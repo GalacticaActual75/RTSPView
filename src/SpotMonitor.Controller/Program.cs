@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using SpotMonitor.Core;
 using SpotMonitor.Infrastructure;
 using SpotMonitor.Controller;
@@ -21,6 +22,11 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://0.0.0.0:5080");
 var dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor");
 Directory.CreateDirectory(dataDirectory);
+var dataProtectionDirectory = Path.Combine(dataDirectory, "data-protection");
+Directory.CreateDirectory(dataProtectionDirectory);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionDirectory))
+    .SetApplicationName("SpotMonitor.Controller");
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
     options.Cookie.Name = "SpotMonitor.Admin";

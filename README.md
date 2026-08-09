@@ -27,7 +27,7 @@ The installer uses a stable application identity and installation directory (`C:
 4. Refreshes the Private-LAN firewall rules and optional logon watchdog task.
 5. Offers to launch the upgraded camera wall.
 
-Public-network access to TCP 5080 is explicitly blocked. The installer is currently unsigned, so Windows SmartScreen may show an unknown-publisher warning until a code-signing certificate is added.
+TCP 5080 is allowed only from Windows' `LocalSubnet`, regardless of whether the host NIC is classified Private or Public. The installer is currently unsigned, so Windows SmartScreen may show an unknown-publisher warning until a code-signing certificate is added.
 
 ## Build from source
 
