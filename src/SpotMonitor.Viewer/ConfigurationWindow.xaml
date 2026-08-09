@@ -1,0 +1,28 @@
+<Window x:Class="SpotMonitor.Viewer.ConfigurationWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SpotMonitor Configuration" Width="760" Height="650" MinWidth="700" MinHeight="600" WindowStartupLocation="CenterOwner" Background="#101318" Foreground="White">
+  <Grid Margin="20">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+      <TextBlock Text="Camera slot" VerticalAlignment="Center" Margin="0,0,10,0"/>
+      <ComboBox x:Name="SlotBox" Width="90" Height="30" SelectionChanged="SlotBox_SelectionChanged"><ComboBoxItem>1</ComboBoxItem><ComboBoxItem>2</ComboBoxItem><ComboBoxItem>3</ComboBoxItem><ComboBoxItem>4</ComboBoxItem><ComboBoxItem>5</ComboBoxItem><ComboBoxItem>6</ComboBoxItem><ComboBoxItem>7</ComboBoxItem><ComboBoxItem>8</ComboBoxItem><ComboBoxItem>9</ComboBoxItem></ComboBox>
+      <CheckBox x:Name="EnabledBox" Content="Enabled" VerticalAlignment="Center" Margin="24,0,0,0"/>
+    </StackPanel>
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/></Grid.RowDefinitions>
+      <TextBlock Text="Camera name" VerticalAlignment="Center"/><TextBox x:Name="NameBox" Grid.Column="1" Margin="0,7" Padding="8,4"/>
+      <TextBlock Grid.Row="1" Text="RTSP URL" VerticalAlignment="Center"/><TextBox x:Name="UrlBox" Grid.Row="1" Grid.Column="1" Margin="0,7" Padding="8,4" ToolTip="Stored locally as plain text by deployment choice"/>
+      <TextBlock Grid.Row="2" Text="RTSP transport" VerticalAlignment="Center"/><ComboBox x:Name="TransportBox" Grid.Row="2" Grid.Column="1" Width="140" HorizontalAlignment="Left" Margin="0,7"><ComboBoxItem>Auto</ComboBoxItem><ComboBoxItem>TCP</ComboBoxItem><ComboBoxItem>UDP</ComboBoxItem></ComboBox>
+      <TextBlock Grid.Row="3" Text="Network cache (ms)" VerticalAlignment="Center"/><TextBox x:Name="CacheBox" Grid.Row="3" Grid.Column="1" Width="140" HorizontalAlignment="Left" Margin="0,7" Padding="8,4"/>
+      <TextBlock Grid.Row="4" Text="Startup timeout (seconds)" VerticalAlignment="Center"/><TextBox x:Name="StartupBox" Grid.Row="4" Grid.Column="1" Width="140" HorizontalAlignment="Left" Margin="0,7" Padding="8,4"/>
+      <TextBlock Grid.Row="5" Text="Stall watchdog (seconds)" VerticalAlignment="Center"/><TextBox x:Name="WatchdogBox" Grid.Row="5" Grid.Column="1" Width="140" HorizontalAlignment="Left" Margin="0,7" Padding="8,4"/>
+      <TextBlock Grid.Row="6" Text="Maximum retry backoff (seconds)" VerticalAlignment="Center"/><TextBox x:Name="BackoffBox" Grid.Row="6" Grid.Column="1" Width="140" HorizontalAlignment="Left" Margin="0,7" Padding="8,4"/>
+      <TextBlock Grid.Row="7" Text="Streaming options" VerticalAlignment="Center"/><StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><CheckBox x:Name="LowLatencyBox" Content="Low latency" Foreground="White"/><CheckBox x:Name="AudioBox" Content="Decode audio" Foreground="White" Margin="24,0,0,0"/></StackPanel>
+      <TextBlock Grid.Row="8" Text="Credential storage" VerticalAlignment="Center"/><TextBlock Grid.Row="8" Grid.Column="1" Text="Plain local JSON (LAN-only deployment choice)" Foreground="#F0B45A" VerticalAlignment="Center"/>
+    </Grid>
+    <Grid Grid.Row="2" Margin="0,18,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Button Content="Import…" Width="90" Height="32" Click="ImportButton_Click"/><Button Grid.Column="1" Content="Export…" Width="90" Height="32" Margin="8,0,0,0" Click="ExportButton_Click"/>
+      <Button Grid.Column="3" Content="Cancel" Width="90" Height="32" Margin="0,0,8,0" Click="CancelButton_Click"/><Button Grid.Column="4" Content="Save" Width="100" Height="32" Background="#1976D2" Foreground="White" BorderThickness="0" Click="SaveButton_Click"/>
+    </Grid>
+  </Grid>
+</Window>

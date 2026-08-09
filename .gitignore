@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+artifacts/
+publish/
+stage/
+dist/
+assets/branding/*-chroma.png
+TestResults/
+.toolchain/

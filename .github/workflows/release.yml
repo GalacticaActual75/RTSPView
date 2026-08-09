@@ -1,0 +1,68 @@
+name: Build Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example 1.0.1"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.version }}' } else { '${{ github.ref_name }}'.TrimStart('v') }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid release version: $version" }
+          "value=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore and test
+        run: |
+          dotnet restore SpotMonitor.sln
+          dotnet test tests/SpotMonitor.ConfigurationChecks/SpotMonitor.ConfigurationChecks.csproj -c Release --no-restore
+
+      - name: Publish self-contained applications
+        shell: pwsh
+        run: |
+          dotnet publish src/SpotMonitor.Viewer/SpotMonitor.Viewer.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Viewer /p:Version=${{ steps.version.outputs.value }}
+          dotnet publish src/SpotMonitor.Controller/SpotMonitor.Controller.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Controller /p:Version=${{ steps.version.outputs.value }}
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $env:SPOTMONITOR_VERSION='${{ steps.version.outputs.value }}'
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/SpotMonitor.iss
+          $installer = Get-ChildItem dist/SpotMonitor-Setup-*-win-x64.exe | Select-Object -First 1
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
+          "$hash  $($installer.Name)" | Set-Content "dist/$($installer.BaseName).sha256.txt"
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag='${{ steps.version.outputs.tag }}'
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            gh release create $tag dist/*.exe dist/*.sha256.txt --target '${{ github.sha }}' --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+          } else {
+            gh release create $tag dist/*.exe dist/*.sha256.txt --verify-tag --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+          }
