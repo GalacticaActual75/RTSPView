@@ -204,7 +204,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             var generation = _playGeneration;
             _ = CaptureSnapshotAsync(player, generation);
             SetOverlay("Live", false);
-            _logger?.Write("INFO", $"Camera {_settings.Slot} connected: {RtspUrlSanitizer.Redact(_settings.RtspUrl)}");
+            var effectiveOptions = string.Join(' ', _settings.ToMediaOptions().Where(option => option.StartsWith(":rtsp-", StringComparison.Ordinal) || option.StartsWith(":network-caching=", StringComparison.Ordinal)));
+            _logger?.Write("INFO", $"Camera {_settings.Slot} connected: {RtspUrlSanitizer.Redact(_settings.RtspUrl)}; transport={_settings.EffectiveTransport}; cache={_settings.EffectiveNetworkCacheMilliseconds} ms; lowLatency={_settings.EffectiveLowLatency}; mediaOptions=[{effectiveOptions}]");
         };
         player.EndReached += (_, _) => { if (ReferenceEquals(_player, player)) ScheduleRecovery("Stream ended"); };
         player.EncounteredError += (_, _) => { if (ReferenceEquals(_player, player)) ScheduleRecovery("LibVLC reported a decoder or stream error"); };

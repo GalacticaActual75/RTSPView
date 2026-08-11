@@ -16,13 +16,28 @@ public sealed record CameraSettings
     public int WatchdogTimeoutSeconds { get; init; } = 12;
     public int MaximumReconnectBackoffSeconds { get; init; } = 30;
 
+    public bool UsesStreamGridCompositePolicy()
+    {
+        if (!Uri.TryCreate(RtspUrl, UriKind.Absolute, out var uri)) return false;
+        return uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase) &&
+               uri.Host.Equals("camera.example", StringComparison.OrdinalIgnoreCase) &&
+               uri.Port == 8554 &&
+               (uri.AbsolutePath.Equals("/grid1", StringComparison.OrdinalIgnoreCase) ||
+                uri.AbsolutePath.Equals("/grid2", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public RtspTransport EffectiveTransport => UsesStreamGridCompositePolicy() ? RtspTransport.Tcp : Transport;
+    public int EffectiveNetworkCacheMilliseconds => UsesStreamGridCompositePolicy() ? 3000 : Math.Clamp(NetworkCacheMilliseconds, 100, 10_000);
+    public bool EffectiveLowLatency => !UsesStreamGridCompositePolicy() && LowLatency;
+
     public IReadOnlyList<string> ToMediaOptions()
     {
-        var options = new List<string> { $":network-caching={Math.Clamp(NetworkCacheMilliseconds, 100, 10_000)}", ":clock-jitter=0" };
+        var options = new List<string> { $":network-caching={EffectiveNetworkCacheMilliseconds}" };
+        if (!UsesStreamGridCompositePolicy()) options.Add(":clock-jitter=0");
         if (!DecodeAudio) options.Add(":no-audio");
-        if (Transport != RtspTransport.Auto)
-            options.Add(Transport == RtspTransport.Tcp ? ":rtsp-tcp" : ":rtsp-udp");
-        if (LowLatency)
+        if (EffectiveTransport != RtspTransport.Auto)
+            options.Add(EffectiveTransport == RtspTransport.Tcp ? ":rtsp-tcp" : ":rtsp-udp");
+        if (EffectiveLowLatency)
         {
             options.Add(":live-caching=150");
             options.Add(":drop-late-frames");

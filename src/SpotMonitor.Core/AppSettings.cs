@@ -32,7 +32,7 @@ public sealed record AppSettings
         for (var index = 0; index < normalized.Length; index++)
         {
             var camera = normalized[index];
-            normalized[index] = camera with
+            var normalizedCamera = camera with
             {
                 Slot = index + 1,
                 Name = string.IsNullOrWhiteSpace(camera.Name) ? $"Camera {index + 1}" : camera.Name.Trim(),
@@ -41,6 +41,9 @@ public sealed record AppSettings
                 WatchdogTimeoutSeconds = Math.Clamp(camera.WatchdogTimeoutSeconds, 8, 120),
                 MaximumReconnectBackoffSeconds = Math.Clamp(camera.MaximumReconnectBackoffSeconds, 5, 300)
             };
+            if (normalizedCamera.UsesStreamGridCompositePolicy())
+                normalizedCamera = normalizedCamera with { Transport = RtspTransport.Tcp, NetworkCacheMilliseconds = 3000, LowLatency = false };
+            normalized[index] = normalizedCamera;
         }
         return this with
         {
