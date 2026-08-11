@@ -27,6 +27,18 @@
 .brand { display: inline-flex; align-items: center; gap: 9px; }
 .brand-icon { width: 25px; height: 25px; object-fit: contain; }
 .viewer-display-panel > div:first-child { display: grid; gap: 2px; }
+.viewer-update-section {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0c1015;
+}
+.viewer-update-section .panel-head { align-items: center; }
+.viewer-update-section h2 { font-size: 17px; }
+.viewer-update-section p { margin: 3px 0 0; }
+.viewer-update-section .control-state { margin-top: 8px; }
+.viewer-update-section .update-note { font-size: 12px; }
 .viewer-action-strip {
   margin-top: 14px;
   padding: 12px;
