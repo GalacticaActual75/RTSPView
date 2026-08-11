@@ -60,7 +60,13 @@ public partial class MainWindow : Window
             else if (eventArgs.FormattedLog.Contains("using hw decoder module", StringComparison.OrdinalIgnoreCase) && _hardwareDecoder == "HW requested")
                 _hardwareDecoder = "Hardware decode active";
             if (eventArgs.Level >= LogLevel.Warning)
-                _logger.Write($"VLC-{eventArgs.Level}", eventArgs.FormattedLog);
+            {
+                // LibVLC emits late-picture messages from its shared engine without
+                // media-player context. CameraTile logs the corresponding lost-frame
+                // counters with the camera slot and name, which is the useful signal.
+                if (eventArgs.FormattedLog.Contains("picture is too late to be displayed", StringComparison.OrdinalIgnoreCase)) return;
+                _logger.Write($"VLC-{eventArgs.Level}", $"Global LibVLC event (camera unavailable): {eventArgs.FormattedLog}");
+            }
         };
         Loaded += OnLoaded;
         _diagnosticsTimer.Tick += async (_, _) =>
