@@ -18,6 +18,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private DateTimeOffset _attemptStartedAt;
     private DateTimeOffset? _healthySince;
     private int _lastDecodedFrames = -1;
+    private long _lastLostPictures = -1;
+    private long _pendingLostPictures;
+    private DateTimeOffset _lastFrameLossLogAt = DateTimeOffset.MinValue;
     private bool _requestHardwareDecoding;
     private bool _disposed;
     private bool _showCameraNames = true;
@@ -179,6 +182,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             _lastDecodedFrames = decodedFrames;
             _status = _status with { LastFrameAt = now };
         }
+
+        var lostPictures = (long)stats.Value.LostPictures;
+        if (_lastLostPictures >= 0)
+        {
+            var newlyLost = lostPictures >= _lastLostPictures ? lostPictures - _lastLostPictures : lostPictures;
+            _pendingLostPictures += newlyLost;
+        }
+        _lastLostPictures = lostPictures;
+
+        if (_pendingLostPictures > 0 && now - _lastFrameLossLogAt >= TimeSpan.FromSeconds(5))
+        {
+            _logger?.Write("VLC-Warning", $"Camera {_settings.Slot} ({_settings.Name}): {_pendingLostPictures} video frame(s) lost; displayed={stats.Value.DisplayedPictures}, lost-total={lostPictures}");
+            _pendingLostPictures = 0;
+            _lastFrameLossLogAt = now;
+        }
     }
 
     private void CreatePlayer()
@@ -239,6 +257,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _playGeneration++;
         _healthySince = null;
         _lastDecodedFrames = -1;
+        _lastLostPictures = -1;
+        _pendingLostPictures = 0;
+        _lastFrameLossLogAt = DateTimeOffset.MinValue;
         _status = _status with { NextReconnectAt = null };
         SetState(_status.ReconnectCount > 0 ? CameraConnectionState.Reconnecting : CameraConnectionState.Connecting);
         void QueuePlayback() => QueuePlayerOperation(() =>
