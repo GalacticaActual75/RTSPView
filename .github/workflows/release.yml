@@ -54,6 +54,12 @@ jobs:
           $installer = Get-ChildItem dist/SpotMonitor-Setup-*-win-x64.exe | Select-Object -First 1
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
           "$hash  $($installer.Name)" | Set-Content "dist/$($installer.BaseName).sha256.txt"
+          [ordered]@{
+            Version = '${{ steps.version.outputs.value }}'
+            Installer = $installer.Name
+            Sha256 = $hash
+            PublishedAt = (Get-Date).ToUniversalTime().ToString('o')
+          } | ConvertTo-Json | Set-Content 'dist/update.json'
 
       - name: Publish GitHub Release
         shell: pwsh
@@ -62,7 +68,7 @@ jobs:
         run: |
           $tag='${{ steps.version.outputs.tag }}'
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            gh release create $tag dist/*.exe dist/*.sha256.txt --target '${{ github.sha }}' --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
           } else {
-            gh release create $tag dist/*.exe dist/*.sha256.txt --verify-tag --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --verify-tag --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
           }

@@ -43,6 +43,7 @@ Source: "..\deployment\Run-Appliance.ps1"; DestDir: "{app}"; Flags: ignoreversio
 Source: "..\deployment\Stop-SpotMonitor.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\deployment\Open-Web-Admin.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\deployment\Repair-LAN-Firewall.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\deployment\Apply-Update.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\SpotMonitor"; Filename: "{app}\Start-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"

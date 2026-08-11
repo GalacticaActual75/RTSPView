@@ -44,6 +44,7 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Viewer
 builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
+builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>()));
 builder.Services.AddHostedService<ViewerSupervisor>();
 
 var app = builder.Build();
@@ -55,6 +56,7 @@ var viewerTelemetry = app.Services.GetRequiredService<ViewerTelemetryClient>();
 var systemMetrics = app.Services.GetRequiredService<SystemMetricsCollector>();
 var viewerCommands = app.Services.GetRequiredService<ViewerCommandClient>();
 var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
+var updates = app.Services.GetRequiredService<UpdateService>();
 var loginLimiter = new LoginAttemptLimiter();
 
 app.UseDefaultFiles();
@@ -135,6 +137,21 @@ app.MapGet("/api/telemetry", () =>
 {
     var viewer = viewerTelemetry.Latest;
     return Results.Ok(new ApplianceTelemetry { ViewerConnected = viewer is not null, Viewer = viewer, System = systemMetrics.GetSnapshot() });
+}).RequireAuthorization();
+app.MapGet("/api/update", async (CancellationToken cancellationToken) => Results.Ok(await updates.CheckAsync(cancellationToken))).RequireAuthorization();
+app.MapPost("/api/update/install", async (ConfirmedAction request, CancellationToken cancellationToken) =>
+{
+    if (!request.Confirmed) return Results.BadRequest(new { error = "Explicit confirmation is required." });
+    try
+    {
+        var result = await updates.StageAndLaunchAsync(cancellationToken);
+        return result.Started ? Results.Ok(result) : Results.BadRequest(new { error = result.Message });
+    }
+    catch (Exception exception)
+    {
+        auditLog.Write("ERROR", $"Unable to start SpotMonitor update: {exception.Message}");
+        return Results.Problem($"Unable to start update: {exception.Message}", statusCode: 500);
+    }
 }).RequireAuthorization();
 
 app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();

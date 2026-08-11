@@ -11,6 +11,7 @@ SpotMonitor is a production-oriented Windows RTSP camera wall with nine independ
 - LAN web administration with PBKDF2 password hashing, CSRF protection, login throttling, audit logs, and Private-network-only firewall configuration.
 - Separate Controller watchdog that restores a failed Viewer.
 - Self-contained Windows x64 deployment; the target computer does not need the .NET runtime installed.
+- Web-triggered, SHA-256-verified updates from the private LAN channel at `UPDATE_CHANNEL_DIRECTORY`.
 - Branded Windows executables, shortcuts, and web interface.
 
 Settings, logs, password state, and thumbnails live under `%LOCALAPPDATA%\SpotMonitor`. Installing or upgrading the application does not remove them.
@@ -57,6 +58,8 @@ Push a semantic version tag:
 ```
 
 GitHub Actions publishes both the installer and its SHA-256 checksum to a GitHub Release. The workflow can also be started manually from the repository's **Actions** page.
+
+For LAN deployment, copy the generated installer and `update.json` from the release into `UPDATE_CHANNEL_DIRECTORY`. Installed hosts can then check and start the verified update from the web dashboard. Windows displays one elevation prompt on the camera-wall host before installation.
 
 ## Administration
 
