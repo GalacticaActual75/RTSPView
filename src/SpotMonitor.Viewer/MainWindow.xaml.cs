@@ -49,8 +49,12 @@ public partial class MainWindow : Window
         _cursorTimer.Tick += (_, _) =>
         {
             CheckCornerGesture();
-            if (_isFullScreen && _settings.HideMouseCursor && DateTime.UtcNow - _lastMouseMovement >= TimeSpan.FromSeconds(_settings.MouseCursorHideSeconds))
-                Mouse.OverrideCursor = System.Windows.Input.Cursors.None;
+            if (_isFullScreen && _settings.HideMouseCursor &&
+                DateTime.UtcNow - _lastMouseMovement >= TimeSpan.FromSeconds(_settings.MouseCursorHideSeconds))
+            {
+                if (Mouse.OverrideCursor is null) Mouse.OverrideCursor = System.Windows.Input.Cursors.None;
+                foreach (var tile in _tiles) tile.HideHoverControls();
+            }
         };
         _settingsPath = Path.Combine(_dataDirectory, "settings.json");
         _settingsStore = new JsonSettingsStore(_settingsPath);
@@ -76,7 +80,7 @@ public partial class MainWindow : Window
         _diagnosticsTimer.Tick += async (_, _) =>
         {
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
-            NativeVideoBackgroundGuard.Apply();
+            RefreshNativeVideoBackgrounds();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _tiles) tile.Tick(_hardwareDecoder);
             _telemetryPublisher.Publish(new ViewerTelemetry
@@ -235,7 +239,18 @@ public partial class MainWindow : Window
             ControlBar.Visibility = Visibility.Visible;
         }
         ApplyAlwaysOnTop();
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => NativeVideoBackgroundGuard.Apply(forceRedraw: true));
+        RefreshNativeVideoBackgrounds(forceRedraw: true);
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, async () =>
+        {
+            await Task.Delay(250);
+            RefreshNativeVideoBackgrounds(forceRedraw: true);
+        });
+    }
+
+    private void RefreshNativeVideoBackgrounds(bool forceRedraw = false)
+    {
+        NativeVideoBackgroundGuard.Apply(forceRedraw);
+        foreach (var tile in _tiles) tile.EnsureNativeVideoBackground(forceRedraw);
     }
 
     private void ApplyAlwaysOnTop()

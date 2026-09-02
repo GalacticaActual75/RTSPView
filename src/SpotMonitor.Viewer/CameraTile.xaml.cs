@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using LibVLCSharp.Shared;
 using SpotMonitor.Core;
@@ -29,6 +30,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private readonly object _operationGate = new();
     private Task _playerOperation = Task.CompletedTask;
     private int _playGeneration;
+    private nint _nativeVideoHandle;
     private readonly string _snapshotDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor", "snapshots");
 
     public int Slot => _settings.Slot;
@@ -121,6 +123,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void OverlayRoot_MouseLeave(object sender, MouseEventArgs e) =>
         RestartStreamButton.Visibility = Visibility.Collapsed;
+
+    public void HideHoverControls() => RestartStreamButton.Visibility = Visibility.Collapsed;
+
+    public void EnsureNativeVideoBackground(bool forceRedraw = false)
+    {
+        VideoView.ApplyTemplate();
+        if (VideoView.Template.FindName("PART_PlayerHost", VideoView) is not HwndHost videoHost ||
+            videoHost.Handle == IntPtr.Zero)
+            return;
+
+        var handle = (nint)videoHost.Handle;
+        var handleChanged = handle != _nativeVideoHandle;
+        _nativeVideoHandle = handle;
+        NativeVideoBackgroundGuard.Apply(handle, forceRedraw || handleChanged);
+    }
 
     private void UpdateRestartButton() => RestartStreamButton.IsEnabled =
         _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);
