@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using LibVLCSharp.Shared;
 using SpotMonitor.Core;
 using SpotMonitor.Infrastructure;
+using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
 namespace SpotMonitor.Viewer;
 
@@ -33,6 +34,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public int Slot => _settings.Slot;
     public bool IsPlaying => _player?.IsPlaying == true;
     public CameraRuntimeStatus Status => _status;
+    public event EventHandler? PointerActivity;
 
     public CameraTelemetry GetTelemetry()
     {
@@ -107,6 +109,18 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _logger?.Write("INFO", $"Camera {_settings.Slot} ({_settings.Name}): local tile restart requested");
         Start();
     }
+
+    private void OverlayRoot_MouseEnter(object sender, MouseEventArgs e)
+    {
+        RestartStreamButton.Visibility = Visibility.Visible;
+        PointerActivity?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OverlayRoot_MouseMove(object sender, MouseEventArgs e) =>
+        PointerActivity?.Invoke(this, EventArgs.Empty);
+
+    private void OverlayRoot_MouseLeave(object sender, MouseEventArgs e) =>
+        RestartStreamButton.Visibility = Visibility.Collapsed;
 
     private void UpdateRestartButton() => RestartStreamButton.IsEnabled =
         _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);

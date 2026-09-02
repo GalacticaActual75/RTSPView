@@ -58,9 +58,9 @@ public partial class MainWindow : Window
         _libVlc = new LibVLC("--no-video-title-show", "--no-osd");
         _libVlc.Log += (_, eventArgs) =>
         {
-            var hardwareMatch = Regex.Match(eventArgs.FormattedLog, @"Using\s+([^\s]+)\s+\(([^,\)]+)", RegexOptions.IgnoreCase);
+            var hardwareMatch = Regex.Match(eventArgs.FormattedLog, @"Using\s+(?<module>\S+)\s+\((?<device>.+?)(?:,\s+vendor\b|\)\s+for\s+hardware decoding)", RegexOptions.IgnoreCase);
             if (hardwareMatch.Success && eventArgs.FormattedLog.Contains("hardware decoding", StringComparison.OrdinalIgnoreCase))
-                _hardwareDecoder = $"{hardwareMatch.Groups[1].Value} • {hardwareMatch.Groups[2].Value}";
+                _hardwareDecoder = $"{hardwareMatch.Groups["module"].Value} • {hardwareMatch.Groups["device"].Value}";
             else if (eventArgs.FormattedLog.Contains("using hw decoder module", StringComparison.OrdinalIgnoreCase) && _hardwareDecoder == "HW requested")
                 _hardwareDecoder = "Hardware decode active";
             if (eventArgs.Level >= LogLevel.Warning)
@@ -94,6 +94,7 @@ public partial class MainWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _tiles = [Tile1, Tile2, Tile3, Tile4, Tile5, Tile6, Tile7, Tile8, Tile9];
+        foreach (var tile in _tiles) tile.PointerActivity += Tile_PointerActivity;
         _settings = (await _settingsStore.LoadAsync()).Normalize();
         _settingsLastWriteUtc = File.Exists(_settingsPath) ? File.GetLastWriteTimeUtc(_settingsPath) : DateTime.MinValue;
         var commandLineUrl = ReadArgument("--rtsp");
@@ -255,7 +256,11 @@ public partial class MainWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
-    private void Window_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    private void Window_MouseMove(object sender, System.Windows.Input.MouseEventArgs e) => RegisterPointerActivity();
+
+    private void Tile_PointerActivity(object? sender, EventArgs e) => RegisterPointerActivity();
+
+    private void RegisterPointerActivity()
     {
         _lastMouseMovement = DateTime.UtcNow;
         if (Mouse.OverrideCursor is not null) Mouse.OverrideCursor = null;
