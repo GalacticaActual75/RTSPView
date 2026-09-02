@@ -1,5 +1,8 @@
 using System.ComponentModel;
 using System.IO;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -33,6 +36,7 @@ public partial class MainWindow : Window
     private readonly Stopwatch _viewerUptime = Stopwatch.StartNew();
     private readonly DispatcherTimer _cursorTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
     private DateTime _lastMouseMovement = DateTime.UtcNow;
+    private DateTime _lastLanAddressRefresh = DateTime.MinValue;
     private bool _isFullScreen;
     private DateTime _cornerClickWindowStarted;
     private int _cornerClickCount;
@@ -73,6 +77,7 @@ public partial class MainWindow : Window
         {
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             NativeVideoBackgroundGuard.Apply();
+            if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _tiles) tile.Tick(_hardwareDecoder);
             _telemetryPublisher.Publish(new ViewerTelemetry
             {
@@ -110,6 +115,7 @@ public partial class MainWindow : Window
         for (var index = 0; index < 9; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
         ApplyOverlayPreferences();
         LoadEditor(0);
+        UpdateLanAddressText();
         PositionOnPreferredMonitor();
         SetFullScreen(_settings.StartFullScreen);
         _cursorTimer.Start();
@@ -163,6 +169,37 @@ public partial class MainWindow : Window
 
     private void RestartButton_Click(object sender, RoutedEventArgs e) => _tiles[Math.Max(0, SlotBox.SelectedIndex)].Start();
 
+    private void FullScreenButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetFullScreen(true);
+        _logger.Write("INFO", "Local control: entered full screen");
+    }
+
+    private void UpdateLanAddressText()
+    {
+        string[] addresses;
+        try
+        {
+            addresses = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(adapter => adapter.OperationalStatus == OperationalStatus.Up && adapter.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .SelectMany(adapter => adapter.GetIPProperties().UnicastAddresses)
+                .Where(address => address.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(address.Address))
+                .Select(address => address.Address.ToString())
+                .Distinct()
+                .OrderBy(address => address, StringComparer.Ordinal)
+                .ToArray();
+        }
+        catch
+        {
+            addresses = [];
+        }
+
+        var value = addresses.Length == 0 ? "unavailable" : string.Join(", ", addresses);
+        LanAddressText.Text = $"LAN IP: {value}";
+        LanAddressText.ToolTip = LanAddressText.Text;
+        _lastLanAddressRefresh = DateTime.UtcNow;
+    }
+
     private void PositionOnPreferredMonitor()
     {
         var screens = System.Windows.Forms.Screen.AllScreens;
@@ -197,6 +234,7 @@ public partial class MainWindow : Window
             ControlBar.Visibility = Visibility.Visible;
         }
         ApplyAlwaysOnTop();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => NativeVideoBackgroundGuard.Apply(forceRedraw: true));
     }
 
     private void ApplyAlwaysOnTop()

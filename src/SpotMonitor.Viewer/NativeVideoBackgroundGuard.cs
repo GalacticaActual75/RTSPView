@@ -6,36 +6,35 @@ namespace SpotMonitor.Viewer;
 
 internal static class NativeVideoBackgroundGuard
 {
-    private static readonly HashSet<nint> Configured = [];
     private static readonly EnumWindowsCallback Callback = InspectWindow;
 
-    public static void Apply()
+    public static void Apply(bool forceRedraw = false)
     {
         if (!OperatingSystem.IsWindows()) return;
-        EnumWindows(Callback, 0);
+        EnumWindows(Callback, forceRedraw ? new nint(1) : nint.Zero);
     }
 
     private static bool InspectWindow(nint handle, nint parameter)
     {
         GetWindowThreadProcessId(handle, out var processId);
         if (processId != (uint)Environment.ProcessId) return true;
-        ApplyIfVideoWindow(handle);
-        EnumChildWindows(handle, Callback, 0);
+        ApplyIfVideoWindow(handle, parameter != nint.Zero);
+        EnumChildWindows(handle, Callback, parameter);
         return true;
     }
 
-    private static void ApplyIfVideoWindow(nint handle)
+    private static void ApplyIfVideoWindow(nint handle, bool forceRedraw)
     {
-        if (Configured.Contains(handle)) return;
         var className = new StringBuilder(256);
         var title = new StringBuilder(256);
         GetClassName(handle, className, className.Capacity);
         GetWindowText(handle, title, title.Capacity);
         var identity = className + " " + title;
         if (!identity.Contains("VLC", StringComparison.OrdinalIgnoreCase)) return;
-        SetClassLongPtr(handle, -10, GetStockObject(4));
-        Configured.Add(handle);
-        RedrawWindow(handle, 0, 0, 0x0001 | 0x0004 | 0x0080);
+        var blackBrush = GetStockObject(4);
+        var previousBrush = SetClassLongPtr(handle, -10, blackBrush);
+        if (forceRedraw || previousBrush != blackBrush)
+            RedrawWindow(handle, 0, 0, 0x0001 | 0x0004 | 0x0080);
     }
 
     private delegate bool EnumWindowsCallback(nint handle, nint parameter);

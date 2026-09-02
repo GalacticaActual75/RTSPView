@@ -70,6 +70,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         Directory.CreateDirectory(_snapshotDirectory);
         NameText.Text = settings.Name;
         SlotText.Text = $"Slot {settings.Slot}";
+        UpdateRestartButton();
         CreatePlayer();
         if (settings.Enabled && !string.IsNullOrWhiteSpace(settings.RtspUrl)) Start(manual: true);
         else SetState(settings.Enabled ? CameraConnectionState.NotConfigured : CameraConnectionState.Disabled);
@@ -80,6 +81,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _settings = settings;
         NameText.Text = settings.Name;
         SlotText.Text = $"Slot {settings.Slot}";
+        UpdateRestartButton();
         if (settings.Enabled && !string.IsNullOrWhiteSpace(settings.RtspUrl)) Start(manual: true);
         else Stop(settings.Enabled ? CameraConnectionState.NotConfigured : CameraConnectionState.Disabled);
     }
@@ -98,6 +100,16 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             _status = _status with { ConsecutiveFailures = 0, NextReconnectAt = null, LastError = null };
         StartPlayer(recreatePlayer: false);
     }
+
+    private void RestartStreamButton_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        _logger?.Write("INFO", $"Camera {_settings.Slot} ({_settings.Name}): local tile restart requested");
+        Start();
+    }
+
+    private void UpdateRestartButton() => RestartStreamButton.IsEnabled =
+        _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);
 
     public void Tick(string hardwareDecoder)
     {
