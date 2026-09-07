@@ -15,6 +15,11 @@ try
             HostCameraSlot = 2,
             Position = PictureInPicturePosition.BottomLeft,
             SizePercent = 50,
+            VideoSizing = DoorbellVideoSizing.Stretch,
+            ViewportShape = DoorbellViewportShape.RoundedSquare,
+            HorizontalOffsetPercent = 12,
+            VerticalOffsetPercent = -8,
+            ZoomPercent = 160,
             Camera = AppSettings.CreateDoorbellCamera() with { Enabled = true, RtspUrl = "rtsp://door:door-secret@example.test/doorbell" }
         }
     };
@@ -31,6 +36,11 @@ try
     Check(!exportText.Contains("secret", StringComparison.Ordinal), "credential-free export");
     Check(exportText.Contains("example.test", StringComparison.Ordinal), "export retains endpoint");
     Check(recovered.DoorbellOverlay.Camera.Slot == 10, "doorbell overlay backup recovery");
+    Check(recovered.DoorbellOverlay.VideoSizing == DoorbellVideoSizing.Stretch, "doorbell video sizing persistence");
+    Check(recovered.DoorbellOverlay.ViewportShape == DoorbellViewportShape.RoundedSquare, "doorbell viewport shape persistence");
+    Check(recovered.DoorbellOverlay.HorizontalOffsetPercent == 12 &&
+          recovered.DoorbellOverlay.VerticalOffsetPercent == -8, "doorbell viewport offset persistence");
+    Check(recovered.DoorbellOverlay.ZoomPercent == 160, "doorbell zoom persistence");
 
     var normalizedOverlay = (new AppSettings
     {
@@ -39,12 +49,22 @@ try
             HostCameraSlot = 99,
             Position = (PictureInPicturePosition)999,
             SizePercent = 5,
+            VideoSizing = (DoorbellVideoSizing)999,
+            ViewportShape = (DoorbellViewportShape)999,
+            HorizontalOffsetPercent = 999,
+            VerticalOffsetPercent = -999,
+            ZoomPercent = 999,
             Camera = AppSettings.CreateDoorbellCamera() with { Name = "  " }
         }
     }).Normalize().DoorbellOverlay;
     Check(normalizedOverlay.HostCameraSlot == 9, "doorbell host camera normalization");
     Check(normalizedOverlay.Position == PictureInPicturePosition.BottomLeft, "doorbell corner normalization");
     Check(normalizedOverlay.SizePercent == 25, "doorbell size normalization");
+    Check(normalizedOverlay.VideoSizing == DoorbellVideoSizing.Fit, "doorbell video sizing normalization");
+    Check(normalizedOverlay.ViewportShape == DoorbellViewportShape.Native, "doorbell viewport shape normalization");
+    Check(normalizedOverlay.HorizontalOffsetPercent == 50 &&
+          normalizedOverlay.VerticalOffsetPercent == -50, "doorbell viewport offset normalization");
+    Check(normalizedOverlay.ZoomPercent == 300, "doorbell zoom normalization");
     Check(normalizedOverlay.Camera.Slot == 10 && normalizedOverlay.Camera.Name == "Doorbell", "doorbell camera normalization");
 
     var grid = new CameraSettings { RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };

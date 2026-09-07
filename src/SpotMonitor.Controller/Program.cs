@@ -171,7 +171,7 @@ app.MapPut("/api/doorbell", async (DoorbellOverlaySettings overlay) =>
         var requested = overlay with { Camera = (overlay.Camera ?? AppSettings.CreateDoorbellCamera()) with { Slot = 10 } };
         var updated = (settings with { DoorbellOverlay = requested }).Normalize();
         await settingsStore.SaveAsync(updated);
-        auditLog.Write("AUDIT", $"Doorbell overlay changed from web admin: host camera {updated.DoorbellOverlay.HostCameraSlot}, {updated.DoorbellOverlay.Position}, {updated.DoorbellOverlay.SizePercent}%, {RtspUrlSanitizer.Redact(updated.DoorbellOverlay.Camera.RtspUrl)}");
+        auditLog.Write("AUDIT", $"Doorbell overlay changed from web admin: host camera {updated.DoorbellOverlay.HostCameraSlot}, {updated.DoorbellOverlay.Position}, {updated.DoorbellOverlay.ViewportShape}, {updated.DoorbellOverlay.SizePercent}%, {updated.DoorbellOverlay.VideoSizing}, offset=({updated.DoorbellOverlay.HorizontalOffsetPercent},{updated.DoorbellOverlay.VerticalOffsetPercent}), zoom={updated.DoorbellOverlay.ZoomPercent}%, {RtspUrlSanitizer.Redact(updated.DoorbellOverlay.Camera.RtspUrl)}");
         return Results.Ok(updated.DoorbellOverlay);
     }
     catch (InvalidDataException exception) { return Results.BadRequest(new { error = exception.Message }); }

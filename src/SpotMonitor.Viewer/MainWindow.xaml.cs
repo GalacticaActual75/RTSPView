@@ -89,6 +89,9 @@ public partial class MainWindow : Window
         {
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
+            if (_settings.DoorbellOverlay.Camera.Enabled &&
+                _settings.DoorbellOverlay.ViewportShape == DoorbellViewportShape.Native)
+                QueueDoorbellLayout();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick(_hardwareDecoder);
             _telemetryPublisher.Publish(new ViewerTelemetry
@@ -270,11 +273,19 @@ public partial class MainWindow : Window
     private void ApplyDoorbellOverlay()
     {
         if (_doorbellWindow is null) return;
+        foreach (var tile in _tiles)
+        {
+            tile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
+            tile.SetRestartButtonCompact(false);
+        }
+        DoorbellTile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
+        DoorbellTile.SetRestartButtonCompact(false);
         if (!_settings.DoorbellOverlay.Camera.Enabled)
         {
             _doorbellWindow.Hide();
             return;
         }
+        _tiles[Math.Clamp(_settings.DoorbellOverlay.HostCameraSlot, 1, 9) - 1].SetRestartButtonCompact(true);
         UpdateDoorbellWindowLayout();
         QueueDoorbellLayout();
     }
@@ -334,18 +345,120 @@ public partial class MainWindow : Window
         var targetLeft = screenOrigin.X / dpi.DpiScaleX;
         var targetTop = screenOrigin.Y / dpi.DpiScaleY;
         var scale = Math.Clamp(overlay.SizePercent, 25, 90) / 100d;
-        var width = Math.Max(1, target.ActualWidth * scale);
-        var height = Math.Max(1, target.ActualHeight * scale);
+        var maximumWidth = Math.Max(1, target.ActualWidth * scale);
+        var maximumHeight = Math.Max(1, target.ActualHeight * scale);
+        var (width, height) = CalculateDoorbellViewportSize(
+            overlay.ViewportShape, maximumWidth, maximumHeight, DoorbellTile.GetVideoDimensions());
         var alignRight = overlay.Position is PictureInPicturePosition.TopRight or PictureInPicturePosition.BottomRight;
         var alignBottom = overlay.Position is PictureInPicturePosition.BottomLeft or PictureInPicturePosition.BottomRight;
+        var baseLeft = targetLeft + (alignRight ? target.ActualWidth - width : 0);
+        var baseTop = targetTop + (alignBottom ? target.ActualHeight - height : 0);
+        var requestedLeft = baseLeft + target.ActualWidth * overlay.HorizontalOffsetPercent / 100d;
+        var requestedTop = baseTop + target.ActualHeight * overlay.VerticalOffsetPercent / 100d;
+        var left = Math.Clamp(requestedLeft, targetLeft, targetLeft + Math.Max(0, target.ActualWidth - width));
+        var top = Math.Clamp(requestedTop, targetTop, targetTop + Math.Max(0, target.ActualHeight - height));
 
-        _doorbellWindow.Left = Math.Round(targetLeft + (alignRight ? target.ActualWidth - width : 0));
-        _doorbellWindow.Top = Math.Round(targetTop + (alignBottom ? target.ActualHeight - height : 0));
+        _doorbellWindow.Left = Math.Round(left);
+        _doorbellWindow.Top = Math.Round(top);
         _doorbellWindow.Width = Math.Round(width);
         _doorbellWindow.Height = Math.Round(height);
+        DoorbellTile.ApplyVideoSizing(
+            overlay.VideoSizing, overlay.ViewportShape, overlay.ZoomPercent, width, height);
         _doorbellWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
         if (!_doorbellWindow.IsVisible) _doorbellWindow.Show();
+        ApplyDoorbellWindowRegion(overlay.ViewportShape, width, height, dpi);
+        PlaceHostRestartButton(target, left - targetLeft, top - targetTop, width, height);
         BringDoorbellWindowToFront();
+    }
+
+    private static (double Width, double Height) CalculateDoorbellViewportSize(
+        DoorbellViewportShape shape,
+        double maximumWidth,
+        double maximumHeight,
+        (uint Width, uint Height)? videoDimensions)
+    {
+        if (shape is DoorbellViewportShape.Square or DoorbellViewportShape.RoundedSquare or DoorbellViewportShape.Circle)
+        {
+            var side = Math.Max(1, Math.Min(maximumWidth, maximumHeight));
+            return (side, side);
+        }
+
+        if (shape == DoorbellViewportShape.Native && videoDimensions is { Width: > 0, Height: > 0 } source)
+        {
+            var factor = Math.Min(maximumWidth / source.Width, maximumHeight / source.Height);
+            return (Math.Max(1, source.Width * factor), Math.Max(1, source.Height * factor));
+        }
+
+        return (maximumWidth, maximumHeight);
+    }
+
+    private void ApplyDoorbellWindowRegion(DoorbellViewportShape shape, double width, double height, DpiScale dpi)
+    {
+        if (_doorbellWindow is null) return;
+        var handle = new WindowInteropHelper(_doorbellWindow).Handle;
+        if (handle == IntPtr.Zero) return;
+        if (shape is DoorbellViewportShape.Native or DoorbellViewportShape.Square)
+        {
+            SetWindowRgn(handle, IntPtr.Zero, true);
+            return;
+        }
+
+        var pixelWidth = Math.Max(1, (int)Math.Round(width * dpi.DpiScaleX));
+        var pixelHeight = Math.Max(1, (int)Math.Round(height * dpi.DpiScaleY));
+        IntPtr region;
+        if (shape is DoorbellViewportShape.Circle or DoorbellViewportShape.Oval)
+            region = CreateEllipticRgn(0, 0, pixelWidth + 1, pixelHeight + 1);
+        else
+        {
+            var aggressiveCornerDiameter = Math.Max(2, (int)Math.Round(Math.Min(pixelWidth, pixelHeight) * 0.44));
+            region = CreateRoundRectRgn(0, 0, pixelWidth + 1, pixelHeight + 1,
+                aggressiveCornerDiameter, aggressiveCornerDiameter);
+        }
+
+        if (region != IntPtr.Zero && SetWindowRgn(handle, region, true) == 0)
+            DeleteObject(region);
+    }
+
+    private static void PlaceHostRestartButton(
+        CameraTile target,
+        double overlayLeft,
+        double overlayTop,
+        double overlayWidth,
+        double overlayHeight)
+    {
+        const double buttonWidth = 24;
+        const double buttonHeight = 24;
+        const double margin = 0;
+        var tileWidth = target.ActualWidth;
+        var tileHeight = target.ActualHeight;
+        var overlayBounds = new Rect(overlayLeft, overlayTop, overlayWidth, overlayHeight);
+        var candidates = new[]
+        {
+            RestartCandidate(RestartButtonPlacement.Center, (tileWidth - buttonWidth) / 2, (tileHeight - buttonHeight) / 2),
+            RestartCandidate(RestartButtonPlacement.TopCenter, (tileWidth - buttonWidth) / 2, margin),
+            RestartCandidate(RestartButtonPlacement.BottomCenter, (tileWidth - buttonWidth) / 2, tileHeight - buttonHeight - margin),
+            RestartCandidate(RestartButtonPlacement.CenterLeft, margin, (tileHeight - buttonHeight) / 2),
+            RestartCandidate(RestartButtonPlacement.CenterRight, tileWidth - buttonWidth - margin, (tileHeight - buttonHeight) / 2),
+            RestartCandidate(RestartButtonPlacement.TopLeft, margin, margin),
+            RestartCandidate(RestartButtonPlacement.TopRight, tileWidth - buttonWidth - margin, margin),
+            RestartCandidate(RestartButtonPlacement.BottomLeft, margin, tileHeight - buttonHeight - margin),
+            RestartCandidate(RestartButtonPlacement.BottomRight, tileWidth - buttonWidth - margin, tileHeight - buttonHeight - margin)
+        };
+        var overlayCenter = new System.Windows.Point(
+            overlayBounds.X + overlayBounds.Width / 2,
+            overlayBounds.Y + overlayBounds.Height / 2);
+        var clearCandidates = candidates.Where(candidate => !candidate.Bounds.IntersectsWith(overlayBounds)).ToArray();
+        var best = (clearCandidates.Length > 0 ? clearCandidates : candidates)
+            .OrderByDescending(candidate =>
+                Math.Pow(candidate.Bounds.X + candidate.Bounds.Width / 2 - overlayCenter.X, 2) +
+                Math.Pow(candidate.Bounds.Y + candidate.Bounds.Height / 2 - overlayCenter.Y, 2))
+            .First();
+        target.SetRestartButtonPlacement(best.Placement);
+
+        (RestartButtonPlacement Placement, Rect Bounds) RestartCandidate(
+            RestartButtonPlacement placement, double x, double y) =>
+            (placement, new Rect(Math.Max(0, x), Math.Max(0, y),
+                Math.Min(buttonWidth, tileWidth), Math.Min(buttonHeight, tileHeight)));
     }
 
     private static void ConfigureDoorbellWindow(Window window)
@@ -356,6 +469,8 @@ public partial class MainWindow : Window
         SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle | WsExToolWindow | WsExNoActivate));
         var borderColor = DwmColorNone;
         DwmSetWindowAttribute(handle, DwmwaBorderColor, ref borderColor, sizeof(uint));
+        var cornerPreference = DwmWindowCornerPreferenceDoNotRound;
+        DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(uint));
     }
 
     private void BringDoorbellWindowToFront()
@@ -385,7 +500,9 @@ public partial class MainWindow : Window
     private const long WsExToolWindow = 0x00000080L;
     private const long WsExNoActivate = 0x08000000L;
     private const int DwmwaBorderColor = 34;
+    private const int DwmwaWindowCornerPreference = 33;
     private const uint DwmColorNone = 0xFFFFFFFE;
+    private const uint DwmWindowCornerPreferenceDoNotRound = 1;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
@@ -398,6 +515,14 @@ public partial class MainWindow : Window
     private static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref uint value, int valueSize);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowRgn(IntPtr window, IntPtr region, bool redraw);
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateEllipticRgn(int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRoundRectRgn(int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr graphicsObject);
 
     private void Window_MouseMove(object sender, System.Windows.Input.MouseEventArgs e) => RegisterPointerActivity();
 

@@ -9,6 +9,19 @@ using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
 namespace SpotMonitor.Viewer;
 
+public enum RestartButtonPlacement
+{
+    Center,
+    TopLeft,
+    TopCenter,
+    TopRight,
+    CenterLeft,
+    CenterRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight
+}
+
 public partial class CameraTile : System.Windows.Controls.UserControl, IDisposable
 {
     private MediaPlayer? _player;
@@ -31,6 +44,13 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private Task _playerOperation = Task.CompletedTask;
     private int _playGeneration;
     private nint _nativeVideoHandle;
+    private DoorbellVideoSizing _videoSizing = DoorbellVideoSizing.Fit;
+    private DoorbellViewportShape _viewportShape = DoorbellViewportShape.Native;
+    private int _videoZoomPercent = 100;
+    private int _videoDisplayWidth;
+    private int _videoDisplayHeight;
+    private uint _lastSizingSourceWidth;
+    private uint _lastSizingSourceHeight;
     private readonly string _snapshotDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor", "snapshots");
 
     public int Slot => _settings.Slot;
@@ -97,6 +117,59 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         UpdateOverlayPresentation(DateTimeOffset.UtcNow, "Hardware decode");
     }
 
+    public (uint Width, uint Height)? GetVideoDimensions()
+    {
+        var videoTrack = _media?.Tracks.FirstOrDefault(track => track.TrackType == TrackType.Video);
+        if (videoTrack is null || videoTrack.Value.Data.Video.Width == 0 || videoTrack.Value.Data.Video.Height == 0)
+            return null;
+        return (videoTrack.Value.Data.Video.Width, videoTrack.Value.Data.Video.Height);
+    }
+
+    public void ApplyVideoSizing(
+        DoorbellVideoSizing sizing,
+        DoorbellViewportShape viewportShape,
+        int zoomPercent,
+        double width,
+        double height)
+    {
+        var displayWidth = Math.Max(1, (int)Math.Round(width));
+        var displayHeight = Math.Max(1, (int)Math.Round(height));
+        zoomPercent = Math.Clamp(zoomPercent, 100, 300);
+        if (_videoSizing == sizing && _viewportShape == viewportShape && _videoZoomPercent == zoomPercent &&
+            _videoDisplayWidth == displayWidth && _videoDisplayHeight == displayHeight) return;
+        _videoSizing = sizing;
+        _viewportShape = viewportShape;
+        _videoZoomPercent = zoomPercent;
+        _videoDisplayWidth = displayWidth;
+        _videoDisplayHeight = displayHeight;
+        ApplyVideoSizing(_player);
+    }
+
+    public void SetRestartButtonPlacement(RestartButtonPlacement placement)
+    {
+        RestartStreamButton.HorizontalAlignment = placement switch
+        {
+            RestartButtonPlacement.TopLeft or RestartButtonPlacement.CenterLeft or RestartButtonPlacement.BottomLeft => System.Windows.HorizontalAlignment.Left,
+            RestartButtonPlacement.TopRight or RestartButtonPlacement.CenterRight or RestartButtonPlacement.BottomRight => System.Windows.HorizontalAlignment.Right,
+            _ => System.Windows.HorizontalAlignment.Center
+        };
+        RestartStreamButton.VerticalAlignment = placement switch
+        {
+            RestartButtonPlacement.TopLeft or RestartButtonPlacement.TopCenter or RestartButtonPlacement.TopRight => System.Windows.VerticalAlignment.Top,
+            RestartButtonPlacement.BottomLeft or RestartButtonPlacement.BottomCenter or RestartButtonPlacement.BottomRight => System.Windows.VerticalAlignment.Bottom,
+            _ => System.Windows.VerticalAlignment.Center
+        };
+    }
+
+    public void SetRestartButtonCompact(bool compact)
+    {
+        RestartStreamButton.Width = compact ? 24 : 118;
+        RestartStreamButton.Height = compact ? 24 : 32;
+        RestartStreamButton.Margin = compact ? new Thickness(0) : new Thickness(2);
+        RestartStreamButton.Content = compact ? "↻" : "Restart stream";
+        RestartStreamButton.FontSize = compact ? 17 : 12;
+    }
+
     public void Start(bool manual = true)
     {
         if (_disposed || _libVlc is null || !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl)) return;
@@ -145,6 +218,13 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public void Tick(string hardwareDecoder)
     {
         if (_disposed || !_settings.Enabled) return;
+        if (_videoDisplayWidth > 0 && _videoDisplayHeight > 0)
+        {
+            var dimensions = GetVideoDimensions();
+            if (dimensions is { } source &&
+                (source.Width != _lastSizingSourceWidth || source.Height != _lastSizingSourceHeight))
+                ApplyVideoSizing(_player);
+        }
         var now = DateTimeOffset.UtcNow;
         UpdateOverlayPresentation(now, hardwareDecoder);
 
@@ -248,6 +328,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         var player = new MediaPlayer(_libVlc) { EnableHardwareDecoding = _requestHardwareDecoding };
         _player = player;
         VideoView.MediaPlayer = player;
+        _lastSizingSourceWidth = 0;
+        _lastSizingSourceHeight = 0;
+        ApplyVideoSizing(player);
         player.Opening += (_, _) => { if (ReferenceEquals(_player, player)) SetState(CameraConnectionState.Connecting); };
         player.Buffering += (_, e) =>
         {
@@ -265,11 +348,49 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             var generation = _playGeneration;
             _ = CaptureSnapshotAsync(player, generation);
             SetOverlay("Live", false);
+            Dispatcher.BeginInvoke(() => ApplyVideoSizing(player));
             var effectiveOptions = string.Join(' ', _settings.ToMediaOptions().Where(option => option.StartsWith(":rtsp-", StringComparison.Ordinal) || option.StartsWith(":network-caching=", StringComparison.Ordinal)));
             _logger?.Write("INFO", $"Camera {_settings.Slot} connected: {RtspUrlSanitizer.Redact(_settings.RtspUrl)}; transport={_settings.EffectiveTransport}; cache={_settings.EffectiveNetworkCacheMilliseconds} ms; lowLatency={_settings.EffectiveLowLatency}; mediaOptions=[{effectiveOptions}]");
         };
         player.EndReached += (_, _) => { if (ReferenceEquals(_player, player)) ScheduleRecovery("Stream ended"); };
         player.EncounteredError += (_, _) => { if (ReferenceEquals(_player, player)) ScheduleRecovery("LibVLC reported a decoder or stream error"); };
+    }
+
+    private void ApplyVideoSizing(MediaPlayer? player)
+    {
+        if (player is null) return;
+        player.Scale = 0;
+        player.CropGeometry = string.Empty;
+        var dimensions = GetVideoDimensions();
+        if (dimensions is { } source)
+        {
+            _lastSizingSourceWidth = source.Width;
+            _lastSizingSourceHeight = source.Height;
+            var cropWidth = (int)source.Width;
+            var cropHeight = (int)source.Height;
+            if (_viewportShape != DoorbellViewportShape.Native &&
+                _videoSizing == DoorbellVideoSizing.Fit &&
+                _videoDisplayWidth > 0 && _videoDisplayHeight > 0)
+            {
+                var sourceAspect = source.Width / (double)source.Height;
+                var displayAspect = _videoDisplayWidth / (double)_videoDisplayHeight;
+                if (sourceAspect > displayAspect)
+                    cropWidth = Math.Max(1, (int)Math.Round(source.Height * displayAspect));
+                else if (sourceAspect < displayAspect)
+                    cropHeight = Math.Max(1, (int)Math.Round(source.Width / displayAspect));
+            }
+            cropWidth = Math.Max(1, (int)Math.Round(cropWidth * 100d / _videoZoomPercent));
+            cropHeight = Math.Max(1, (int)Math.Round(cropHeight * 100d / _videoZoomPercent));
+            if (cropWidth < source.Width || cropHeight < source.Height)
+            {
+                var left = Math.Max(0, ((int)source.Width - cropWidth) / 2);
+                var top = Math.Max(0, ((int)source.Height - cropHeight) / 2);
+                player.CropGeometry = $"{cropWidth}x{cropHeight}+{left}+{top}";
+            }
+        }
+        player.AspectRatio = _videoSizing == DoorbellVideoSizing.Stretch && _videoDisplayWidth > 0 && _videoDisplayHeight > 0
+            ? $"{_videoDisplayWidth}:{_videoDisplayHeight}"
+            : null;
     }
 
     private void StartPlayer(bool recreatePlayer)
