@@ -152,6 +152,14 @@ try
     Check(Math.Abs(liveLayout.SourceWidth / liveLayout.SourceHeight - 730d / 385d) < 0.000001,
         "doorbell visible source matches viewport aspect ratio without bars");
 
+    Check((int)ViewerCommandType.RestartCamera == 0 &&
+          (int)ViewerCommandType.RestartAllCameras == 1 &&
+          (int)ViewerCommandType.RestartViewer == 2 &&
+          (int)ViewerCommandType.EnterFullScreen == 3 &&
+          (int)ViewerCommandType.ExitFullScreen == 4 &&
+          (int)ViewerCommandType.CaptureCameraSnapshot == 5,
+        "viewer command protocol keeps existing numeric values stable");
+
     var grid = new CameraSettings { RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };
     var gridOptions = grid.ToMediaOptions();
     Check(grid.EffectiveTransport == RtspTransport.Tcp, "StreamGrid forces TCP");

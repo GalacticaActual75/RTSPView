@@ -115,7 +115,8 @@ function createDoorbellPreview(form){
  thumbnail.addEventListener('load',loadDoorbell);
  form.addEventListener('input',scheduleDraw);
  form.addEventListener('change',event=>{if(event.target.name==='hostCameraSlot')loadHost();scheduleDraw()});
- panel.querySelector('.refresh-doorbell-preview').onclick=()=>{loadHost();refreshThumbnail(thumbnail)};
+ const refreshButton=panel.querySelector('.refresh-doorbell-preview');
+ refreshButton.onclick=async()=>{const originalText=refreshButton.textContent;refreshButton.disabled=true;refreshButton.textContent='Refreshing...';try{await Promise.all([api('/api/cameras/'+number('hostCameraSlot',2)+'/thumbnail/refresh',{method:'POST'}),api('/api/cameras/10/thumbnail/refresh',{method:'POST'})]);loadHost();refreshThumbnail(thumbnail);refreshButton.textContent='Refreshed'}catch(error){refreshButton.textContent='Refresh failed';console.error(error)}finally{setTimeout(()=>{refreshButton.textContent=originalText;refreshButton.disabled=false},1200)}};
  if('ResizeObserver'in window)new ResizeObserver(scheduleDraw).observe(panel.querySelector('.doorbell-preview-stage'));else window.addEventListener('resize',scheduleDraw);
  loadHost();loadDoorbell();selectMode('wall');return panel
 }

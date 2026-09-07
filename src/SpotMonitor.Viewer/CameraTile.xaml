@@ -13,8 +13,8 @@
           <TextBlock x:Name="SlotText" Foreground="#59616B" FontSize="12" Margin="0,5,0,0" HorizontalAlignment="Center"/>
         </StackPanel>
         <Button x:Name="RestartStreamButton" Width="118" Height="32" Margin="2" HorizontalAlignment="Center" VerticalAlignment="Center" Content="Restart stream" Click="RestartStreamButton_Click" Background="#D91F2328" Foreground="White" BorderBrush="#343A40" BorderThickness="1" ToolTip="Restart only this camera stream" Visibility="Collapsed"/>
-        <Ellipse x:Name="EllipticalViewportEdge" Margin="1.25" Stroke="#E6000000" StrokeThickness="3.5" Fill="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
-        <Border x:Name="RoundedViewportEdge" Margin="1.25" BorderBrush="#E6000000" BorderThickness="3.5" Background="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
+        <Ellipse x:Name="EllipticalViewportEdge" Margin="-1.5" Stroke="#E6000000" StrokeThickness="3" Fill="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
+        <Border x:Name="RoundedViewportEdge" Margin="-1.5" BorderBrush="#E6000000" BorderThickness="3" Background="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
       </Grid>
     </vlc:VideoView>
   </Border>

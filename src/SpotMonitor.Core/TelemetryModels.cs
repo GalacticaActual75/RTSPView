@@ -55,7 +55,8 @@ public enum ViewerCommandType
     RestartAllCameras,
     RestartViewer,
     EnterFullScreen,
-    ExitFullScreen
+    ExitFullScreen,
+    CaptureCameraSnapshot
 }
 
 public sealed record ViewerCommand(Guid Id, ViewerCommandType Type, int? Slot = null);

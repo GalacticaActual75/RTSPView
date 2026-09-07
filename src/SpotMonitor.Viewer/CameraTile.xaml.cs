@@ -371,7 +371,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             _lastDecodedFrames = -1;
             _status = _status with { State = CameraConnectionState.Live, ConnectedAt = now, LastFrameAt = now, NextReconnectAt = null };
             var generation = _playGeneration;
-            _ = CaptureSnapshotAsync(player, generation);
+            _ = CaptureSnapshotAsync(player, generation, waitForFirstFrame: true);
             SetOverlay("Live", false);
             Dispatcher.BeginInvoke(() => ApplyVideoSizing(player));
             var effectiveOptions = string.Join(' ', _settings.ToMediaOptions().Where(option => option.StartsWith(":rtsp-", StringComparison.Ordinal) || option.StartsWith(":network-caching=", StringComparison.Ordinal)));
@@ -477,24 +477,74 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             QueuePlayback();
     }
 
-    private async Task CaptureSnapshotAsync(MediaPlayer player, int generation)
+    public Task<bool> RefreshSnapshotAsync()
     {
+        var player = _player;
+        return player is null
+            ? Task.FromResult(false)
+            : CaptureSnapshotAsync(player, _playGeneration, waitForFirstFrame: false);
+    }
+
+    private async Task<bool> CaptureSnapshotAsync(MediaPlayer player, int generation, bool waitForFirstFrame)
+    {
+        string? temporaryPath = null;
         try
         {
             var path = Path.Combine(_snapshotDirectory, $"camera-{_settings.Slot}.jpg");
-            var captureStartedAt = DateTime.UtcNow;
-            for (var attempt = 1; attempt <= 6; attempt++)
+            var maximumAttempts = waitForFirstFrame ? 6 : 3;
+            for (var attempt = 1; attempt <= maximumAttempts; attempt++)
             {
-                await Task.Delay(TimeSpan.FromSeconds(attempt == 1 ? 2 : 3));
-                if (_disposed || generation != _playGeneration || !ReferenceEquals(_player, player) || !player.IsPlaying) return;
+                var delay = waitForFirstFrame
+                    ? TimeSpan.FromSeconds(attempt == 1 ? 2 : 3)
+                    : TimeSpan.FromMilliseconds(attempt == 1 ? 0 : 350);
+                if (delay > TimeSpan.Zero) await Task.Delay(delay);
+                if (_disposed || generation != _playGeneration || !ReferenceEquals(_player, player) || !player.IsPlaying) return false;
                 if (player.Media?.Statistics is { } statistics && statistics.DecodedVideo == 0) continue;
-                if (!player.TakeSnapshot(0, path, 320, 180)) continue;
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                if (File.Exists(path) && File.GetLastWriteTimeUtc(path) >= captureStartedAt) return;
+                var attemptPath = Path.Combine(_snapshotDirectory, $"camera-{_settings.Slot}-{Guid.NewGuid():N}.jpg");
+                temporaryPath = attemptPath;
+                // Keep one dimension at zero so LibVLC preserves the source aspect ratio.
+                if (!player.TakeSnapshot(0, attemptPath, 320, 0))
+                {
+                    DeleteTemporarySnapshot(attemptPath);
+                    temporaryPath = null;
+                    continue;
+                }
+                for (var check = 0; check < 20; check++)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(100));
+                    try
+                    {
+                        using (var completedSnapshot = new FileStream(attemptPath, FileMode.Open, FileAccess.Read, FileShare.None))
+                            if (completedSnapshot.Length == 0) continue;
+                        File.Move(attemptPath, path, overwrite: true);
+                        temporaryPath = null;
+                        return true;
+                    }
+                    catch (IOException) { }
+                }
+                DeleteTemporarySnapshot(attemptPath);
+                temporaryPath = null;
             }
             _logger?.Write("WARNING", $"Camera {_settings.Slot}: thumbnail capture was not available after retries");
+            return false;
         }
-        catch (Exception exception) { _logger?.Write("WARNING", $"Camera {_settings.Slot}: thumbnail capture failed: {exception.Message}"); }
+        catch (Exception exception)
+        {
+            _logger?.Write("WARNING", $"Camera {_settings.Slot}: thumbnail capture failed: {exception.Message}");
+            return false;
+        }
+        finally
+        {
+            if (temporaryPath is not null)
+                DeleteTemporarySnapshot(temporaryPath);
+        }
+    }
+
+    private static void DeleteTemporarySnapshot(string path)
+    {
+        try { File.Delete(path); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private void ScheduleRecovery(string error)

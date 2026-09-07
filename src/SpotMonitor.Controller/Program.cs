@@ -161,6 +161,12 @@ app.MapGet("/api/cameras/{slot:int}/thumbnail", (int slot) =>
     var path = Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg");
     return File.Exists(path) ? Results.File(path, "image/jpeg") : Results.NotFound(new { error = "No thumbnail has been captured yet." });
 }).RequireAuthorization();
+app.MapPost("/api/cameras/{slot:int}/thumbnail/refresh", async (int slot, CancellationToken cancellationToken) =>
+{
+    if (slot is < 1 or > 10) return Results.BadRequest(new { error = "Stream slot must be between 1 and 10." });
+    var result = await viewerCommands.SendAsync(ViewerCommandType.CaptureCameraSnapshot, slot, cancellationToken);
+    return CommandResult(result);
+}).RequireAuthorization();
 
 app.MapPut("/api/doorbell", async (DoorbellOverlaySettings overlay) =>
 {

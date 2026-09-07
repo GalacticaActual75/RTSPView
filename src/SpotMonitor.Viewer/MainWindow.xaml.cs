@@ -551,7 +551,10 @@ public partial class MainWindow : Window
             SetFullScreen(false);
     }
 
-    private Task<ViewerCommandResult> HandleCommandAsync(ViewerCommand command) => Dispatcher.InvokeAsync(() =>
+    private Task<ViewerCommandResult> HandleCommandAsync(ViewerCommand command) =>
+        Dispatcher.InvokeAsync(() => HandleCommandOnUiAsync(command)).Task.Unwrap();
+
+    private async Task<ViewerCommandResult> HandleCommandOnUiAsync(ViewerCommand command)
     {
         switch (command.Type)
         {
@@ -560,6 +563,12 @@ public partial class MainWindow : Window
                 var streamName = command.Slot == 10 ? "Doorbell" : $"Camera {command.Slot}";
                 _logger.Write("INFO", $"Remote command: restarted {streamName}");
                 return new ViewerCommandResult(command.Id, true, $"{streamName} restarted.");
+            case ViewerCommandType.CaptureCameraSnapshot when command.Slot is >= 1 and <= 10 && command.Slot.Value <= _allTiles.Length:
+                var snapshotName = command.Slot == 10 ? "Doorbell" : $"Camera {command.Slot}";
+                var captured = await _allTiles[command.Slot.Value - 1].RefreshSnapshotAsync();
+                _logger.Write(captured ? "INFO" : "WARNING", $"Remote command: {snapshotName} snapshot {(captured ? "refreshed" : "failed")}");
+                return new ViewerCommandResult(command.Id, captured,
+                    captured ? $"{snapshotName} snapshot refreshed." : $"{snapshotName} snapshot could not be captured.");
             case ViewerCommandType.RestartAllCameras:
                 foreach (var tile in _allTiles) tile.Start();
                 _logger.Write("INFO", "Remote command: restarted all configured streams");
@@ -583,12 +592,12 @@ public partial class MainWindow : Window
                 restartHelper.ArgumentList.Add($"Start-Sleep -Seconds 2; Start-Process -FilePath '{escapedExecutable}'");
                 Process.Start(restartHelper);
                 _logger.Write("INFO", "Remote command: restarting viewer");
-                Dispatcher.BeginInvoke(System.Windows.Application.Current.Shutdown);
+                _ = Dispatcher.BeginInvoke(System.Windows.Application.Current.Shutdown);
                 return new ViewerCommandResult(command.Id, true, "Viewer restart started.");
             default:
                 return new ViewerCommandResult(command.Id, false, "Invalid viewer command or camera slot.");
         }
-    }).Task;
+    }
 
     private void ConfigureButton_Click(object sender, RoutedEventArgs e)
     {
