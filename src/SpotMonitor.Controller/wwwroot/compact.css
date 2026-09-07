@@ -88,6 +88,83 @@
 @media(max-width:700px){.display-toggle-grid,.display-field-row{grid-template-columns:1fr}.display-field-row .actions{justify-content:space-between}}
 
 .doorbell-section-title { margin-top: 38px; }
-.doorbell-grid { margin-bottom: 38px; }
+.doorbell-grid {
+  grid-template-columns: minmax(420px, 470px) minmax(0, 1fr);
+  gap: 24px;
+  margin-bottom: 38px;
+}
 .overlay-placement { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-@media(max-width:700px){.overlay-placement{grid-template-columns:1fr}}
+.overlay-group-title {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.overlay-range-field { min-width: 0; }
+.range-input-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 68px;
+  gap: 8px;
+  align-items: center;
+}
+.range-input-pair input[type="range"] {
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+.range-input-pair input[type="number"] { text-align: right; }
+.overlay-help {
+  grid-column: 1 / -1;
+  margin: 0 !important;
+  padding: 9px 11px;
+  border-left: 3px solid var(--blue);
+  border-radius: 4px;
+  background: #0c1015;
+  color: var(--muted);
+  font-size: 11px;
+}
+.doorbell-preview-panel {
+  position: sticky;
+  top: 82px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.doorbell-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.doorbell-preview-head h3 { margin: 0; font-size: 17px; }
+.doorbell-preview-head p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+.doorbell-preview-head button { flex: 0 0 auto; }
+.doorbell-preview-stage {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #05070a;
+  box-shadow: inset 0 0 0 1px #000;
+}
+.doorbell-preview-stage canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+@media(max-width:1100px){
+  .doorbell-grid{grid-template-columns:1fr}
+  .doorbell-preview-panel{position:relative;top:auto}
+}
+@media(max-width:700px){
+  .overlay-placement{grid-template-columns:1fr}
+  .doorbell-preview-head{align-items:flex-start;flex-direction:column}
+}

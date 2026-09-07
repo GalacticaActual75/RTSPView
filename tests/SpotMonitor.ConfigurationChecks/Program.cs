@@ -15,11 +15,17 @@ try
             HostCameraSlot = 2,
             Position = PictureInPicturePosition.BottomLeft,
             SizePercent = 50,
+            ViewportWidthPercent = 80,
+            ViewportHeightPercent = 40,
             VideoSizing = DoorbellVideoSizing.Stretch,
             ViewportShape = DoorbellViewportShape.RoundedSquare,
             HorizontalOffsetPercent = 12,
             VerticalOffsetPercent = -8,
             ZoomPercent = 160,
+            CropLeftPercent = 4,
+            CropRightPercent = 6,
+            CropTopPercent = 50,
+            CropBottomPercent = 2,
             Camera = AppSettings.CreateDoorbellCamera() with { Enabled = true, RtspUrl = "rtsp://door:door-secret@example.test/doorbell" }
         }
     };
@@ -41,6 +47,20 @@ try
     Check(recovered.DoorbellOverlay.HorizontalOffsetPercent == 12 &&
           recovered.DoorbellOverlay.VerticalOffsetPercent == -8, "doorbell viewport offset persistence");
     Check(recovered.DoorbellOverlay.ZoomPercent == 160, "doorbell zoom persistence");
+    Check(recovered.DoorbellOverlay.ViewportWidthPercent == 80 &&
+          recovered.DoorbellOverlay.ViewportHeightPercent == 40, "doorbell viewport dimensions persistence");
+    Check(recovered.DoorbellOverlay.CropTopPercent == 50 &&
+          recovered.DoorbellOverlay.CropBottomPercent == 2 &&
+          recovered.DoorbellOverlay.CropLeftPercent == 4 &&
+          recovered.DoorbellOverlay.CropRightPercent == 6, "doorbell source crop persistence");
+
+    var migratedOverlay = (new AppSettings
+    {
+        SchemaVersion = 8,
+        DoorbellOverlay = new DoorbellOverlaySettings { SizePercent = 73 }
+    }).Normalize().DoorbellOverlay;
+    Check(migratedOverlay.ViewportWidthPercent == 73 &&
+          migratedOverlay.ViewportHeightPercent == 73, "schema 8 doorbell size migration");
 
     var normalizedOverlay = (new AppSettings
     {
@@ -49,22 +69,34 @@ try
             HostCameraSlot = 99,
             Position = (PictureInPicturePosition)999,
             SizePercent = 5,
+            ViewportWidthPercent = 999,
+            ViewportHeightPercent = -999,
             VideoSizing = (DoorbellVideoSizing)999,
             ViewportShape = (DoorbellViewportShape)999,
             HorizontalOffsetPercent = 999,
             VerticalOffsetPercent = -999,
             ZoomPercent = 999,
+            CropLeftPercent = 80,
+            CropRightPercent = 80,
+            CropTopPercent = 80,
+            CropBottomPercent = 80,
             Camera = AppSettings.CreateDoorbellCamera() with { Name = "  " }
         }
     }).Normalize().DoorbellOverlay;
     Check(normalizedOverlay.HostCameraSlot == 9, "doorbell host camera normalization");
     Check(normalizedOverlay.Position == PictureInPicturePosition.BottomLeft, "doorbell corner normalization");
     Check(normalizedOverlay.SizePercent == 25, "doorbell size normalization");
+    Check(normalizedOverlay.ViewportWidthPercent == 95 &&
+          normalizedOverlay.ViewportHeightPercent == 10, "doorbell viewport dimension normalization");
     Check(normalizedOverlay.VideoSizing == DoorbellVideoSizing.Fit, "doorbell video sizing normalization");
     Check(normalizedOverlay.ViewportShape == DoorbellViewportShape.Native, "doorbell viewport shape normalization");
     Check(normalizedOverlay.HorizontalOffsetPercent == 50 &&
           normalizedOverlay.VerticalOffsetPercent == -50, "doorbell viewport offset normalization");
     Check(normalizedOverlay.ZoomPercent == 300, "doorbell zoom normalization");
+    Check(normalizedOverlay.CropLeftPercent == 80 &&
+          normalizedOverlay.CropRightPercent == 10 &&
+          normalizedOverlay.CropTopPercent == 80 &&
+          normalizedOverlay.CropBottomPercent == 10, "doorbell source crop normalization");
     Check(normalizedOverlay.Camera.Slot == 10 && normalizedOverlay.Camera.Name == "Doorbell", "doorbell camera normalization");
 
     var grid = new CameraSettings { RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };

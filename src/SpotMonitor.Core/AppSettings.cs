@@ -2,7 +2,7 @@ namespace SpotMonitor.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
@@ -44,6 +44,10 @@ public sealed record AppSettings
         var position = Enum.IsDefined(overlay.Position) ? overlay.Position : PictureInPicturePosition.BottomLeft;
         var videoSizing = Enum.IsDefined(overlay.VideoSizing) ? overlay.VideoSizing : DoorbellVideoSizing.Fit;
         var viewportShape = Enum.IsDefined(overlay.ViewportShape) ? overlay.ViewportShape : DoorbellViewportShape.Native;
+        var viewportWidthPercent = SchemaVersion < 9 ? overlay.SizePercent : overlay.ViewportWidthPercent;
+        var viewportHeightPercent = SchemaVersion < 9 ? overlay.SizePercent : overlay.ViewportHeightPercent;
+        var (cropLeftPercent, cropRightPercent) = NormalizeCropPair(overlay.CropLeftPercent, overlay.CropRightPercent);
+        var (cropTopPercent, cropBottomPercent) = NormalizeCropPair(overlay.CropTopPercent, overlay.CropBottomPercent);
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
@@ -53,11 +57,17 @@ public sealed record AppSettings
                 HostCameraSlot = Math.Clamp(overlay.HostCameraSlot, 1, 9),
                 Position = position,
                 SizePercent = Math.Clamp(overlay.SizePercent, 25, 90),
+                ViewportWidthPercent = Math.Clamp(viewportWidthPercent, 10, 95),
+                ViewportHeightPercent = Math.Clamp(viewportHeightPercent, 10, 95),
                 VideoSizing = videoSizing,
                 ViewportShape = viewportShape,
                 HorizontalOffsetPercent = Math.Clamp(overlay.HorizontalOffsetPercent, -50, 50),
                 VerticalOffsetPercent = Math.Clamp(overlay.VerticalOffsetPercent, -50, 50),
                 ZoomPercent = Math.Clamp(overlay.ZoomPercent, 100, 300),
+                CropLeftPercent = cropLeftPercent,
+                CropRightPercent = cropRightPercent,
+                CropTopPercent = cropTopPercent,
+                CropBottomPercent = cropBottomPercent,
                 Camera = NormalizeCamera(overlay.Camera ?? CreateDoorbellCamera(), 10, "Doorbell")
             },
             StartFullScreen = SchemaVersion < 3 || StartFullScreen,
@@ -81,6 +91,15 @@ public sealed record AppSettings
             ? normalized with { Transport = RtspTransport.Tcp, NetworkCacheMilliseconds = 3000, LowLatency = false }
             : normalized;
     }
+
+    private static (int Leading, int Trailing) NormalizeCropPair(int leading, int trailing)
+    {
+        leading = Math.Clamp(leading, 0, 80);
+        trailing = Math.Clamp(trailing, 0, 80);
+        if (leading + trailing <= 90) return (leading, trailing);
+        trailing = 90 - leading;
+        return (leading, Math.Max(0, trailing));
+    }
 }
 
 public enum PictureInPicturePosition { TopLeft, TopRight, BottomLeft, BottomRight }
@@ -91,12 +110,19 @@ public sealed record DoorbellOverlaySettings
 {
     public int HostCameraSlot { get; init; } = 2;
     public PictureInPicturePosition Position { get; init; } = PictureInPicturePosition.BottomLeft;
+    // Retained for migration from schema 8 and earlier.
     public int SizePercent { get; init; } = 50;
+    public int ViewportWidthPercent { get; init; } = 50;
+    public int ViewportHeightPercent { get; init; } = 50;
     public DoorbellVideoSizing VideoSizing { get; init; } = DoorbellVideoSizing.Fit;
     public DoorbellViewportShape ViewportShape { get; init; } = DoorbellViewportShape.Native;
     public int HorizontalOffsetPercent { get; init; }
     public int VerticalOffsetPercent { get; init; }
     public int ZoomPercent { get; init; } = 100;
+    public int CropLeftPercent { get; init; }
+    public int CropRightPercent { get; init; }
+    public int CropTopPercent { get; init; }
+    public int CropBottomPercent { get; init; }
     public CameraSettings Camera { get; init; } = AppSettings.CreateDoorbellCamera();
 }
 

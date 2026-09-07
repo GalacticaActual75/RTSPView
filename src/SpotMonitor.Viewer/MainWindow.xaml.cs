@@ -344,11 +344,12 @@ public partial class MainWindow : Window
         var dpi = VisualTreeHelper.GetDpi(target);
         var targetLeft = screenOrigin.X / dpi.DpiScaleX;
         var targetTop = screenOrigin.Y / dpi.DpiScaleY;
-        var scale = Math.Clamp(overlay.SizePercent, 25, 90) / 100d;
-        var maximumWidth = Math.Max(1, target.ActualWidth * scale);
-        var maximumHeight = Math.Max(1, target.ActualHeight * scale);
+        var maximumWidth = Math.Max(1,
+            target.ActualWidth * Math.Clamp(overlay.ViewportWidthPercent, 10, 95) / 100d);
+        var maximumHeight = Math.Max(1,
+            target.ActualHeight * Math.Clamp(overlay.ViewportHeightPercent, 10, 95) / 100d);
         var (width, height) = CalculateDoorbellViewportSize(
-            overlay.ViewportShape, maximumWidth, maximumHeight, DoorbellTile.GetVideoDimensions());
+            overlay, maximumWidth, maximumHeight, DoorbellTile.GetVideoDimensions());
         var alignRight = overlay.Position is PictureInPicturePosition.TopRight or PictureInPicturePosition.BottomRight;
         var alignBottom = overlay.Position is PictureInPicturePosition.BottomLeft or PictureInPicturePosition.BottomRight;
         var baseLeft = targetLeft + (alignRight ? target.ActualWidth - width : 0);
@@ -363,7 +364,16 @@ public partial class MainWindow : Window
         _doorbellWindow.Width = Math.Round(width);
         _doorbellWindow.Height = Math.Round(height);
         DoorbellTile.ApplyVideoSizing(
-            overlay.VideoSizing, overlay.ViewportShape, overlay.ZoomPercent, width, height);
+            overlay.VideoSizing,
+            overlay.ViewportShape,
+            overlay.ZoomPercent,
+            overlay.CropLeftPercent,
+            overlay.CropRightPercent,
+            overlay.CropTopPercent,
+            overlay.CropBottomPercent,
+            width,
+            height);
+        DoorbellTile.ApplyViewportEdgeSmoothing(overlay.ViewportShape, width, height);
         _doorbellWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
         if (!_doorbellWindow.IsVisible) _doorbellWindow.Show();
         ApplyDoorbellWindowRegion(overlay.ViewportShape, width, height, dpi);
@@ -372,21 +382,26 @@ public partial class MainWindow : Window
     }
 
     private static (double Width, double Height) CalculateDoorbellViewportSize(
-        DoorbellViewportShape shape,
+        DoorbellOverlaySettings overlay,
         double maximumWidth,
         double maximumHeight,
         (uint Width, uint Height)? videoDimensions)
     {
-        if (shape is DoorbellViewportShape.Square or DoorbellViewportShape.RoundedSquare or DoorbellViewportShape.Circle)
+        if (overlay.ViewportShape is DoorbellViewportShape.Square or DoorbellViewportShape.Circle)
         {
             var side = Math.Max(1, Math.Min(maximumWidth, maximumHeight));
             return (side, side);
         }
 
-        if (shape == DoorbellViewportShape.Native && videoDimensions is { Width: > 0, Height: > 0 } source)
+        if (overlay.ViewportShape == DoorbellViewportShape.Native &&
+            videoDimensions is { Width: > 0, Height: > 0 } source)
         {
-            var factor = Math.Min(maximumWidth / source.Width, maximumHeight / source.Height);
-            return (Math.Max(1, source.Width * factor), Math.Max(1, source.Height * factor));
+            var croppedWidth = Math.Max(1,
+                source.Width * (100 - overlay.CropLeftPercent - overlay.CropRightPercent) / 100d);
+            var croppedHeight = Math.Max(1,
+                source.Height * (100 - overlay.CropTopPercent - overlay.CropBottomPercent) / 100d);
+            var factor = Math.Min(maximumWidth / croppedWidth, maximumHeight / croppedHeight);
+            return (Math.Max(1, croppedWidth * factor), Math.Max(1, croppedHeight * factor));
         }
 
         return (maximumWidth, maximumHeight);
