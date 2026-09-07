@@ -51,6 +51,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private int _imageVerticalPositionPercent = 50;
     private uint _lastSizingSourceWidth;
     private uint _lastSizingSourceHeight;
+    private bool _nativeVideoLayoutConfirmed;
     private readonly string _snapshotDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor", "snapshots");
 
     public int Slot => _settings.Slot;
@@ -353,6 +354,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         VideoView.MediaPlayer = player;
         _lastSizingSourceWidth = 0;
         _lastSizingSourceHeight = 0;
+        _nativeVideoLayoutConfirmed = false;
         ApplyVideoSizing(player);
         player.Opening += (_, _) => { if (ReferenceEquals(_player, player)) SetState(CameraConnectionState.Connecting); };
         player.Buffering += (_, e) =>
@@ -393,14 +395,20 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _lastSizingSourceHeight = source.Height;
         VideoView.ApplyTemplate();
         if (VideoView.Template.FindName("PART_PlayerHost", VideoView) is HwndHost videoHost)
-            NativeVideoSurfaceLayout.Apply(
+        {
+            var layoutApplied = NativeVideoSurfaceLayout.Apply(
                 videoHost,
-                VideoView,
                 (int)source.Width,
                 (int)source.Height,
                 _videoZoomPercent,
                 _imageHorizontalPositionPercent,
                 _imageVerticalPositionPercent);
+            if (layoutApplied && !_nativeVideoLayoutConfirmed)
+            {
+                _nativeVideoLayoutConfirmed = true;
+                _logger?.Write("INFO", $"Camera {_settings.Slot} ({_settings.Name}): native video viewport layout active; source={source.Width}x{source.Height}; viewport={_videoDisplayWidth}x{_videoDisplayHeight}; zoom={_videoZoomPercent}%; focus={_imageHorizontalPositionPercent},{_imageVerticalPositionPercent}");
+            }
+        }
     }
 
     private void StartPlayer(bool recreatePlayer)
