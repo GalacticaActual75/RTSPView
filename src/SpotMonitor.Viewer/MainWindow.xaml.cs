@@ -26,8 +26,11 @@ public partial class MainWindow : Window
     private readonly LibVLC _libVlc;
     private readonly JsonSettingsStore _settingsStore;
     private readonly RollingFileLogger _logger;
+    private readonly CameraTile DoorbellTile = new();
     private CameraTile[] _tiles = [];
     private CameraTile[] _allTiles = [];
+    private Window? _doorbellWindow;
+    private bool _doorbellLayoutQueued;
     private AppSettings _settings = new();
     private string _hardwareDecoder = "HW requested";
     private DateTime _settingsLastWriteUtc;
@@ -47,6 +50,10 @@ public partial class MainWindow : Window
     {
         _commandServer = new ViewerCommandServer(HandleCommandAsync);
         InitializeComponent();
+        LocationChanged += (_, _) => QueueDoorbellLayout();
+        SizeChanged += (_, _) => QueueDoorbellLayout();
+        StateChanged += (_, _) => QueueDoorbellLayout();
+        WallGrid.SizeChanged += (_, _) => QueueDoorbellLayout();
         _cursorTimer.Tick += (_, _) =>
         {
             CheckCornerGesture();
@@ -98,6 +105,7 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        EnsureDoorbellWindow();
         _tiles = [Tile1, Tile2, Tile3, Tile4, Tile5, Tile6, Tile7, Tile8, Tile9];
         _allTiles = [.. _tiles, DoorbellTile];
         foreach (var tile in _allTiles) tile.PointerActivity += Tile_PointerActivity;
@@ -120,8 +128,8 @@ public partial class MainWindow : Window
             _settings = _settings with { Cameras = cameras };
         }
         for (var index = 0; index < 9; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
-        DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding);
         ApplyDoorbellOverlay();
+        DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding);
         ApplyOverlayPreferences();
         LoadEditor(0);
         UpdateLanAddressText();
@@ -243,10 +251,12 @@ public partial class MainWindow : Window
             ControlBar.Visibility = Visibility.Visible;
         }
         ApplyAlwaysOnTop();
+        QueueDoorbellLayout();
         RefreshNativeVideoBackgrounds(forceRedraw: true);
         Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, async () =>
         {
             await Task.Delay(250);
+            QueueDoorbellLayout();
             RefreshNativeVideoBackgrounds(forceRedraw: true);
         });
     }
@@ -257,50 +267,137 @@ public partial class MainWindow : Window
         foreach (var tile in _allTiles) tile.EnsureNativeVideoBackground(forceRedraw);
     }
 
-    private void DoorbellOverlayLayer_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateDoorbellSize();
-
     private void ApplyDoorbellOverlay()
     {
-        var overlay = _settings.DoorbellOverlay;
-        var hostIndex = Math.Clamp(overlay.HostCameraSlot, 1, 9) - 1;
-        Grid.SetRow(DoorbellOverlayLayer, hostIndex / 3);
-        Grid.SetColumn(DoorbellOverlayLayer, hostIndex % 3);
-        DoorbellHost.HorizontalAlignment = overlay.Position is PictureInPicturePosition.TopRight or PictureInPicturePosition.BottomRight
-            ? System.Windows.HorizontalAlignment.Right
-            : System.Windows.HorizontalAlignment.Left;
-        DoorbellHost.VerticalAlignment = overlay.Position is PictureInPicturePosition.BottomLeft or PictureInPicturePosition.BottomRight
-            ? System.Windows.VerticalAlignment.Bottom
-            : System.Windows.VerticalAlignment.Top;
-        DoorbellOverlayLayer.Visibility = overlay.Camera.Enabled ? Visibility.Visible : Visibility.Collapsed;
-        UpdateDoorbellSize();
-        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => RefreshNativeVideoBackgrounds(forceRedraw: true));
+        if (_doorbellWindow is null) return;
+        if (!_settings.DoorbellOverlay.Camera.Enabled)
+        {
+            _doorbellWindow.Hide();
+            return;
+        }
+        UpdateDoorbellWindowLayout();
+        QueueDoorbellLayout();
     }
 
-    private void UpdateDoorbellSize()
+    private void EnsureDoorbellWindow()
     {
-        if (DoorbellOverlayLayer.ActualWidth <= 0 || DoorbellOverlayLayer.ActualHeight <= 0) return;
-        var scale = Math.Clamp(_settings.DoorbellOverlay.SizePercent, 25, 90) / 100d;
-        DoorbellHost.Width = DoorbellOverlayLayer.ActualWidth * scale;
-        DoorbellHost.Height = DoorbellOverlayLayer.ActualHeight * scale;
+        if (_doorbellWindow is not null) return;
+        var window = new Window
+        {
+            Owner = this,
+            Title = "SpotMonitor Doorbell Overlay",
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Background = System.Windows.Media.Brushes.Black,
+            BorderBrush = System.Windows.Media.Brushes.Black,
+            BorderThickness = new Thickness(0),
+            Content = DoorbellTile,
+            Left = -32_000,
+            Top = -32_000,
+            Width = 1,
+            Height = 1
+        };
+        window.SourceInitialized += (_, _) => ConfigureDoorbellWindow(window);
+        _doorbellWindow = window;
+    }
+
+    private void QueueDoorbellLayout()
+    {
+        if (!IsLoaded || _doorbellWindow is null || _doorbellLayoutQueued) return;
+        _doorbellLayoutQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+        {
+            _doorbellLayoutQueued = false;
+            UpdateDoorbellWindowLayout();
+        }));
+    }
+
+    private void UpdateDoorbellWindowLayout()
+    {
+        if (_doorbellWindow is null || _tiles.Length != 9) return;
+        var overlay = _settings.DoorbellOverlay;
+        if (!overlay.Camera.Enabled || !IsVisible || WindowState == WindowState.Minimized)
+        {
+            _doorbellWindow.Hide();
+            return;
+        }
+
+        var target = _tiles[Math.Clamp(overlay.HostCameraSlot, 1, 9) - 1];
+        if (target.ActualWidth <= 0 || target.ActualHeight <= 0) return;
+        System.Windows.Point screenOrigin;
+        try { screenOrigin = target.PointToScreen(new System.Windows.Point(0, 0)); }
+        catch (InvalidOperationException) { return; }
+        var dpi = VisualTreeHelper.GetDpi(target);
+        var targetLeft = screenOrigin.X / dpi.DpiScaleX;
+        var targetTop = screenOrigin.Y / dpi.DpiScaleY;
+        var scale = Math.Clamp(overlay.SizePercent, 25, 90) / 100d;
+        var width = Math.Max(1, target.ActualWidth * scale);
+        var height = Math.Max(1, target.ActualHeight * scale);
+        var alignRight = overlay.Position is PictureInPicturePosition.TopRight or PictureInPicturePosition.BottomRight;
+        var alignBottom = overlay.Position is PictureInPicturePosition.BottomLeft or PictureInPicturePosition.BottomRight;
+
+        _doorbellWindow.Left = Math.Round(targetLeft + (alignRight ? target.ActualWidth - width : 0));
+        _doorbellWindow.Top = Math.Round(targetTop + (alignBottom ? target.ActualHeight - height : 0));
+        _doorbellWindow.Width = Math.Round(width);
+        _doorbellWindow.Height = Math.Round(height);
+        _doorbellWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
+        if (!_doorbellWindow.IsVisible) _doorbellWindow.Show();
+        BringDoorbellWindowToFront();
+    }
+
+    private static void ConfigureDoorbellWindow(Window window)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero) return;
+        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+        SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle | WsExToolWindow | WsExNoActivate));
+        var borderColor = DwmColorNone;
+        DwmSetWindowAttribute(handle, DwmwaBorderColor, ref borderColor, sizeof(uint));
+    }
+
+    private void BringDoorbellWindowToFront()
+    {
+        if (_doorbellWindow?.IsVisible != true) return;
+        var handle = new WindowInteropHelper(_doorbellWindow).Handle;
+        if (handle == IntPtr.Zero) return;
+        SetWindowPos(handle, _settings.KeepViewerAlwaysOnTop ? HwndTopmost : HwndTop, 0, 0, 0, 0,
+            SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
     }
 
     private void ApplyAlwaysOnTop()
     {
         Topmost = _settings.KeepViewerAlwaysOnTop;
+        if (_doorbellWindow is not null) _doorbellWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
         SetWindowPos(handle, _settings.KeepViewerAlwaysOnTop ? HwndTopmost : HwndNotTopmost, 0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
+        BringDoorbellWindowToFront();
     }
 
     private static readonly IntPtr HwndTopmost = new(-1);
     private static readonly IntPtr HwndNotTopmost = new(-2);
+    private static readonly IntPtr HwndTop = IntPtr.Zero;
+    private const int GwlExStyle = -20;
+    private const long WsExToolWindow = 0x00000080L;
+    private const long WsExNoActivate = 0x08000000L;
+    private const int DwmwaBorderColor = 34;
+    private const uint DwmColorNone = 0xFFFFFFFE;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpShowWindow = 0x0040;
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref uint value, int valueSize);
 
     private void Window_MouseMove(object sender, System.Windows.Input.MouseEventArgs e) => RegisterPointerActivity();
 
@@ -382,8 +479,8 @@ public partial class MainWindow : Window
         _settings = dialog.Settings.Normalize();
         _settingsLastWriteUtc = File.GetLastWriteTimeUtc(_settingsPath);
         for (var index = 0; index < _tiles.Length; index++) _tiles[index].Apply(_settings.Cameras[index]);
-        DoorbellTile.Apply(_settings.DoorbellOverlay.Camera);
         ApplyDoorbellOverlay();
+        DoorbellTile.Apply(_settings.DoorbellOverlay.Camera);
         ApplyOverlayPreferences();
         LoadEditor(Math.Max(0, SlotBox.SelectedIndex));
         _logger.Write("INFO", "Configuration saved and applied to all changed camera slots");
@@ -398,12 +495,13 @@ public partial class MainWindow : Window
         try
         {
             var updated = (await _settingsStore.LoadAsync()).Normalize();
+            var previousDoorbell = _settings.DoorbellOverlay.Camera;
             for (var index = 0; index < _tiles.Length; index++)
                 if (_settings.Cameras[index] != updated.Cameras[index]) _tiles[index].Apply(updated.Cameras[index]);
-            if (_settings.DoorbellOverlay.Camera != updated.DoorbellOverlay.Camera)
-                DoorbellTile.Apply(updated.DoorbellOverlay.Camera);
             _settings = updated;
             ApplyDoorbellOverlay();
+            if (previousDoorbell != updated.DoorbellOverlay.Camera)
+                DoorbellTile.Apply(updated.DoorbellOverlay.Camera);
             ApplyOverlayPreferences();
             PositionOnPreferredMonitor();
             SetFullScreen(updated.StartFullScreen);
@@ -426,6 +524,12 @@ public partial class MainWindow : Window
         _cursorTimer.Stop();
         Mouse.OverrideCursor = null;
         foreach (var tile in _allTiles) tile.Dispose();
+        if (_doorbellWindow is not null)
+        {
+            _doorbellWindow.Content = null;
+            _doorbellWindow.Close();
+            _doorbellWindow = null;
+        }
         _telemetryPublisher.Dispose();
         _commandServer.Dispose();
         _libVlc.Dispose();
