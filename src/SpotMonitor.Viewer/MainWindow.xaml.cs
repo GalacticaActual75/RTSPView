@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private readonly JsonSettingsStore _settingsStore;
     private readonly RollingFileLogger _logger;
     private CameraTile[] _tiles = [];
+    private CameraTile[] _allTiles = [];
     private AppSettings _settings = new();
     private string _hardwareDecoder = "HW requested";
     private DateTime _settingsLastWriteUtc;
@@ -53,7 +54,7 @@ public partial class MainWindow : Window
                 DateTime.UtcNow - _lastMouseMovement >= TimeSpan.FromSeconds(_settings.MouseCursorHideSeconds))
             {
                 if (Mouse.OverrideCursor is null) Mouse.OverrideCursor = System.Windows.Input.Cursors.None;
-                foreach (var tile in _tiles) tile.HideHoverControls();
+                foreach (var tile in _allTiles) tile.HideHoverControls();
             }
         };
         _settingsPath = Path.Combine(_dataDirectory, "settings.json");
@@ -82,13 +83,13 @@ public partial class MainWindow : Window
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
-            foreach (var tile in _tiles) tile.Tick(_hardwareDecoder);
+            foreach (var tile in _allTiles) tile.Tick(_hardwareDecoder);
             _telemetryPublisher.Publish(new ViewerTelemetry
             {
                 ViewerUptimeSeconds = (long)_viewerUptime.Elapsed.TotalSeconds,
                 ViewerMemoryMb = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1024d / 1024d, 1),
                 HardwareDecoder = _hardwareDecoder,
-                Cameras = _tiles.Select(tile => tile.GetTelemetry()).ToArray()
+                Cameras = _allTiles.Select(tile => tile.GetTelemetry()).ToArray()
             });
             await ReloadExternalConfigurationAsync();
         };
@@ -98,7 +99,8 @@ public partial class MainWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _tiles = [Tile1, Tile2, Tile3, Tile4, Tile5, Tile6, Tile7, Tile8, Tile9];
-        foreach (var tile in _tiles) tile.PointerActivity += Tile_PointerActivity;
+        _allTiles = [.. _tiles, DoorbellTile];
+        foreach (var tile in _allTiles) tile.PointerActivity += Tile_PointerActivity;
         _settings = (await _settingsStore.LoadAsync()).Normalize();
         _settingsLastWriteUtc = File.Exists(_settingsPath) ? File.GetLastWriteTimeUtc(_settingsPath) : DateTime.MinValue;
         var commandLineUrl = ReadArgument("--rtsp");
@@ -118,6 +120,8 @@ public partial class MainWindow : Window
             _settings = _settings with { Cameras = cameras };
         }
         for (var index = 0; index < 9; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
+        DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding);
+        ApplyDoorbellOverlay();
         ApplyOverlayPreferences();
         LoadEditor(0);
         UpdateLanAddressText();
@@ -250,7 +254,34 @@ public partial class MainWindow : Window
     private void RefreshNativeVideoBackgrounds(bool forceRedraw = false)
     {
         NativeVideoBackgroundGuard.Apply(forceRedraw);
-        foreach (var tile in _tiles) tile.EnsureNativeVideoBackground(forceRedraw);
+        foreach (var tile in _allTiles) tile.EnsureNativeVideoBackground(forceRedraw);
+    }
+
+    private void DoorbellOverlayLayer_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateDoorbellSize();
+
+    private void ApplyDoorbellOverlay()
+    {
+        var overlay = _settings.DoorbellOverlay;
+        var hostIndex = Math.Clamp(overlay.HostCameraSlot, 1, 9) - 1;
+        Grid.SetRow(DoorbellOverlayLayer, hostIndex / 3);
+        Grid.SetColumn(DoorbellOverlayLayer, hostIndex % 3);
+        DoorbellHost.HorizontalAlignment = overlay.Position is PictureInPicturePosition.TopRight or PictureInPicturePosition.BottomRight
+            ? System.Windows.HorizontalAlignment.Right
+            : System.Windows.HorizontalAlignment.Left;
+        DoorbellHost.VerticalAlignment = overlay.Position is PictureInPicturePosition.BottomLeft or PictureInPicturePosition.BottomRight
+            ? System.Windows.VerticalAlignment.Bottom
+            : System.Windows.VerticalAlignment.Top;
+        DoorbellOverlayLayer.Visibility = overlay.Camera.Enabled ? Visibility.Visible : Visibility.Collapsed;
+        UpdateDoorbellSize();
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => RefreshNativeVideoBackgrounds(forceRedraw: true));
+    }
+
+    private void UpdateDoorbellSize()
+    {
+        if (DoorbellOverlayLayer.ActualWidth <= 0 || DoorbellOverlayLayer.ActualHeight <= 0) return;
+        var scale = Math.Clamp(_settings.DoorbellOverlay.SizePercent, 25, 90) / 100d;
+        DoorbellHost.Width = DoorbellOverlayLayer.ActualWidth * scale;
+        DoorbellHost.Height = DoorbellOverlayLayer.ActualHeight * scale;
     }
 
     private void ApplyAlwaysOnTop()
@@ -309,14 +340,15 @@ public partial class MainWindow : Window
     {
         switch (command.Type)
         {
-            case ViewerCommandType.RestartCamera when command.Slot is >= 1 and <= 9:
-                _tiles[command.Slot.Value - 1].Start();
-                _logger.Write("INFO", $"Remote command: restarted camera {command.Slot}");
-                return new ViewerCommandResult(command.Id, true, $"Camera {command.Slot} restarted.");
+            case ViewerCommandType.RestartCamera when command.Slot is >= 1 and <= 10 && command.Slot.Value <= _allTiles.Length:
+                _allTiles[command.Slot.Value - 1].Start();
+                var streamName = command.Slot == 10 ? "Doorbell" : $"Camera {command.Slot}";
+                _logger.Write("INFO", $"Remote command: restarted {streamName}");
+                return new ViewerCommandResult(command.Id, true, $"{streamName} restarted.");
             case ViewerCommandType.RestartAllCameras:
-                foreach (var tile in _tiles) tile.Start();
-                _logger.Write("INFO", "Remote command: restarted all cameras");
-                return new ViewerCommandResult(command.Id, true, "All cameras restarted.");
+                foreach (var tile in _allTiles) tile.Start();
+                _logger.Write("INFO", "Remote command: restarted all configured streams");
+                return new ViewerCommandResult(command.Id, true, "All configured streams restarted.");
             case ViewerCommandType.EnterFullScreen:
                 SetFullScreen(true);
                 _logger.Write("INFO", "Remote command: entered full screen");
@@ -350,6 +382,8 @@ public partial class MainWindow : Window
         _settings = dialog.Settings.Normalize();
         _settingsLastWriteUtc = File.GetLastWriteTimeUtc(_settingsPath);
         for (var index = 0; index < _tiles.Length; index++) _tiles[index].Apply(_settings.Cameras[index]);
+        DoorbellTile.Apply(_settings.DoorbellOverlay.Camera);
+        ApplyDoorbellOverlay();
         ApplyOverlayPreferences();
         LoadEditor(Math.Max(0, SlotBox.SelectedIndex));
         _logger.Write("INFO", "Configuration saved and applied to all changed camera slots");
@@ -366,7 +400,10 @@ public partial class MainWindow : Window
             var updated = (await _settingsStore.LoadAsync()).Normalize();
             for (var index = 0; index < _tiles.Length; index++)
                 if (_settings.Cameras[index] != updated.Cameras[index]) _tiles[index].Apply(updated.Cameras[index]);
+            if (_settings.DoorbellOverlay.Camera != updated.DoorbellOverlay.Camera)
+                DoorbellTile.Apply(updated.DoorbellOverlay.Camera);
             _settings = updated;
+            ApplyDoorbellOverlay();
             ApplyOverlayPreferences();
             PositionOnPreferredMonitor();
             SetFullScreen(updated.StartFullScreen);
@@ -380,7 +417,7 @@ public partial class MainWindow : Window
 
     private void ApplyOverlayPreferences()
     {
-        foreach (var tile in _tiles) tile.ApplyOverlayPreferences(_settings.ShowCameraNames, _settings.ShowCameraStats);
+        foreach (var tile in _allTiles) tile.ApplyOverlayPreferences(_settings.ShowCameraNames, _settings.ShowCameraStats);
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -388,7 +425,7 @@ public partial class MainWindow : Window
         _diagnosticsTimer.Stop();
         _cursorTimer.Stop();
         Mouse.OverrideCursor = null;
-        foreach (var tile in _tiles) tile.Dispose();
+        foreach (var tile in _allTiles) tile.Dispose();
         _telemetryPublisher.Dispose();
         _commandServer.Dispose();
         _libVlc.Dispose();

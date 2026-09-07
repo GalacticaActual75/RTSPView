@@ -99,7 +99,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void Start(bool manual = true)
     {
-        if (_disposed || _libVlc is null) return;
+        if (_disposed || _libVlc is null || !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl)) return;
         if (manual)
             _status = _status with { ConsecutiveFailures = 0, NextReconnectAt = null, LastError = null };
         StartPlayer(recreatePlayer: false);

@@ -7,7 +7,17 @@ try
 {
     var path = Path.Combine(root, "settings.json");
     var store = new JsonSettingsStore(path);
-    var first = new AppSettings { Cameras = AppSettings.CreateCameraSlots().Select((camera, index) => index == 0 ? camera with { Name = "First", RtspUrl = "rtsp://user:secret@example.test/live" } : camera).ToArray() };
+    var first = new AppSettings
+    {
+        Cameras = AppSettings.CreateCameraSlots().Select((camera, index) => index == 0 ? camera with { Name = "First", RtspUrl = "rtsp://user:secret@example.test/live" } : camera).ToArray(),
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            HostCameraSlot = 2,
+            Position = PictureInPicturePosition.BottomLeft,
+            SizePercent = 50,
+            Camera = AppSettings.CreateDoorbellCamera() with { Enabled = true, RtspUrl = "rtsp://door:door-secret@example.test/doorbell" }
+        }
+    };
     await store.SaveAsync(first);
     var second = first with { Cameras = first.Cameras.Select((camera, index) => index == 0 ? camera with { Name = "Second" } : camera).ToArray() };
     await store.SaveAsync(second);
@@ -20,6 +30,22 @@ try
     var exportText = await File.ReadAllTextAsync(export);
     Check(!exportText.Contains("secret", StringComparison.Ordinal), "credential-free export");
     Check(exportText.Contains("example.test", StringComparison.Ordinal), "export retains endpoint");
+    Check(recovered.DoorbellOverlay.Camera.Slot == 10, "doorbell overlay backup recovery");
+
+    var normalizedOverlay = (new AppSettings
+    {
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            HostCameraSlot = 99,
+            Position = (PictureInPicturePosition)999,
+            SizePercent = 5,
+            Camera = AppSettings.CreateDoorbellCamera() with { Name = "  " }
+        }
+    }).Normalize().DoorbellOverlay;
+    Check(normalizedOverlay.HostCameraSlot == 9, "doorbell host camera normalization");
+    Check(normalizedOverlay.Position == PictureInPicturePosition.BottomLeft, "doorbell corner normalization");
+    Check(normalizedOverlay.SizePercent == 25, "doorbell size normalization");
+    Check(normalizedOverlay.Camera.Slot == 10 && normalizedOverlay.Camera.Name == "Doorbell", "doorbell camera normalization");
 
     var grid = new CameraSettings { RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };
     var gridOptions = grid.ToMediaOptions();
@@ -34,7 +60,7 @@ try
     try { await store.ImportAsync(future); throw new InvalidOperationException("future schema was accepted"); }
     catch (InvalidDataException) { }
 
-    Console.WriteLine("Configuration checks passed: atomic backup recovery, sanitized export, schema rejection.");
+    Console.WriteLine("Configuration checks passed: recovery, sanitized export, doorbell overlay normalization, schema rejection.");
 }
 finally
 {

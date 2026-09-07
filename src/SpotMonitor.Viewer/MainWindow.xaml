@@ -7,6 +7,11 @@
       <local:CameraTile x:Name="Tile1" Grid.Row="0" Grid.Column="0"/><local:CameraTile x:Name="Tile2" Grid.Row="0" Grid.Column="1"/><local:CameraTile x:Name="Tile3" Grid.Row="0" Grid.Column="2"/>
       <local:CameraTile x:Name="Tile4" Grid.Row="1" Grid.Column="0"/><local:CameraTile x:Name="Tile5" Grid.Row="1" Grid.Column="1"/><local:CameraTile x:Name="Tile6" Grid.Row="1" Grid.Column="2"/>
       <local:CameraTile x:Name="Tile7" Grid.Row="2" Grid.Column="0"/><local:CameraTile x:Name="Tile8" Grid.Row="2" Grid.Column="1"/><local:CameraTile x:Name="Tile9" Grid.Row="2" Grid.Column="2"/>
+      <Grid x:Name="DoorbellOverlayLayer" Grid.Row="0" Grid.Column="1" Panel.ZIndex="100" Background="{x:Null}" ClipToBounds="True" Visibility="Collapsed" SizeChanged="DoorbellOverlayLayer_SizeChanged">
+        <Border x:Name="DoorbellHost" HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="Black" BorderBrush="#E6FFFFFF" BorderThickness="2" SnapsToDevicePixels="True">
+          <local:CameraTile x:Name="DoorbellTile"/>
+        </Border>
+      </Grid>
     </Grid>
     <Border x:Name="ControlBar" Grid.Row="1" Background="#15171A" Padding="12">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

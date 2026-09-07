@@ -2,11 +2,12 @@ namespace SpotMonitor.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
     public IReadOnlyList<CameraSettings> Cameras { get; init; } = CreateCameraSlots();
+    public DoorbellOverlaySettings DoorbellOverlay { get; init; } = new();
     public bool RequestHardwareDecoding { get; init; } = true;
     public bool StartFullScreen { get; init; } = true;
     public int PreferredMonitor { get; init; }
@@ -19,6 +20,13 @@ public sealed record AppSettings
     public static IReadOnlyList<CameraSettings> CreateCameraSlots() =>
         Enumerable.Range(1, 9).Select(slot => new CameraSettings { Slot = slot, Name = $"Camera {slot}" }).ToArray();
 
+    public static CameraSettings CreateDoorbellCamera() => new()
+    {
+        Slot = 10,
+        Name = "Doorbell",
+        Enabled = false
+    };
+
     public AppSettings Normalize()
     {
         var normalized = CreateCameraSlots().ToArray();
@@ -30,30 +38,52 @@ public sealed record AppSettings
         if (normalized.All(camera => string.IsNullOrWhiteSpace(camera.RtspUrl)) && !string.IsNullOrWhiteSpace(Camera.RtspUrl))
             normalized[0] = Camera with { Slot = 1 };
         for (var index = 0; index < normalized.Length; index++)
-        {
-            var camera = normalized[index];
-            var normalizedCamera = camera with
-            {
-                Slot = index + 1,
-                Name = string.IsNullOrWhiteSpace(camera.Name) ? $"Camera {index + 1}" : camera.Name.Trim(),
-                NetworkCacheMilliseconds = Math.Clamp(camera.NetworkCacheMilliseconds, 100, 10_000),
-                StartupTimeoutSeconds = Math.Clamp(camera.StartupTimeoutSeconds, 8, 120),
-                WatchdogTimeoutSeconds = Math.Clamp(camera.WatchdogTimeoutSeconds, 8, 120),
-                MaximumReconnectBackoffSeconds = Math.Clamp(camera.MaximumReconnectBackoffSeconds, 5, 300)
-            };
-            if (normalizedCamera.UsesStreamGridCompositePolicy())
-                normalizedCamera = normalizedCamera with { Transport = RtspTransport.Tcp, NetworkCacheMilliseconds = 3000, LowLatency = false };
-            normalized[index] = normalizedCamera;
-        }
+            normalized[index] = NormalizeCamera(normalized[index], index + 1, $"Camera {index + 1}");
+
+        var overlay = DoorbellOverlay ?? new DoorbellOverlaySettings();
+        var position = Enum.IsDefined(overlay.Position) ? overlay.Position : PictureInPicturePosition.BottomLeft;
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
             Cameras = normalized,
+            DoorbellOverlay = overlay with
+            {
+                HostCameraSlot = Math.Clamp(overlay.HostCameraSlot, 1, 9),
+                Position = position,
+                SizePercent = Math.Clamp(overlay.SizePercent, 25, 90),
+                Camera = NormalizeCamera(overlay.Camera ?? CreateDoorbellCamera(), 10, "Doorbell")
+            },
             StartFullScreen = SchemaVersion < 3 || StartFullScreen,
             PreferredMonitor = Math.Max(0, PreferredMonitor),
             MouseCursorHideSeconds = Math.Clamp(MouseCursorHideSeconds, 1, 30)
         };
     }
+
+    private static CameraSettings NormalizeCamera(CameraSettings camera, int slot, string defaultName)
+    {
+        var normalized = camera with
+        {
+            Slot = slot,
+            Name = string.IsNullOrWhiteSpace(camera.Name) ? defaultName : camera.Name.Trim(),
+            NetworkCacheMilliseconds = Math.Clamp(camera.NetworkCacheMilliseconds, 100, 10_000),
+            StartupTimeoutSeconds = Math.Clamp(camera.StartupTimeoutSeconds, 8, 120),
+            WatchdogTimeoutSeconds = Math.Clamp(camera.WatchdogTimeoutSeconds, 8, 120),
+            MaximumReconnectBackoffSeconds = Math.Clamp(camera.MaximumReconnectBackoffSeconds, 5, 300)
+        };
+        return normalized.UsesStreamGridCompositePolicy()
+            ? normalized with { Transport = RtspTransport.Tcp, NetworkCacheMilliseconds = 3000, LowLatency = false }
+            : normalized;
+    }
+}
+
+public enum PictureInPicturePosition { TopLeft, TopRight, BottomLeft, BottomRight }
+
+public sealed record DoorbellOverlaySettings
+{
+    public int HostCameraSlot { get; init; } = 2;
+    public PictureInPicturePosition Position { get; init; } = PictureInPicturePosition.BottomLeft;
+    public int SizePercent { get; init; } = 50;
+    public CameraSettings Camera { get; init; } = AppSettings.CreateDoorbellCamera();
 }
 
 public sealed record DisplaySettings

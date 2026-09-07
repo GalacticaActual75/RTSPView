@@ -40,10 +40,18 @@ public sealed class JsonSettingsStore
 
     public async Task ExportWithoutCredentialsAsync(AppSettings settings, string destination, CancellationToken cancellationToken = default)
     {
-        var sanitized = settings.Normalize() with
+        var normalized = settings.Normalize();
+        var sanitized = normalized with
         {
-            Cameras = settings.Cameras.Select(camera => camera with { RtspUrl = RtspUrlSanitizer.RemoveCredentials(camera.RtspUrl) }).ToArray(),
-            Camera = settings.Camera with { RtspUrl = RtspUrlSanitizer.RemoveCredentials(settings.Camera.RtspUrl) }
+            Cameras = normalized.Cameras.Select(camera => camera with { RtspUrl = RtspUrlSanitizer.RemoveCredentials(camera.RtspUrl) }).ToArray(),
+            Camera = normalized.Camera with { RtspUrl = RtspUrlSanitizer.RemoveCredentials(normalized.Camera.RtspUrl) },
+            DoorbellOverlay = normalized.DoorbellOverlay with
+            {
+                Camera = normalized.DoorbellOverlay.Camera with
+                {
+                    RtspUrl = RtspUrlSanitizer.RemoveCredentials(normalized.DoorbellOverlay.Camera.RtspUrl)
+                }
+            }
         };
         await WriteAsync(destination, Validate(sanitized), cancellationToken);
     }
@@ -65,11 +73,17 @@ public sealed class JsonSettingsStore
         var normalized = settings.Normalize();
         foreach (var camera in normalized.Cameras)
         {
-            if (string.IsNullOrWhiteSpace(camera.RtspUrl)) continue;
-            if (!Uri.TryCreate(camera.RtspUrl, UriKind.Absolute, out var uri) || !uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"Camera {camera.Slot} does not contain a valid RTSP URL.");
+            ValidateCameraUrl(camera, $"Camera {camera.Slot}");
         }
+        ValidateCameraUrl(normalized.DoorbellOverlay.Camera, "Doorbell");
         return normalized;
+    }
+
+    private static void ValidateCameraUrl(CameraSettings camera, string label)
+    {
+        if (string.IsNullOrWhiteSpace(camera.RtspUrl)) return;
+        if (!Uri.TryCreate(camera.RtspUrl, UriKind.Absolute, out var uri) || !uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"{label} does not contain a valid RTSP URL.");
     }
 
     private static async Task WriteAsync(string path, AppSettings settings, CancellationToken cancellationToken)

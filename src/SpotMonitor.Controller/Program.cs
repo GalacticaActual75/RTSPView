@@ -157,9 +157,25 @@ app.MapPost("/api/update/install", async (ConfirmedAction request, CancellationT
 app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();
 app.MapGet("/api/cameras/{slot:int}/thumbnail", (int slot) =>
 {
-    if (slot is < 1 or > 9) return Results.BadRequest(new { error = "Camera slot must be between 1 and 9." });
+    if (slot is < 1 or > 10) return Results.BadRequest(new { error = "Stream slot must be between 1 and 10." });
     var path = Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg");
     return File.Exists(path) ? Results.File(path, "image/jpeg") : Results.NotFound(new { error = "No thumbnail has been captured yet." });
+}).RequireAuthorization();
+
+app.MapPut("/api/doorbell", async (DoorbellOverlaySettings overlay) =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        var settings = await settingsStore.LoadAsync();
+        var requested = overlay with { Camera = (overlay.Camera ?? AppSettings.CreateDoorbellCamera()) with { Slot = 10 } };
+        var updated = (settings with { DoorbellOverlay = requested }).Normalize();
+        await settingsStore.SaveAsync(updated);
+        auditLog.Write("AUDIT", $"Doorbell overlay changed from web admin: host camera {updated.DoorbellOverlay.HostCameraSlot}, {updated.DoorbellOverlay.Position}, {updated.DoorbellOverlay.SizePercent}%, {RtspUrlSanitizer.Redact(updated.DoorbellOverlay.Camera.RtspUrl)}");
+        return Results.Ok(updated.DoorbellOverlay);
+    }
+    catch (InvalidDataException exception) { return Results.BadRequest(new { error = exception.Message }); }
+    finally { configGate.Release(); }
 }).RequireAuthorization();
 app.MapPut("/api/display", async (DisplaySettings display) =>
 {
@@ -228,7 +244,7 @@ app.MapPost("/api/cameras/reorder", async (CameraReorderRequest request) =>
 
 app.MapPost("/api/control/cameras/{slot:int}/restart", async (int slot, CancellationToken cancellationToken) =>
 {
-    if (slot is < 1 or > 9) return Results.BadRequest(new { error = "Camera slot must be between 1 and 9." });
+    if (slot is < 1 or > 10) return Results.BadRequest(new { error = "Stream slot must be between 1 and 10." });
     var result = await viewerCommands.SendAsync(ViewerCommandType.RestartCamera, slot, cancellationToken);
     auditLog.Write("AUDIT", $"Remote camera {slot} restart requested: {result.Message}");
     return CommandResult(result);
