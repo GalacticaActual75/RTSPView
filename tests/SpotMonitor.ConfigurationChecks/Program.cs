@@ -142,6 +142,16 @@ try
     Check(bottomRightZoom.X + bottomRightZoom.Width == 2048 &&
           bottomRightZoom.Y + bottomRightZoom.Height == 1536, "doorbell zoom can focus bottom-right");
 
+    var liveLayout = DoorbellVideoTransform.CalculateLayout(
+        2048, 1536, 730, 385, 175, 36, 88);
+    Check(Math.Abs(liveLayout.RenderWidth / liveLayout.RenderHeight - 2048d / 1536d) < 0.000001,
+        "doorbell native surface preserves source aspect ratio");
+    Check(Math.Abs(liveLayout.SourceX - (-liveLayout.OffsetX / (liveLayout.RenderWidth / 2048d))) < 0.000001 &&
+          Math.Abs(liveLayout.SourceY - (-liveLayout.OffsetY / (liveLayout.RenderHeight / 1536d))) < 0.000001,
+        "doorbell preview crop and live surface use the same pan calculation");
+    Check(Math.Abs(liveLayout.SourceWidth / liveLayout.SourceHeight - 730d / 385d) < 0.000001,
+        "doorbell visible source matches viewport aspect ratio without bars");
+
     var grid = new CameraSettings { RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };
     var gridOptions = grid.ToMediaOptions();
     Check(grid.EffectiveTransport == RtspTransport.Tcp, "StreamGrid forces TCP");

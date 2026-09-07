@@ -83,7 +83,12 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private static string FourCc(uint value) => new string([(char)(value & 0xff), (char)((value >> 8) & 0xff), (char)((value >> 16) & 0xff), (char)((value >> 24) & 0xff)]).Trim('\0').ToUpperInvariant();
 
-    public CameraTile() => InitializeComponent();
+    public CameraTile()
+    {
+        InitializeComponent();
+        VideoView.Loaded += (_, _) => ApplyVideoSizing(_player);
+        VideoView.SizeChanged += (_, _) => ApplyVideoSizing(_player);
+    }
 
     public void Initialize(LibVLC libVlc, RollingFileLogger logger, CameraSettings settings, bool requestHardwareDecoding)
     {
@@ -240,8 +245,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         if (_videoDisplayWidth > 0 && _videoDisplayHeight > 0)
         {
             var dimensions = GetVideoDimensions();
-            if (dimensions is { } source &&
-                (source.Width != _lastSizingSourceWidth || source.Height != _lastSizingSourceHeight))
+            if (dimensions is not null)
                 ApplyVideoSizing(_player);
         }
         var now = DateTimeOffset.UtcNow;
@@ -379,26 +383,24 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         if (player is null) return;
         player.Scale = 0;
-        var cropGeometry = string.Empty;
+        if (!string.IsNullOrEmpty(player.AspectRatio)) player.AspectRatio = null;
+        if (!string.IsNullOrEmpty(player.CropGeometry)) player.CropGeometry = string.Empty;
         var dimensions = GetVideoDimensions();
-        if (dimensions is { } source)
-        {
-            _lastSizingSourceWidth = source.Width;
-            _lastSizingSourceHeight = source.Height;
-            var crop = DoorbellVideoTransform.CalculateCropWindow(
-                (int)source.Width, (int)source.Height, _videoDisplayWidth, _videoDisplayHeight,
+        if (dimensions is not { } source || _videoDisplayWidth <= 0 || _videoDisplayHeight <= 0)
+            return;
+
+        _lastSizingSourceWidth = source.Width;
+        _lastSizingSourceHeight = source.Height;
+        VideoView.ApplyTemplate();
+        if (VideoView.Template.FindName("PART_PlayerHost", VideoView) is HwndHost videoHost)
+            NativeVideoSurfaceLayout.Apply(
+                videoHost,
+                VideoView,
+                (int)source.Width,
+                (int)source.Height,
                 _videoZoomPercent,
-                _imageHorizontalPositionPercent, _imageVerticalPositionPercent);
-            if (!crop.IsFullFrame((int)source.Width, (int)source.Height))
-                cropGeometry = crop.ToVlcGeometry();
-        }
-        var aspectRatio = _videoDisplayWidth > 0 && _videoDisplayHeight > 0
-            ? $"{_videoDisplayWidth}:{_videoDisplayHeight}"
-            : null;
-        if (!string.Equals(player.AspectRatio, aspectRatio, StringComparison.Ordinal))
-            player.AspectRatio = aspectRatio;
-        if (!string.Equals(player.CropGeometry, cropGeometry, StringComparison.Ordinal))
-            player.CropGeometry = cropGeometry;
+                _imageHorizontalPositionPercent,
+                _imageVerticalPositionPercent);
     }
 
     private void StartPlayer(bool recreatePlayer)

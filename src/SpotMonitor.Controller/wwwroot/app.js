@@ -1,6 +1,6 @@
 const q=s=>document.querySelector(s),login=q('#login'),app=q('#app'),grid=q('#cameras'),doorbellGrid=q('#doorbell');let csrfToken='';
 const brand=q('.brand');if(brand){const brandIcon=document.createElement('img');brandIcon.src='favicon-32.png';brandIcon.alt='';brandIcon.className='brand-icon';brand.prepend(brandIcon)}
-const compactStyles=document.createElement('link');compactStyles.rel='stylesheet';compactStyles.href='compact.css?v=11.5';document.head.appendChild(compactStyles);
+const compactStyles=document.createElement('link');compactStyles.rel='stylesheet';compactStyles.href='compact.css?v=11.6';document.head.appendChild(compactStyles);
 q('#passwordForm').style.marginTop='38px';
 function combineViewerControls(){const remote=document.querySelector('main > .control-panel.panel'),display=q('#displayForm'),updates=q('#updatePanel'),options=display?.querySelector('.display-options');if(!remote||!display||!updates||!options)return;remote.classList.add('viewer-display-panel');remote.querySelector('h2').textContent='Viewer and display';remote.querySelector('p').textContent='Immediate viewer controls and persistent wall behavior.';const viewerButtons=remote.querySelector('.control-buttons');viewerButtons.classList.add('viewer-action-strip');updates.classList.remove('panel','control-panel','bottom-panel');updates.classList.add('viewer-update-section');remote.insertBefore(updates,viewerButtons);display.classList.remove('panel');display.classList.add('combined-display');display.querySelector('h2').textContent='Wall behavior';display.querySelector('div>p').textContent='Choose how the viewer protects and presents the camera wall.';const alwaysOnTop=document.createElement('label');alwaysOnTop.innerHTML='<input name="keepViewerAlwaysOnTop" type="checkbox"> Keep viewer always on top';options.appendChild(alwaysOnTop);const toggles=document.createElement('div'),fields=document.createElement('div');toggles.className='display-toggle-grid';fields.className='display-field-row';for(const label of [...options.querySelectorAll(':scope > label')]){const input=label.querySelector('input');(input?.type==='checkbox'?toggles:fields).appendChild(label)}const actions=display.querySelector('.actions');fields.appendChild(actions);options.replaceWith(toggles,fields);const paragraphs=display.querySelectorAll(':scope > p');if(paragraphs.length)paragraphs[paragraphs.length-1].classList.add('display-note');remote.appendChild(display)}
 combineViewerControls();
@@ -24,10 +24,6 @@ function createDoorbellPreview(form){
  const loadHost=()=>hostImage.src='/api/cameras/'+number('hostCameraSlot',2)+'/thumbnail?v='+Date.now();
  const loadDoorbell=()=>doorbellImage.src=thumbnail.src||'/api/cameras/10/thumbnail?v='+Date.now();
  const scheduleDraw=()=>{if(drawQueued)return;drawQueued=true;requestAnimationFrame(()=>{drawQueued=false;draw()})};
- const alignNearest=value=>Math.max(0,Math.round(value/2)*2);
- const alignDown=value=>Math.max(2,value-value%2);
- const alignedSize=(requested,maximum)=>maximum<=2?maximum:clamp(alignNearest(requested),2,alignDown(maximum));
- const alignedOffset=(slack,position)=>slack<=0?0:clamp(alignNearest(slack*clamp(position,0,100)/100),0,alignDown(slack));
  function setSynced(name,newValue){
   const numeric=form.elements[name],newNumber=Math.round(clamp(newValue,Number(numeric.min),Number(numeric.max)));
   numeric.value=newNumber;
@@ -44,16 +40,11 @@ function createDoorbellPreview(form){
   return {shape,width:viewportWidth,height:viewportHeight,left:travelX*clamp(number('viewportHorizontalPositionPercent',0),0,100)/100,top:travelY*clamp(number('viewportVerticalPositionPercent',100),0,100)/100,travelX,travelY};
  }
  function sourceCrop(sourceWidth,sourceHeight,displayWidth,displayHeight){
-  const usableWidth=alignDown(Math.max(2,sourceWidth)),usableHeight=alignDown(Math.max(2,sourceHeight));
-  let cropWidth=usableWidth,cropHeight=usableHeight;
-  const sourceAspect=usableWidth/usableHeight,displayAspect=Math.max(1,Math.round(displayWidth))/Math.max(1,Math.round(displayHeight));
-  if(sourceAspect>displayAspect)cropWidth=alignedSize(usableHeight*displayAspect,usableWidth);
-  else if(sourceAspect<displayAspect)cropHeight=alignedSize(usableWidth/displayAspect,usableHeight);
+  sourceWidth=Math.max(1,sourceWidth);sourceHeight=Math.max(1,sourceHeight);displayWidth=Math.max(1,displayWidth);displayHeight=Math.max(1,displayHeight);
   const zoom=clamp(number('zoomPercent',100),100,300)/100;
-  cropWidth=alignedSize(cropWidth/zoom,usableWidth);
-  cropHeight=alignedSize(cropHeight/zoom,usableHeight);
-  const slackX=usableWidth-cropWidth,slackY=usableHeight-cropHeight;
-  return {x:alignedOffset(slackX,number('imageHorizontalPositionPercent',50)),y:alignedOffset(slackY,number('imageVerticalPositionPercent',50)),width:cropWidth,height:cropHeight,slackX,slackY};
+  const scale=Math.max(displayWidth/sourceWidth,displayHeight/sourceHeight)*zoom;
+  const cropWidth=displayWidth/scale,cropHeight=displayHeight/scale,slackX=sourceWidth-cropWidth,slackY=sourceHeight-cropHeight;
+  return {x:slackX*clamp(number('imageHorizontalPositionPercent',50),0,100)/100,y:slackY*clamp(number('imageVerticalPositionPercent',50),0,100)/100,width:cropWidth,height:cropHeight,slackX,slackY};
  }
  function imageCover(image,x,y,width,height){const scale=Math.max(width/image.naturalWidth,height/image.naturalHeight),sourceWidth=width/scale,sourceHeight=height/scale,sourceX=(image.naturalWidth-sourceWidth)/2,sourceY=(image.naturalHeight-sourceHeight)/2;context.drawImage(image,sourceX,sourceY,sourceWidth,sourceHeight,x,y,width,height)}
  function viewportPath(shape,x,y,width,height){
