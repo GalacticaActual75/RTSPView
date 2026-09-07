@@ -15,13 +15,7 @@ public static class DoorbellVideoTransform
         int sourceHeight,
         int displayWidth,
         int displayHeight,
-        DoorbellVideoSizing sizing,
-        DoorbellViewportShape shape,
         int zoomPercent,
-        int cropLeftPercent,
-        int cropRightPercent,
-        int cropTopPercent,
-        int cropBottomPercent,
         int horizontalPositionPercent,
         int verticalPositionPercent)
     {
@@ -29,37 +23,25 @@ public static class DoorbellVideoTransform
         sourceHeight = Math.Max(2, sourceHeight);
         var usableSourceWidth = AlignDown(sourceWidth);
         var usableSourceHeight = AlignDown(sourceHeight);
-        var left = AlignNearest(sourceWidth * Math.Clamp(cropLeftPercent, 0, 80) / 100d);
-        var right = AlignNearest(sourceWidth * (100 - Math.Clamp(cropRightPercent, 0, 80)) / 100d);
-        var top = AlignNearest(sourceHeight * Math.Clamp(cropTopPercent, 0, 80) / 100d);
-        var bottom = AlignNearest(sourceHeight * (100 - Math.Clamp(cropBottomPercent, 0, 80)) / 100d);
-        left = Math.Clamp(left, 0, usableSourceWidth - 2);
-        right = Math.Clamp(right, left + 2, usableSourceWidth);
-        top = Math.Clamp(top, 0, usableSourceHeight - 2);
-        bottom = Math.Clamp(bottom, top + 2, usableSourceHeight);
-
-        var availableWidth = right - left;
-        var availableHeight = bottom - top;
-        var cropWidth = availableWidth;
-        var cropHeight = availableHeight;
-        if (shape != DoorbellViewportShape.Native && sizing == DoorbellVideoSizing.Fit &&
-            displayWidth > 0 && displayHeight > 0)
+        var cropWidth = usableSourceWidth;
+        var cropHeight = usableSourceHeight;
+        if (displayWidth > 0 && displayHeight > 0)
         {
-            var sourceAspect = availableWidth / (double)availableHeight;
+            var sourceAspect = usableSourceWidth / (double)usableSourceHeight;
             var displayAspect = displayWidth / (double)displayHeight;
             if (sourceAspect > displayAspect)
-                cropWidth = AlignedSize(availableHeight * displayAspect, availableWidth);
+                cropWidth = AlignedSize(usableSourceHeight * displayAspect, usableSourceWidth);
             else if (sourceAspect < displayAspect)
-                cropHeight = AlignedSize(availableWidth / displayAspect, availableHeight);
+                cropHeight = AlignedSize(usableSourceWidth / displayAspect, usableSourceHeight);
         }
 
         var zoom = Math.Clamp(zoomPercent, 100, 300) / 100d;
-        cropWidth = AlignedSize(cropWidth / zoom, availableWidth);
-        cropHeight = AlignedSize(cropHeight / zoom, availableHeight);
-        var horizontalSlack = availableWidth - cropWidth;
-        var verticalSlack = availableHeight - cropHeight;
-        var x = left + AlignedOffset(horizontalSlack, horizontalPositionPercent);
-        var y = top + AlignedOffset(verticalSlack, verticalPositionPercent);
+        cropWidth = AlignedSize(cropWidth / zoom, usableSourceWidth);
+        cropHeight = AlignedSize(cropHeight / zoom, usableSourceHeight);
+        var horizontalSlack = usableSourceWidth - cropWidth;
+        var verticalSlack = usableSourceHeight - cropHeight;
+        var x = AlignedOffset(horizontalSlack, horizontalPositionPercent);
+        var y = AlignedOffset(verticalSlack, verticalPositionPercent);
         return new DoorbellCropWindow(x, y, cropWidth, cropHeight);
     }
 

@@ -17,15 +17,10 @@ try
             SizePercent = 50,
             ViewportWidthPercent = 80,
             ViewportHeightPercent = 40,
-            VideoSizing = DoorbellVideoSizing.Stretch,
+            ViewportHorizontalPositionPercent = 35,
+            ViewportVerticalPositionPercent = 75,
             ViewportShape = DoorbellViewportShape.RoundedSquare,
-            HorizontalOffsetPercent = 12,
-            VerticalOffsetPercent = -8,
             ZoomPercent = 160,
-            CropLeftPercent = 4,
-            CropRightPercent = 6,
-            CropTopPercent = 50,
-            CropBottomPercent = 2,
             ImageHorizontalPositionPercent = 25,
             ImageVerticalPositionPercent = 80,
             Camera = AppSettings.CreateDoorbellCamera() with { Enabled = true, RtspUrl = "rtsp://door:door-secret@example.test/doorbell" }
@@ -44,17 +39,13 @@ try
     Check(!exportText.Contains("secret", StringComparison.Ordinal), "credential-free export");
     Check(exportText.Contains("example.test", StringComparison.Ordinal), "export retains endpoint");
     Check(recovered.DoorbellOverlay.Camera.Slot == 10, "doorbell overlay backup recovery");
-    Check(recovered.DoorbellOverlay.VideoSizing == DoorbellVideoSizing.Stretch, "doorbell video sizing persistence");
+    Check(recovered.DoorbellOverlay.VideoSizing == DoorbellVideoSizing.Fit, "doorbell aspect-preserving sizing persistence");
     Check(recovered.DoorbellOverlay.ViewportShape == DoorbellViewportShape.RoundedSquare, "doorbell viewport shape persistence");
-    Check(recovered.DoorbellOverlay.HorizontalOffsetPercent == 12 &&
-          recovered.DoorbellOverlay.VerticalOffsetPercent == -8, "doorbell viewport offset persistence");
+    Check(recovered.DoorbellOverlay.ViewportHorizontalPositionPercent == 35 &&
+          recovered.DoorbellOverlay.ViewportVerticalPositionPercent == 75, "doorbell viewport position persistence");
     Check(recovered.DoorbellOverlay.ZoomPercent == 160, "doorbell zoom persistence");
     Check(recovered.DoorbellOverlay.ViewportWidthPercent == 80 &&
           recovered.DoorbellOverlay.ViewportHeightPercent == 40, "doorbell viewport dimensions persistence");
-    Check(recovered.DoorbellOverlay.CropTopPercent == 50 &&
-          recovered.DoorbellOverlay.CropBottomPercent == 2 &&
-          recovered.DoorbellOverlay.CropLeftPercent == 4 &&
-          recovered.DoorbellOverlay.CropRightPercent == 6, "doorbell source crop persistence");
     Check(recovered.DoorbellOverlay.ImageHorizontalPositionPercent == 25 &&
           recovered.DoorbellOverlay.ImageVerticalPositionPercent == 80, "doorbell image position persistence");
 
@@ -65,6 +56,28 @@ try
     }).Normalize().DoorbellOverlay;
     Check(migratedOverlay.ViewportWidthPercent == 73 &&
           migratedOverlay.ViewportHeightPercent == 73, "schema 8 doorbell size migration");
+    Check(migratedOverlay.ViewportHorizontalPositionPercent == 0 &&
+          migratedOverlay.ViewportVerticalPositionPercent == 100, "schema 8 doorbell position migration");
+
+    var migratedLegacyFraming = (new AppSettings
+    {
+        SchemaVersion = 10,
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            Position = PictureInPicturePosition.BottomRight,
+            ViewportWidthPercent = 73,
+            ViewportHeightPercent = 77,
+            HorizontalOffsetPercent = -2,
+            VerticalOffsetPercent = -2,
+            VideoSizing = DoorbellVideoSizing.Stretch,
+            CropTopPercent = 54
+        }
+    }).Normalize().DoorbellOverlay;
+    Check(migratedLegacyFraming.ViewportHorizontalPositionPercent == 93 &&
+          migratedLegacyFraming.ViewportVerticalPositionPercent == 91, "schema 10 viewport anchor migration");
+    Check(migratedLegacyFraming.VideoSizing == DoorbellVideoSizing.Fit &&
+          migratedLegacyFraming.HorizontalOffsetPercent == 0 &&
+          migratedLegacyFraming.CropTopPercent == 0, "schema 10 framing model migration");
 
     var normalizedOverlay = (new AppSettings
     {
@@ -75,6 +88,8 @@ try
             SizePercent = 5,
             ViewportWidthPercent = 999,
             ViewportHeightPercent = -999,
+            ViewportHorizontalPositionPercent = -999,
+            ViewportVerticalPositionPercent = 999,
             VideoSizing = (DoorbellVideoSizing)999,
             ViewportShape = (DoorbellViewportShape)999,
             HorizontalOffsetPercent = 999,
@@ -96,33 +111,34 @@ try
           normalizedOverlay.ViewportHeightPercent == 10, "doorbell viewport dimension normalization");
     Check(normalizedOverlay.VideoSizing == DoorbellVideoSizing.Fit, "doorbell video sizing normalization");
     Check(normalizedOverlay.ViewportShape == DoorbellViewportShape.Native, "doorbell viewport shape normalization");
-    Check(normalizedOverlay.HorizontalOffsetPercent == 50 &&
-          normalizedOverlay.VerticalOffsetPercent == -50, "doorbell viewport offset normalization");
+    Check(normalizedOverlay.ViewportHorizontalPositionPercent == 0 &&
+          normalizedOverlay.ViewportVerticalPositionPercent == 100, "doorbell viewport position normalization");
+    Check(normalizedOverlay.HorizontalOffsetPercent == 0 &&
+          normalizedOverlay.VerticalOffsetPercent == 0, "legacy doorbell offsets are cleared");
     Check(normalizedOverlay.ZoomPercent == 300, "doorbell zoom normalization");
-    Check(normalizedOverlay.CropLeftPercent == 80 &&
-          normalizedOverlay.CropRightPercent == 10 &&
-          normalizedOverlay.CropTopPercent == 80 &&
-          normalizedOverlay.CropBottomPercent == 10, "doorbell source crop normalization");
+    Check(normalizedOverlay.CropLeftPercent == 0 &&
+          normalizedOverlay.CropRightPercent == 0 &&
+          normalizedOverlay.CropTopPercent == 0 &&
+          normalizedOverlay.CropBottomPercent == 0, "legacy doorbell crops are cleared");
     Check(normalizedOverlay.ImageHorizontalPositionPercent == 0 &&
           normalizedOverlay.ImageVerticalPositionPercent == 100, "doorbell image position normalization");
     Check(normalizedOverlay.Camera.Slot == 10 && normalizedOverlay.Camera.Name == "Doorbell", "doorbell camera normalization");
 
     var alignedCrop = DoorbellVideoTransform.CalculateCropWindow(
-        2048, 1536, 500, 300, DoorbellVideoSizing.Stretch, DoorbellViewportShape.RoundedSquare,
-        100, 0, 0, 54, 0, 50, 50);
-    Check(alignedCrop == new DoorbellCropWindow(0, 830, 2048, 706),
-        "doorbell crop aligns 4:2:0 source coordinates");
-    Check(alignedCrop.ToVlcGeometry() == "2048x706+0+830", "doorbell VLC crop geometry");
+        2048, 1536, 500, 300, 100, 50, 50);
+    Check(alignedCrop == new DoorbellCropWindow(0, 154, 2048, 1228),
+        "doorbell cover crop aligns 4:2:0 source coordinates");
+    Check(alignedCrop.ToVlcGeometry() == "2048x1228+0+154", "doorbell VLC crop geometry");
 
     var centeredOval = DoorbellVideoTransform.CalculateCropWindow(
-        2048, 1536, 730, 385, DoorbellVideoSizing.Fit, DoorbellViewportShape.Oval,
-        100, 0, 0, 0, 0, 50, 50);
+        2048, 1536, 730, 385, 100, 50, 50);
     Check(centeredOval.X == 0 && centeredOval.Width == 2048 && centeredOval.Y > 0 &&
-          centeredOval.Y + centeredOval.Height < 1536, "doorbell fit crop removes letterbox region");
+          centeredOval.Y + centeredOval.Height < 1536, "doorbell cover crop removes letterbox region");
+    Check(Math.Abs(centeredOval.Width / (double)centeredOval.Height - 730d / 385d) < 0.002,
+        "doorbell crop matches viewport aspect ratio");
 
     var bottomRightZoom = DoorbellVideoTransform.CalculateCropWindow(
-        2048, 1536, 730, 385, DoorbellVideoSizing.Fit, DoorbellViewportShape.Oval,
-        200, 0, 0, 0, 0, 100, 100);
+        2048, 1536, 730, 385, 200, 100, 100);
     Check(bottomRightZoom.X + bottomRightZoom.Width == 2048 &&
           bottomRightZoom.Y + bottomRightZoom.Height == 1536, "doorbell zoom can focus bottom-right");
 

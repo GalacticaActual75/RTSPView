@@ -89,8 +89,7 @@ public partial class MainWindow : Window
         {
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
-            if (_settings.DoorbellOverlay.Camera.Enabled &&
-                _settings.DoorbellOverlay.ViewportShape == DoorbellViewportShape.Native)
+            if (_settings.DoorbellOverlay.Camera.Enabled)
                 QueueDoorbellLayout();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick(_hardwareDecoder);
@@ -348,29 +347,18 @@ public partial class MainWindow : Window
             target.ActualWidth * Math.Clamp(overlay.ViewportWidthPercent, 10, 95) / 100d);
         var maximumHeight = Math.Max(1,
             target.ActualHeight * Math.Clamp(overlay.ViewportHeightPercent, 10, 95) / 100d);
-        var (width, height) = CalculateDoorbellViewportSize(
-            overlay, maximumWidth, maximumHeight, DoorbellTile.GetVideoDimensions());
-        var alignRight = overlay.Position is PictureInPicturePosition.TopRight or PictureInPicturePosition.BottomRight;
-        var alignBottom = overlay.Position is PictureInPicturePosition.BottomLeft or PictureInPicturePosition.BottomRight;
-        var baseLeft = targetLeft + (alignRight ? target.ActualWidth - width : 0);
-        var baseTop = targetTop + (alignBottom ? target.ActualHeight - height : 0);
-        var requestedLeft = baseLeft + target.ActualWidth * overlay.HorizontalOffsetPercent / 100d;
-        var requestedTop = baseTop + target.ActualHeight * overlay.VerticalOffsetPercent / 100d;
-        var left = Math.Clamp(requestedLeft, targetLeft, targetLeft + Math.Max(0, target.ActualWidth - width));
-        var top = Math.Clamp(requestedTop, targetTop, targetTop + Math.Max(0, target.ActualHeight - height));
+        var (width, height) = CalculateDoorbellViewportSize(overlay, maximumWidth, maximumHeight);
+        var horizontalTravel = Math.Max(0, target.ActualWidth - width);
+        var verticalTravel = Math.Max(0, target.ActualHeight - height);
+        var left = targetLeft + horizontalTravel * overlay.ViewportHorizontalPositionPercent / 100d;
+        var top = targetTop + verticalTravel * overlay.ViewportVerticalPositionPercent / 100d;
 
         _doorbellWindow.Left = Math.Round(left);
         _doorbellWindow.Top = Math.Round(top);
         _doorbellWindow.Width = Math.Round(width);
         _doorbellWindow.Height = Math.Round(height);
         DoorbellTile.ApplyVideoSizing(
-            overlay.VideoSizing,
-            overlay.ViewportShape,
             overlay.ZoomPercent,
-            overlay.CropLeftPercent,
-            overlay.CropRightPercent,
-            overlay.CropTopPercent,
-            overlay.CropBottomPercent,
             overlay.ImageHorizontalPositionPercent,
             overlay.ImageVerticalPositionPercent,
             width,
@@ -386,24 +374,12 @@ public partial class MainWindow : Window
     private static (double Width, double Height) CalculateDoorbellViewportSize(
         DoorbellOverlaySettings overlay,
         double maximumWidth,
-        double maximumHeight,
-        (uint Width, uint Height)? videoDimensions)
+        double maximumHeight)
     {
         if (overlay.ViewportShape is DoorbellViewportShape.Square or DoorbellViewportShape.Circle)
         {
             var side = Math.Max(1, Math.Min(maximumWidth, maximumHeight));
             return (side, side);
-        }
-
-        if (overlay.ViewportShape == DoorbellViewportShape.Native &&
-            videoDimensions is { Width: > 0, Height: > 0 } source)
-        {
-            var croppedWidth = Math.Max(1,
-                source.Width * (100 - overlay.CropLeftPercent - overlay.CropRightPercent) / 100d);
-            var croppedHeight = Math.Max(1,
-                source.Height * (100 - overlay.CropTopPercent - overlay.CropBottomPercent) / 100d);
-            var factor = Math.Min(maximumWidth / croppedWidth, maximumHeight / croppedHeight);
-            return (Math.Max(1, croppedWidth * factor), Math.Max(1, croppedHeight * factor));
         }
 
         return (maximumWidth, maximumHeight);
