@@ -53,6 +53,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private int _cropRightPercent;
     private int _cropTopPercent;
     private int _cropBottomPercent;
+    private int _imageHorizontalPositionPercent = 50;
+    private int _imageVerticalPositionPercent = 50;
     private uint _lastSizingSourceWidth;
     private uint _lastSizingSourceHeight;
     private readonly string _snapshotDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor", "snapshots");
@@ -137,6 +139,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         int cropRightPercent,
         int cropTopPercent,
         int cropBottomPercent,
+        int imageHorizontalPositionPercent,
+        int imageVerticalPositionPercent,
         double width,
         double height)
     {
@@ -147,9 +151,13 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         cropRightPercent = Math.Clamp(cropRightPercent, 0, 80);
         cropTopPercent = Math.Clamp(cropTopPercent, 0, 80);
         cropBottomPercent = Math.Clamp(cropBottomPercent, 0, 80);
+        imageHorizontalPositionPercent = Math.Clamp(imageHorizontalPositionPercent, 0, 100);
+        imageVerticalPositionPercent = Math.Clamp(imageVerticalPositionPercent, 0, 100);
         if (_videoSizing == sizing && _viewportShape == viewportShape && _videoZoomPercent == zoomPercent &&
             _cropLeftPercent == cropLeftPercent && _cropRightPercent == cropRightPercent &&
             _cropTopPercent == cropTopPercent && _cropBottomPercent == cropBottomPercent &&
+            _imageHorizontalPositionPercent == imageHorizontalPositionPercent &&
+            _imageVerticalPositionPercent == imageVerticalPositionPercent &&
             _videoDisplayWidth == displayWidth && _videoDisplayHeight == displayHeight) return;
         _videoSizing = sizing;
         _viewportShape = viewportShape;
@@ -158,6 +166,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _cropRightPercent = cropRightPercent;
         _cropTopPercent = cropTopPercent;
         _cropBottomPercent = cropBottomPercent;
+        _imageHorizontalPositionPercent = imageHorizontalPositionPercent;
+        _imageVerticalPositionPercent = imageVerticalPositionPercent;
         _videoDisplayWidth = displayWidth;
         _videoDisplayHeight = displayHeight;
         ApplyVideoSizing(_player);
@@ -393,42 +403,22 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         if (player is null) return;
         player.Scale = 0;
-        player.CropGeometry = string.Empty;
+        var cropGeometry = string.Empty;
         var dimensions = GetVideoDimensions();
         if (dimensions is { } source)
         {
             _lastSizingSourceWidth = source.Width;
             _lastSizingSourceHeight = source.Height;
-            var cropLeft = Math.Min((int)source.Width - 1, (int)Math.Round(source.Width * _cropLeftPercent / 100d));
-            var cropTop = Math.Min((int)source.Height - 1, (int)Math.Round(source.Height * _cropTopPercent / 100d));
-            var cropRight = Math.Min((int)source.Width - cropLeft - 1, (int)Math.Round(source.Width * _cropRightPercent / 100d));
-            var cropBottom = Math.Min((int)source.Height - cropTop - 1, (int)Math.Round(source.Height * _cropBottomPercent / 100d));
-            var availableWidth = Math.Max(1, (int)source.Width - cropLeft - cropRight);
-            var availableHeight = Math.Max(1, (int)source.Height - cropTop - cropBottom);
-            var cropWidth = availableWidth;
-            var cropHeight = availableHeight;
-            if (_viewportShape != DoorbellViewportShape.Native &&
-                _videoSizing == DoorbellVideoSizing.Fit &&
-                _videoDisplayWidth > 0 && _videoDisplayHeight > 0)
-            {
-                var sourceAspect = availableWidth / (double)availableHeight;
-                var displayAspect = _videoDisplayWidth / (double)_videoDisplayHeight;
-                if (sourceAspect > displayAspect)
-                    cropWidth = Math.Max(1, (int)Math.Round(availableHeight * displayAspect));
-                else if (sourceAspect < displayAspect)
-                    cropHeight = Math.Max(1, (int)Math.Round(availableWidth / displayAspect));
-            }
-            cropWidth = Math.Max(1, (int)Math.Round(cropWidth * 100d / _videoZoomPercent));
-            cropHeight = Math.Max(1, (int)Math.Round(cropHeight * 100d / _videoZoomPercent));
-            if (cropLeft > 0 || cropTop > 0 || cropRight > 0 || cropBottom > 0 ||
-                cropWidth < source.Width || cropHeight < source.Height)
-            {
-                var left = cropLeft + Math.Max(0, (availableWidth - cropWidth) / 2);
-                var top = cropTop + Math.Max(0, (availableHeight - cropHeight) / 2);
-                player.CropGeometry = $"{cropWidth}x{cropHeight}+{left}+{top}";
-            }
+            var crop = DoorbellVideoTransform.CalculateCropWindow(
+                (int)source.Width, (int)source.Height, _videoDisplayWidth, _videoDisplayHeight,
+                _videoSizing, _viewportShape, _videoZoomPercent,
+                _cropLeftPercent, _cropRightPercent, _cropTopPercent, _cropBottomPercent,
+                _imageHorizontalPositionPercent, _imageVerticalPositionPercent);
+            if (!crop.IsFullFrame((int)source.Width, (int)source.Height))
+                cropGeometry = crop.ToVlcGeometry();
         }
-        player.AspectRatio = _videoSizing == DoorbellVideoSizing.Stretch && _videoDisplayWidth > 0 && _videoDisplayHeight > 0
+        player.CropGeometry = cropGeometry;
+        player.AspectRatio = _videoDisplayWidth > 0 && _videoDisplayHeight > 0
             ? $"{_videoDisplayWidth}:{_videoDisplayHeight}"
             : null;
     }

@@ -2,7 +2,7 @@ namespace SpotMonitor.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
@@ -68,6 +68,8 @@ public sealed record AppSettings
                 CropRightPercent = cropRightPercent,
                 CropTopPercent = cropTopPercent,
                 CropBottomPercent = cropBottomPercent,
+                ImageHorizontalPositionPercent = Math.Clamp(overlay.ImageHorizontalPositionPercent, 0, 100),
+                ImageVerticalPositionPercent = Math.Clamp(overlay.ImageVerticalPositionPercent, 0, 100),
                 Camera = NormalizeCamera(overlay.Camera ?? CreateDoorbellCamera(), 10, "Doorbell")
             },
             StartFullScreen = SchemaVersion < 3 || StartFullScreen,
@@ -123,6 +125,8 @@ public sealed record DoorbellOverlaySettings
     public int CropRightPercent { get; init; }
     public int CropTopPercent { get; init; }
     public int CropBottomPercent { get; init; }
+    public int ImageHorizontalPositionPercent { get; init; } = 50;
+    public int ImageVerticalPositionPercent { get; init; } = 50;
     public CameraSettings Camera { get; init; } = AppSettings.CreateDoorbellCamera();
 }
 

@@ -371,6 +371,8 @@ public partial class MainWindow : Window
             overlay.CropRightPercent,
             overlay.CropTopPercent,
             overlay.CropBottomPercent,
+            overlay.ImageHorizontalPositionPercent,
+            overlay.ImageVerticalPositionPercent,
             width,
             height);
         DoorbellTile.ApplyViewportEdgeSmoothing(overlay.ViewportShape, width, height);

@@ -26,6 +26,8 @@ try
             CropRightPercent = 6,
             CropTopPercent = 50,
             CropBottomPercent = 2,
+            ImageHorizontalPositionPercent = 25,
+            ImageVerticalPositionPercent = 80,
             Camera = AppSettings.CreateDoorbellCamera() with { Enabled = true, RtspUrl = "rtsp://door:door-secret@example.test/doorbell" }
         }
     };
@@ -53,6 +55,8 @@ try
           recovered.DoorbellOverlay.CropBottomPercent == 2 &&
           recovered.DoorbellOverlay.CropLeftPercent == 4 &&
           recovered.DoorbellOverlay.CropRightPercent == 6, "doorbell source crop persistence");
+    Check(recovered.DoorbellOverlay.ImageHorizontalPositionPercent == 25 &&
+          recovered.DoorbellOverlay.ImageVerticalPositionPercent == 80, "doorbell image position persistence");
 
     var migratedOverlay = (new AppSettings
     {
@@ -80,6 +84,8 @@ try
             CropRightPercent = 80,
             CropTopPercent = 80,
             CropBottomPercent = 80,
+            ImageHorizontalPositionPercent = -999,
+            ImageVerticalPositionPercent = 999,
             Camera = AppSettings.CreateDoorbellCamera() with { Name = "  " }
         }
     }).Normalize().DoorbellOverlay;
@@ -97,7 +103,28 @@ try
           normalizedOverlay.CropRightPercent == 10 &&
           normalizedOverlay.CropTopPercent == 80 &&
           normalizedOverlay.CropBottomPercent == 10, "doorbell source crop normalization");
+    Check(normalizedOverlay.ImageHorizontalPositionPercent == 0 &&
+          normalizedOverlay.ImageVerticalPositionPercent == 100, "doorbell image position normalization");
     Check(normalizedOverlay.Camera.Slot == 10 && normalizedOverlay.Camera.Name == "Doorbell", "doorbell camera normalization");
+
+    var alignedCrop = DoorbellVideoTransform.CalculateCropWindow(
+        2048, 1536, 500, 300, DoorbellVideoSizing.Stretch, DoorbellViewportShape.RoundedSquare,
+        100, 0, 0, 54, 0, 50, 50);
+    Check(alignedCrop == new DoorbellCropWindow(0, 830, 2048, 706),
+        "doorbell crop aligns 4:2:0 source coordinates");
+    Check(alignedCrop.ToVlcGeometry() == "2048x706+0+830", "doorbell VLC crop geometry");
+
+    var centeredOval = DoorbellVideoTransform.CalculateCropWindow(
+        2048, 1536, 730, 385, DoorbellVideoSizing.Fit, DoorbellViewportShape.Oval,
+        100, 0, 0, 0, 0, 50, 50);
+    Check(centeredOval.X == 0 && centeredOval.Width == 2048 && centeredOval.Y > 0 &&
+          centeredOval.Y + centeredOval.Height < 1536, "doorbell fit crop removes letterbox region");
+
+    var bottomRightZoom = DoorbellVideoTransform.CalculateCropWindow(
+        2048, 1536, 730, 385, DoorbellVideoSizing.Fit, DoorbellViewportShape.Oval,
+        200, 0, 0, 0, 0, 100, 100);
+    Check(bottomRightZoom.X + bottomRightZoom.Width == 2048 &&
+          bottomRightZoom.Y + bottomRightZoom.Height == 1536, "doorbell zoom can focus bottom-right");
 
     var grid = new CameraSettings { RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };
     var gridOptions = grid.ToMediaOptions();
