@@ -155,8 +155,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         ApplyVideoSizing(_player);
     }
 
-    public void ApplyViewportEdgeSmoothing(DoorbellViewportShape shape, double width, double height)
+    public void ApplyViewportEdgeSmoothing(DoorbellOverlaySettings overlay, double width, double height)
     {
+        var shape = overlay.ViewportShape;
         TileBorder.BorderThickness = new Thickness(0);
         EllipticalViewportEdge.Visibility =
             shape is DoorbellViewportShape.Circle or DoorbellViewportShape.Oval
@@ -168,6 +169,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
                 : Visibility.Collapsed;
         RoundedViewportEdge.CornerRadius =
             new CornerRadius(Math.Max(1, Math.Min(width, height) * 0.22));
+        CustomViewportEdge.Visibility = Visibility.Collapsed;
+        CustomViewportEdge.Data = null;
+        if (shape != DoorbellViewportShape.Custom) return;
+        try
+        {
+            var geometry = System.Windows.Media.Geometry.Parse(overlay.CustomViewportPathData).GetFlattenedPathGeometry();
+            geometry.FillRule = System.Windows.Media.FillRule.EvenOdd;
+            foreach (var figure in geometry.Figures) figure.IsClosed = true;
+            CustomViewportEdge.Data = geometry;
+            CustomViewportEdge.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception) when (exception is FormatException or InvalidOperationException)
+        {
+            CustomViewportEdge.Data = null;
+        }
     }
 
     public void SetRestartButtonPlacement(RestartButtonPlacement placement)

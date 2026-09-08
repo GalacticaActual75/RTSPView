@@ -2,7 +2,7 @@ namespace SpotMonitor.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 12;
+    public const int CurrentSchemaVersion = 13;
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
@@ -75,6 +75,14 @@ public sealed record AppSettings
     {
         var position = Enum.IsDefined(overlay.Position) ? overlay.Position : PictureInPicturePosition.BottomLeft;
         var viewportShape = Enum.IsDefined(overlay.ViewportShape) ? overlay.ViewportShape : DoorbellViewportShape.Native;
+        var customViewportIsValid = CustomViewportPathValidator.IsValid(
+            overlay.CustomViewportPathData,
+            overlay.CustomViewportViewBoxX,
+            overlay.CustomViewportViewBoxY,
+            overlay.CustomViewportViewBoxWidth,
+            overlay.CustomViewportViewBoxHeight);
+        if (viewportShape == DoorbellViewportShape.Custom && !customViewportIsValid)
+            viewportShape = DoorbellViewportShape.Native;
         var viewportWidthPercent = SchemaVersion < 9 ? overlay.SizePercent : overlay.ViewportWidthPercent;
         var viewportHeightPercent = SchemaVersion < 9 ? overlay.SizePercent : overlay.ViewportHeightPercent;
         var viewportHorizontalPositionPercent = SchemaVersion < 11
@@ -92,8 +100,17 @@ public sealed record AppSettings
             ViewportHeightPercent = Math.Clamp(viewportHeightPercent, 10, 95),
             ViewportHorizontalPositionPercent = Math.Clamp(viewportHorizontalPositionPercent, 0, 100),
             ViewportVerticalPositionPercent = Math.Clamp(viewportVerticalPositionPercent, 0, 100),
+            ViewportOpacityPercent = Math.Clamp(overlay.ViewportOpacityPercent, 20, 100),
             VideoSizing = DoorbellVideoSizing.Fit,
             ViewportShape = viewportShape,
+            CustomViewportSourceName = customViewportIsValid
+                ? CustomViewportPathValidator.NormalizeSourceName(overlay.CustomViewportSourceName)
+                : string.Empty,
+            CustomViewportPathData = customViewportIsValid ? overlay.CustomViewportPathData.Trim() : string.Empty,
+            CustomViewportViewBoxX = customViewportIsValid ? overlay.CustomViewportViewBoxX : 0,
+            CustomViewportViewBoxY = customViewportIsValid ? overlay.CustomViewportViewBoxY : 0,
+            CustomViewportViewBoxWidth = customViewportIsValid ? overlay.CustomViewportViewBoxWidth : 1,
+            CustomViewportViewBoxHeight = customViewportIsValid ? overlay.CustomViewportViewBoxHeight : 1,
             HorizontalOffsetPercent = 0,
             VerticalOffsetPercent = 0,
             ZoomPercent = Math.Clamp(overlay.ZoomPercent, 100, 300),
@@ -140,7 +157,7 @@ public sealed record AppSettings
 
 public enum PictureInPicturePosition { TopLeft, TopRight, BottomLeft, BottomRight }
 public enum DoorbellVideoSizing { Fit, Stretch }
-public enum DoorbellViewportShape { Native, Square, RoundedSquare, Circle, Oval }
+public enum DoorbellViewportShape { Native, Square, RoundedSquare, Circle, Oval, Custom }
 
 public sealed record DoorbellOverlaySettings
 {
@@ -152,8 +169,15 @@ public sealed record DoorbellOverlaySettings
     public int ViewportHeightPercent { get; init; } = 50;
     public int ViewportHorizontalPositionPercent { get; init; }
     public int ViewportVerticalPositionPercent { get; init; } = 100;
+    public int ViewportOpacityPercent { get; init; } = 100;
     public DoorbellVideoSizing VideoSizing { get; init; } = DoorbellVideoSizing.Fit;
     public DoorbellViewportShape ViewportShape { get; init; } = DoorbellViewportShape.Native;
+    public string CustomViewportSourceName { get; init; } = string.Empty;
+    public string CustomViewportPathData { get; init; } = string.Empty;
+    public double CustomViewportViewBoxX { get; init; }
+    public double CustomViewportViewBoxY { get; init; }
+    public double CustomViewportViewBoxWidth { get; init; } = 1;
+    public double CustomViewportViewBoxHeight { get; init; } = 1;
     public int HorizontalOffsetPercent { get; init; }
     public int VerticalOffsetPercent { get; init; }
     public int ZoomPercent { get; init; } = 100;

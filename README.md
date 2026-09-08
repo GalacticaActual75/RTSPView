@@ -5,7 +5,7 @@ SpotMonitor is a production-oriented Windows RTSP camera wall with nine independ
 ## Features
 
 - Fixed 3×3 native video wall with AMD, NVIDIA, and Intel hardware-decoding support through LibVLC/D3D11VA.
-- Independent Doorbell and Garage picture-in-picture streams that can each overlay any camera. Both support Rectangle, Square, aggressively rounded Rectangle, Circle, or Oval viewports with independent size and position, aspect-preserving cover rendering, 100–300% source zoom, horizontal/vertical source pan, and interactive wall/source previews. Garage defaults disabled over Camera 3.
+- Independent Doorbell and Garage picture-in-picture streams that can each overlay any camera. Both support Rectangle, Square, aggressively rounded Rectangle, Circle, Oval, or uploaded custom SVG viewports with independent size, position, and 20–100% opacity, aspect-preserving cover rendering, 100–300% source zoom, horizontal/vertical source pan, and interactive wall/source previews. Garage defaults disabled over Camera 3.
 - Independent reconnect, stall detection, exponential backoff, and player recreation for every camera.
 - Persistent camera naming, ordering, transport, cache, overlay, monitor, cursor, and always-on-top settings.
 - Automatic connection-state overlays and per-camera feed thumbnails.
@@ -16,6 +16,8 @@ SpotMonitor is a production-oriented Windows RTSP camera wall with nine independ
 - Branded Windows executables, shortcuts, and web interface.
 
 Settings, logs, password state, and thumbnails live under `%LOCALAPPDATA%\SpotMonitor`. Installing or upgrading the application does not remove them.
+
+Custom viewport uploads are converted to path geometry in the browser; SpotMonitor persists only inert SVG path data and normalized bounds, not the original file or SVG markup. SVGs must use a `viewBox` and path elements with flattened transforms. Convert text and primitive shapes to paths before upload. If a drawing contains a full-canvas background path plus a smaller mask path, the importer automatically ignores the canvas background.
 
 ## Install or upgrade
 

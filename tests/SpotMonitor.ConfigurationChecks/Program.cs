@@ -1,6 +1,7 @@
 using SpotMonitor.Core;
 using SpotMonitor.Infrastructure;
 
+const string sampleCustomViewportPath = "m344.6614 99.874016l90.734924 14.3622055l142.30185 35.249344l75.72174 30.679794l71.15228 39.165344l56.136475 40.469833l1.9580078 291.13385l-744.1522 -1.3044434l-3.2624664 -159.2756l23.498688 -122.71918z";
 var root = Path.Combine(Path.GetTempPath(), "SpotMonitor-ConfigurationChecks", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 try
@@ -32,7 +33,14 @@ try
             ViewportHeightPercent = 45,
             ViewportHorizontalPositionPercent = 80,
             ViewportVerticalPositionPercent = 20,
-            ViewportShape = DoorbellViewportShape.Oval,
+            ViewportOpacityPercent = 63,
+            ViewportShape = DoorbellViewportShape.Custom,
+            CustomViewportSourceName = @"C:\fakepath\Untitled drawing (1).svg",
+            CustomViewportPathData = sampleCustomViewportPath,
+            CustomViewportViewBoxX = 35.251968,
+            CustomViewportViewBoxY = 99.874016,
+            CustomViewportViewBoxWidth = 747.4147,
+            CustomViewportViewBoxHeight = 451.06082,
             ZoomPercent = 175,
             ImageHorizontalPositionPercent = 70,
             ImageVerticalPositionPercent = 30,
@@ -63,12 +71,19 @@ try
           recovered.DoorbellOverlay.ImageVerticalPositionPercent == 80, "doorbell image position persistence");
     Check(recovered.GarageOverlay.Camera.Slot == 11, "garage overlay backup recovery");
     Check(recovered.GarageOverlay.HostCameraSlot == 3, "garage host camera persistence");
-    Check(recovered.GarageOverlay.ViewportShape == DoorbellViewportShape.Oval,
+    Check(recovered.GarageOverlay.ViewportShape == DoorbellViewportShape.Custom,
         "garage viewport shape persistence");
+    Check(recovered.GarageOverlay.CustomViewportSourceName == "Untitled drawing (1).svg" &&
+          recovered.GarageOverlay.CustomViewportPathData == sampleCustomViewportPath,
+        "custom SVG path and sanitized filename persistence");
+    Check(recovered.GarageOverlay.CustomViewportViewBoxWidth == 747.4147 &&
+          recovered.GarageOverlay.CustomViewportViewBoxHeight == 451.06082,
+        "custom SVG normalized bounds persistence");
     Check(recovered.GarageOverlay.ViewportWidthPercent == 65 &&
           recovered.GarageOverlay.ViewportHeightPercent == 45, "garage viewport dimensions persistence");
     Check(recovered.GarageOverlay.ViewportHorizontalPositionPercent == 80 &&
           recovered.GarageOverlay.ViewportVerticalPositionPercent == 20, "garage viewport position persistence");
+    Check(recovered.GarageOverlay.ViewportOpacityPercent == 63, "garage viewport opacity persistence");
     Check(recovered.GarageOverlay.ZoomPercent == 175 &&
           recovered.GarageOverlay.ImageHorizontalPositionPercent == 70 &&
           recovered.GarageOverlay.ImageVerticalPositionPercent == 30, "garage framing persistence");
@@ -82,6 +97,28 @@ try
           migratedGarage.Camera.Slot == 11 &&
           migratedGarage.Camera.Name == "Garage" &&
           !migratedGarage.Camera.Enabled, "schema 11 creates disabled Garage overlay on Camera 3");
+    Check((new AppSettings { SchemaVersion = 12 }).Normalize().DoorbellOverlay.ViewportOpacityPercent == 100 &&
+          (new AppSettings { SchemaVersion = 12 }).Normalize().GarageOverlay.ViewportOpacityPercent == 100,
+        "schema 12 overlays migrate to fully opaque viewports");
+
+    Check(CustomViewportPathValidator.IsValid(
+            sampleCustomViewportPath, 35.251968, 99.874016, 747.4147, 451.06082),
+        "uploaded sample SVG path validation");
+    Check(!CustomViewportPathValidator.IsValid("M0 0L10 10<script>", 0, 0, 10, 10),
+        "custom SVG executable markup rejection");
+    Check(!CustomViewportPathValidator.IsValid("M0 0L10 10", 0, 0, 0, 10),
+        "custom SVG invalid bounds rejection");
+    var invalidCustomViewport = (new AppSettings
+    {
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            ViewportShape = DoorbellViewportShape.Custom,
+            CustomViewportPathData = "not-svg-path"
+        }
+    }).Normalize().DoorbellOverlay;
+    Check(invalidCustomViewport.ViewportShape == DoorbellViewportShape.Native &&
+          invalidCustomViewport.CustomViewportPathData.Length == 0,
+        "invalid custom SVG falls back to rectangle safely");
 
     var migratedOverlay = (new AppSettings
     {
@@ -124,6 +161,7 @@ try
             ViewportHeightPercent = -999,
             ViewportHorizontalPositionPercent = -999,
             ViewportVerticalPositionPercent = 999,
+            ViewportOpacityPercent = -999,
             VideoSizing = (DoorbellVideoSizing)999,
             ViewportShape = (DoorbellViewportShape)999,
             HorizontalOffsetPercent = 999,
@@ -147,6 +185,7 @@ try
     Check(normalizedOverlay.ViewportShape == DoorbellViewportShape.Native, "doorbell viewport shape normalization");
     Check(normalizedOverlay.ViewportHorizontalPositionPercent == 0 &&
           normalizedOverlay.ViewportVerticalPositionPercent == 100, "doorbell viewport position normalization");
+    Check(normalizedOverlay.ViewportOpacityPercent == 20, "doorbell viewport opacity normalization");
     Check(normalizedOverlay.HorizontalOffsetPercent == 0 &&
           normalizedOverlay.VerticalOffsetPercent == 0, "legacy doorbell offsets are cleared");
     Check(normalizedOverlay.ZoomPercent == 300, "doorbell zoom normalization");

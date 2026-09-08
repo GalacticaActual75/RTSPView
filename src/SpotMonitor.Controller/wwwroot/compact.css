@@ -94,6 +94,20 @@
   margin-bottom: 38px;
 }
 .overlay-placement { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.custom-viewport-upload {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0c1015;
+}
+.custom-viewport-upload label { margin: 0; }
+.custom-viewport-upload input[type="file"] { padding: 7px; }
+.custom-viewport-file-state { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.custom-viewport-status { min-width: 0; overflow: hidden; color: var(--green); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.custom-viewport-status.error { color: var(--red); white-space: normal; }
+.custom-viewport-upload p { margin: 8px 0 0 !important; color: var(--muted); font-size: 11px; }
 .overlay-group-title {
   grid-column: 1 / -1;
   margin-top: 8px;

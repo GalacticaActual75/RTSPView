@@ -360,10 +360,11 @@ public partial class MainWindow : Window
             overlay.ImageVerticalPositionPercent,
             bounds.Width,
             bounds.Height);
-        overlayTile.ApplyViewportEdgeSmoothing(overlay.ViewportShape, bounds.Width, bounds.Height);
+        overlayTile.ApplyViewportEdgeSmoothing(overlay, bounds.Width, bounds.Height);
         overlayWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
         if (!overlayWindow.IsVisible) overlayWindow.Show();
-        ApplyOverlayWindowRegion(overlayWindow, overlay.ViewportShape, bounds.Width, bounds.Height, dpi);
+        ApplyOverlayWindowRegion(overlayWindow, overlay, bounds.Width, bounds.Height, dpi);
+        ApplyOverlayWindowOpacity(overlayWindow, overlay.ViewportOpacityPercent);
         BringOverlayWindowToFront(overlayWindow);
     }
 
@@ -397,11 +398,12 @@ public partial class MainWindow : Window
 
     private static void ApplyOverlayWindowRegion(
         Window overlayWindow,
-        DoorbellViewportShape shape,
+        DoorbellOverlaySettings overlay,
         double width,
         double height,
         DpiScale dpi)
     {
+        var shape = overlay.ViewportShape;
         var handle = new WindowInteropHelper(overlayWindow).Handle;
         if (handle == IntPtr.Zero) return;
         if (shape is DoorbellViewportShape.Native or DoorbellViewportShape.Square)
@@ -413,7 +415,16 @@ public partial class MainWindow : Window
         var pixelWidth = Math.Max(1, (int)Math.Round(width * dpi.DpiScaleX));
         var pixelHeight = Math.Max(1, (int)Math.Round(height * dpi.DpiScaleY));
         IntPtr region;
-        if (shape is DoorbellViewportShape.Circle or DoorbellViewportShape.Oval)
+        if (shape == DoorbellViewportShape.Custom)
+        {
+            region = CustomViewportRegion.Create(overlay, pixelWidth, pixelHeight);
+            if (region == IntPtr.Zero)
+            {
+                SetWindowRgn(handle, IntPtr.Zero, true);
+                return;
+            }
+        }
+        else if (shape is DoorbellViewportShape.Circle or DoorbellViewportShape.Oval)
             region = CreateEllipticRgn(0, 0, pixelWidth + 1, pixelHeight + 1);
         else
         {
@@ -491,11 +502,31 @@ public partial class MainWindow : Window
         var handle = new WindowInteropHelper(window).Handle;
         if (handle == IntPtr.Zero) return;
         var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
-        SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle | WsExToolWindow | WsExNoActivate));
+        SetWindowLongPtr(handle, GwlExStyle,
+            new IntPtr(extendedStyle | WsExToolWindow | WsExNoActivate));
         var borderColor = DwmColorNone;
         DwmSetWindowAttribute(handle, DwmwaBorderColor, ref borderColor, sizeof(uint));
         var cornerPreference = DwmWindowCornerPreferenceDoNotRound;
         DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(uint));
+    }
+
+    private static void ApplyOverlayWindowOpacity(Window window, int opacityPercent)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero) return;
+        var alpha = (byte)Math.Round(Math.Clamp(opacityPercent, 20, 100) * byte.MaxValue / 100d);
+        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+        var isLayered = (extendedStyle & WsExLayered) != 0;
+        if (alpha == byte.MaxValue)
+        {
+            if (isLayered)
+                SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle & ~WsExLayered));
+            return;
+        }
+
+        if (!isLayered)
+            SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle | WsExLayered));
+        SetLayeredWindowAttributes(handle, 0, alpha, LwaAlpha);
     }
 
     private void BringOverlayWindowToFront(Window? overlayWindow)
@@ -525,7 +556,9 @@ public partial class MainWindow : Window
     private static readonly IntPtr HwndTop = IntPtr.Zero;
     private const int GwlExStyle = -20;
     private const long WsExToolWindow = 0x00000080L;
+    private const long WsExLayered = 0x00080000L;
     private const long WsExNoActivate = 0x08000000L;
+    private const uint LwaAlpha = 0x00000002;
     private const int DwmwaBorderColor = 34;
     private const int DwmwaWindowCornerPreference = 33;
     private const uint DwmColorNone = 0xFFFFFFFE;
@@ -540,6 +573,8 @@ public partial class MainWindow : Window
     private static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     private static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr window, uint colorKey, byte alpha, uint flags);
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref uint value, int valueSize);
     [DllImport("user32.dll", SetLastError = true)]
