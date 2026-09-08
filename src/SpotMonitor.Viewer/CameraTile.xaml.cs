@@ -256,6 +256,17 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         NativeVideoBackgroundGuard.Apply(handle, forceRedraw || handleChanged);
     }
 
+    public IntPtr GetNativeVideoHandle()
+    {
+        VideoView.ApplyTemplate();
+        if (VideoView.Template.FindName("PART_PlayerHost", VideoView) is not HwndHost videoHost ||
+            videoHost.Handle == IntPtr.Zero)
+            return IntPtr.Zero;
+
+        _nativeVideoHandle = videoHost.Handle;
+        return videoHost.Handle;
+    }
+
     private void UpdateRestartButton() => RestartStreamButton.IsEnabled =
         _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);
 

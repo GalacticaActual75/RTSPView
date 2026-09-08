@@ -48,6 +48,8 @@ public partial class MainWindow : Window
     private int _cornerClickCount;
     private bool _leftButtonWasDown;
     private readonly HashSet<nint> _overlayOpacityFailureHandles = [];
+    private readonly HashSet<nint> _overlayVideoLayeredHandles = [];
+    private readonly Dictionary<nint, int> _overlayVideoRedirectCounts = [];
 
     public MainWindow()
     {
@@ -313,7 +315,7 @@ public partial class MainWindow : Window
     private void QueueOverlayLayouts()
     {
         if (!IsLoaded || _doorbellWindow is null || _garageWindow is null) return;
-        if (!IsVisible || WindowState == WindowState.Minimized)
+        if (!CanDisplayOverlayWindows())
         {
             HideOverlayWindows();
             return;
@@ -353,8 +355,29 @@ public partial class MainWindow : Window
 
     private void HideOverlayWindows()
     {
-        if (_doorbellWindow?.IsVisible == true) _doorbellWindow.Hide();
-        if (_garageWindow?.IsVisible == true) _garageWindow.Hide();
+        HideOverlayWindowHierarchy(_doorbellWindow, DoorbellTile);
+        HideOverlayWindowHierarchy(_garageWindow, GarageTile);
+    }
+
+    private static void HideOverlayWindowHierarchy(Window? overlayWindow, CameraTile overlayTile)
+    {
+        if (overlayWindow is null) return;
+        foreach (Window ownedWindow in overlayWindow.OwnedWindows.Cast<Window>().ToArray())
+            if (ownedWindow.IsVisible) ownedWindow.Hide();
+
+        SetNativeWindowHierarchyVisibility(overlayTile.GetNativeVideoHandle(), false);
+        var handle = new WindowInteropHelper(overlayWindow).Handle;
+        if (handle != IntPtr.Zero) ShowWindow(handle, SwHide);
+        if (overlayWindow.IsVisible) overlayWindow.Hide();
+    }
+
+    private bool CanDisplayOverlayWindows()
+    {
+        if (!IsVisible || WindowState == WindowState.Minimized) return false;
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return true;
+        if (!IsWindowVisible(handle) || IsIconic(handle)) return false;
+        return DwmGetWindowAttribute(handle, DwmwaCloaked, out var cloaked, sizeof(uint)) != 0 || cloaked == 0;
     }
 
     private void UpdateOverlayWindowLayouts()
@@ -370,9 +393,9 @@ public partial class MainWindow : Window
         DoorbellOverlaySettings overlay)
     {
         if (overlayWindow is null || _tiles.Length != 9) return;
-        if (!overlay.Camera.Enabled || !IsVisible || WindowState == WindowState.Minimized)
+        if (!overlay.Camera.Enabled || !CanDisplayOverlayWindows())
         {
-            overlayWindow.Hide();
+            HideOverlayWindowHierarchy(overlayWindow, overlayTile);
             return;
         }
 
@@ -399,11 +422,32 @@ public partial class MainWindow : Window
             bounds.Width,
             bounds.Height);
         overlayTile.ApplyViewportEdgeSmoothing(overlay, bounds.Width, bounds.Height);
-        overlayWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
+        overlayWindow.Topmost = false;
         if (!overlayWindow.IsVisible) overlayWindow.Show();
+        ShowOverlayWindowHierarchy(overlayWindow, overlayTile, overlay.ViewportOpacityPercent);
         ApplyOverlayWindowRegion(overlayWindow, overlay, bounds.Width, bounds.Height, dpi);
-        ApplyOverlayWindowOpacity(overlayWindow, overlay.ViewportOpacityPercent);
+        ApplyOverlayWindowOpacity(overlayWindow, overlayTile, overlay.ViewportOpacityPercent);
         BringOverlayWindowToFront(overlayWindow);
+    }
+
+    private static void ShowOverlayWindowHierarchy(Window overlayWindow, CameraTile overlayTile, int opacityPercent)
+    {
+        SetNativeWindowHierarchyVisibility(overlayTile.GetNativeVideoHandle(), true);
+        var opacity = Math.Clamp(opacityPercent, 20, 100) / 100d;
+        foreach (Window ownedWindow in overlayWindow.OwnedWindows.Cast<Window>().ToArray())
+        {
+            ownedWindow.ShowActivated = false;
+            ownedWindow.Opacity = opacity;
+            if (!ownedWindow.IsVisible) ownedWindow.Show();
+        }
+    }
+
+    private static void SetNativeWindowHierarchyVisibility(IntPtr root, bool visible)
+    {
+        if (root == IntPtr.Zero) return;
+        var command = visible ? SwShowNoActivate : SwHide;
+        ShowWindow(root, command);
+        foreach (var descendant in EnumerateDescendantWindows(root)) ShowWindow(descendant, command);
     }
 
     private static Rect CalculateOverlayBounds(CameraTile target, DoorbellOverlaySettings overlay)
@@ -548,35 +592,91 @@ public partial class MainWindow : Window
         DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(uint));
     }
 
-    private void ApplyOverlayWindowOpacity(Window window, int opacityPercent)
+    private void ApplyOverlayWindowOpacity(Window window, CameraTile overlayTile, int opacityPercent)
     {
         var handle = new WindowInteropHelper(window).Handle;
         if (handle == IntPtr.Zero) return;
         var alpha = (byte)Math.Round(Math.Clamp(opacityPercent, 20, 100) * byte.MaxValue / 100d);
-        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
-        var isLayered = (extendedStyle & WsExLayered) != 0;
         if (alpha == byte.MaxValue)
         {
-            if (isLayered)
-            {
-                SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle & ~WsExLayered));
-                RefreshOverlayWindowStyle(handle);
-            }
+            RemoveLayeredStyle(handle);
+            SetVideoHierarchyRedirected(overlayTile.GetNativeVideoHandle(), false, window.Title);
+            foreach (Window ownedWindow in window.OwnedWindows.Cast<Window>()) ownedWindow.Opacity = 1;
             return;
         }
 
-        if (!isLayered)
+        if (!ApplyLayeredAlpha(handle, alpha))
+        {
+            if (_overlayOpacityFailureHandles.Add(handle))
+                _logger.Write("WARNING", $"{window.Title}: parent-window opacity could not be applied; Win32 error={Marshal.GetLastWin32Error()}");
+        }
+        else
+            _overlayOpacityFailureHandles.Remove(handle);
+
+        // LibVLC renders into an HwndHost child surface. Marking that hierarchy as
+        // fully opaque layered children redirects its hardware surface into the
+        // already-alpha-blended parent instead of applying alpha twice to the video.
+        SetVideoHierarchyRedirected(overlayTile.GetNativeVideoHandle(), true, window.Title);
+        var opacity = alpha / (double)byte.MaxValue;
+        foreach (Window ownedWindow in window.OwnedWindows.Cast<Window>()) ownedWindow.Opacity = opacity;
+    }
+
+    private void SetVideoHierarchyRedirected(IntPtr root, bool redirected, string description)
+    {
+        if (root == IntPtr.Zero) return;
+        var handles = new[] { root }.Concat(EnumerateDescendantWindows(root)).Distinct().ToArray();
+        foreach (var handle in handles)
+        {
+            if (!redirected)
+            {
+                if (_overlayVideoLayeredHandles.Remove(handle)) RemoveLayeredStyle(handle);
+                continue;
+            }
+
+            var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+            if ((extendedStyle & WsExLayered) == 0)
+            {
+                SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle | WsExLayered));
+                RefreshOverlayWindowStyle(handle);
+                _overlayVideoLayeredHandles.Add(handle);
+            }
+
+            if (!SetLayeredWindowAttributes(handle, 0, byte.MaxValue, LwaAlpha))
+            {
+                if (_overlayOpacityFailureHandles.Add(handle))
+                    _logger.Write("WARNING", $"{description}: LibVLC child redirection could not be enabled; Win32 error={Marshal.GetLastWin32Error()}");
+            }
+            else
+                _overlayOpacityFailureHandles.Remove(handle);
+        }
+
+        if (!redirected)
+            _overlayVideoRedirectCounts.Remove(root);
+        else if (!_overlayVideoRedirectCounts.TryGetValue(root, out var previousCount) || previousCount != handles.Length)
+        {
+            _overlayVideoRedirectCounts[root] = handles.Length;
+            _logger.Write("INFO", $"{description}: live opacity now includes {handles.Length} LibVLC native video window(s)");
+        }
+    }
+
+    private static bool ApplyLayeredAlpha(IntPtr handle, byte alpha)
+    {
+        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+        if ((extendedStyle & WsExLayered) == 0)
         {
             SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle | WsExLayered));
             RefreshOverlayWindowStyle(handle);
         }
-        if (!SetLayeredWindowAttributes(handle, 0, alpha, LwaAlpha))
-        {
-            if (_overlayOpacityFailureHandles.Add(handle))
-                _logger.Write("WARNING", $"{window.Title}: opacity could not be applied; Win32 error={Marshal.GetLastWin32Error()}");
-        }
-        else
-            _overlayOpacityFailureHandles.Remove(handle);
+        return SetLayeredWindowAttributes(handle, 0, alpha, LwaAlpha);
+    }
+
+    private static void RemoveLayeredStyle(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero) return;
+        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+        if ((extendedStyle & WsExLayered) == 0) return;
+        SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle & ~WsExLayered));
+        RefreshOverlayWindowStyle(handle);
     }
 
     private static void RefreshOverlayWindowStyle(IntPtr handle) =>
@@ -588,21 +688,38 @@ public partial class MainWindow : Window
         if (overlayWindow?.IsVisible != true) return;
         var handle = new WindowInteropHelper(overlayWindow).Handle;
         if (handle == IntPtr.Zero) return;
-        SetWindowPos(handle, _settings.KeepViewerAlwaysOnTop ? HwndTopmost : HwndTop, 0, 0, 0, 0,
+        SetWindowPos(handle, HwndTop, 0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
     }
 
     private void ApplyAlwaysOnTop()
     {
         Topmost = _settings.KeepViewerAlwaysOnTop;
-        if (_doorbellWindow is not null) _doorbellWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
-        if (_garageWindow is not null) _garageWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
+        if (_doorbellWindow is not null) _doorbellWindow.Topmost = false;
+        if (_garageWindow is not null) _garageWindow.Topmost = false;
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
         SetWindowPos(handle, _settings.KeepViewerAlwaysOnTop ? HwndTopmost : HwndNotTopmost, 0, 0, 0, 0,
-            SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
-        BringOverlayWindowToFront(_doorbellWindow);
-        BringOverlayWindowToFront(_garageWindow);
+            SwpNoMove | SwpNoSize | SwpNoActivate);
+        if (CanDisplayOverlayWindows())
+        {
+            BringOverlayWindowToFront(_doorbellWindow);
+            BringOverlayWindowToFront(_garageWindow);
+        }
+        else
+            HideOverlayWindows();
+    }
+
+    private static IReadOnlyList<IntPtr> EnumerateDescendantWindows(IntPtr root)
+    {
+        if (root == IntPtr.Zero) return [];
+        var result = new List<IntPtr>();
+        EnumChildWindows(root, (handle, _) =>
+        {
+            result.Add(handle);
+            return true;
+        }, IntPtr.Zero);
+        return result;
     }
 
     private static readonly IntPtr HwndTopmost = new(-1);
@@ -615,6 +732,7 @@ public partial class MainWindow : Window
     private const uint LwaAlpha = 0x00000002;
     private const int DwmwaBorderColor = 34;
     private const int DwmwaWindowCornerPreference = 33;
+    private const int DwmwaCloaked = 14;
     private const uint DwmColorNone = 0xFFFFFFFE;
     private const uint DwmWindowCornerPreferenceDoNotRound = 1;
     private const uint SwpNoSize = 0x0001;
@@ -623,6 +741,9 @@ public partial class MainWindow : Window
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
     private const uint SwpShowWindow = 0x0040;
+    private const int SwHide = 0;
+    private const int SwShowNoActivate = 4;
+    private delegate bool EnumWindowProc(IntPtr window, IntPtr parameter);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
@@ -631,8 +752,18 @@ public partial class MainWindow : Window
     private static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetLayeredWindowAttributes(IntPtr window, uint colorKey, byte alpha, uint flags);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr parent, EnumWindowProc callback, IntPtr parameter);
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref uint value, int valueSize);
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out uint value, int valueSize);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int SetWindowRgn(IntPtr window, IntPtr region, bool redraw);
     [DllImport("gdi32.dll")]
