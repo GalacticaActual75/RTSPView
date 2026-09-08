@@ -171,6 +171,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             new CornerRadius(Math.Max(1, Math.Min(width, height) * 0.22));
         CustomViewportEdge.Visibility = Visibility.Collapsed;
         CustomViewportEdge.Data = null;
+        CustomViewportEdge.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+        CustomViewportEdge.RenderTransform = new System.Windows.Media.RotateTransform(
+            Math.Clamp(overlay.CustomViewportRotationDegrees, -180, 180));
         if (shape != DoorbellViewportShape.Custom) return;
         try
         {

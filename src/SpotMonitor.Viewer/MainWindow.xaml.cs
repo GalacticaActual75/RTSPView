@@ -47,6 +47,7 @@ public partial class MainWindow : Window
     private DateTime _cornerClickWindowStarted;
     private int _cornerClickCount;
     private bool _leftButtonWasDown;
+    private readonly HashSet<nint> _overlayOpacityFailureHandles = [];
 
     public MainWindow()
     {
@@ -54,7 +55,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         LocationChanged += (_, _) => QueueOverlayLayouts();
         SizeChanged += (_, _) => QueueOverlayLayouts();
-        StateChanged += (_, _) => QueueOverlayLayouts();
+        StateChanged += MainWindow_StateChanged;
+        IsVisibleChanged += MainWindow_IsVisibleChanged;
         WallGrid.SizeChanged += (_, _) => QueueOverlayLayouts();
         _cursorTimer.Tick += (_, _) =>
         {
@@ -310,13 +312,49 @@ public partial class MainWindow : Window
 
     private void QueueOverlayLayouts()
     {
-        if (!IsLoaded || _doorbellWindow is null || _garageWindow is null || _overlayLayoutQueued) return;
+        if (!IsLoaded || _doorbellWindow is null || _garageWindow is null) return;
+        if (!IsVisible || WindowState == WindowState.Minimized)
+        {
+            HideOverlayWindows();
+            return;
+        }
+        if (_overlayLayoutQueued) return;
         _overlayLayoutQueued = true;
         Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
         {
             _overlayLayoutQueued = false;
             UpdateOverlayWindowLayouts();
         }));
+    }
+
+    private void MainWindow_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            _overlayLayoutQueued = false;
+            HideOverlayWindows();
+            return;
+        }
+
+        QueueOverlayLayouts();
+    }
+
+    private void MainWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsVisible)
+        {
+            _overlayLayoutQueued = false;
+            HideOverlayWindows();
+            return;
+        }
+
+        QueueOverlayLayouts();
+    }
+
+    private void HideOverlayWindows()
+    {
+        if (_doorbellWindow?.IsVisible == true) _doorbellWindow.Hide();
+        if (_garageWindow?.IsVisible == true) _garageWindow.Hide();
     }
 
     private void UpdateOverlayWindowLayouts()
@@ -510,7 +548,7 @@ public partial class MainWindow : Window
         DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(uint));
     }
 
-    private static void ApplyOverlayWindowOpacity(Window window, int opacityPercent)
+    private void ApplyOverlayWindowOpacity(Window window, int opacityPercent)
     {
         var handle = new WindowInteropHelper(window).Handle;
         if (handle == IntPtr.Zero) return;
@@ -520,14 +558,30 @@ public partial class MainWindow : Window
         if (alpha == byte.MaxValue)
         {
             if (isLayered)
+            {
                 SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle & ~WsExLayered));
+                RefreshOverlayWindowStyle(handle);
+            }
             return;
         }
 
         if (!isLayered)
+        {
             SetWindowLongPtr(handle, GwlExStyle, new IntPtr(extendedStyle | WsExLayered));
-        SetLayeredWindowAttributes(handle, 0, alpha, LwaAlpha);
+            RefreshOverlayWindowStyle(handle);
+        }
+        if (!SetLayeredWindowAttributes(handle, 0, alpha, LwaAlpha))
+        {
+            if (_overlayOpacityFailureHandles.Add(handle))
+                _logger.Write("WARNING", $"{window.Title}: opacity could not be applied; Win32 error={Marshal.GetLastWin32Error()}");
+        }
+        else
+            _overlayOpacityFailureHandles.Remove(handle);
     }
+
+    private static void RefreshOverlayWindowStyle(IntPtr handle) =>
+        SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0,
+            SwpNoSize | SwpNoMove | SwpNoActivate | SwpNoZOrder | SwpFrameChanged);
 
     private void BringOverlayWindowToFront(Window? overlayWindow)
     {
@@ -565,7 +619,9 @@ public partial class MainWindow : Window
     private const uint DwmWindowCornerPreferenceDoNotRound = 1;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
+    private const uint SwpFrameChanged = 0x0020;
     private const uint SwpShowWindow = 0x0040;
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);

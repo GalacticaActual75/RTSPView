@@ -2,7 +2,7 @@ namespace SpotMonitor.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 13;
+    public const int CurrentSchemaVersion = 14;
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
@@ -111,6 +111,7 @@ public sealed record AppSettings
             CustomViewportViewBoxY = customViewportIsValid ? overlay.CustomViewportViewBoxY : 0,
             CustomViewportViewBoxWidth = customViewportIsValid ? overlay.CustomViewportViewBoxWidth : 1,
             CustomViewportViewBoxHeight = customViewportIsValid ? overlay.CustomViewportViewBoxHeight : 1,
+            CustomViewportRotationDegrees = Math.Clamp(overlay.CustomViewportRotationDegrees, -180, 180),
             HorizontalOffsetPercent = 0,
             VerticalOffsetPercent = 0,
             ZoomPercent = Math.Clamp(overlay.ZoomPercent, 100, 300),
@@ -178,6 +179,7 @@ public sealed record DoorbellOverlaySettings
     public double CustomViewportViewBoxY { get; init; }
     public double CustomViewportViewBoxWidth { get; init; } = 1;
     public double CustomViewportViewBoxHeight { get; init; } = 1;
+    public int CustomViewportRotationDegrees { get; init; }
     public int HorizontalOffsetPercent { get; init; }
     public int VerticalOffsetPercent { get; init; }
     public int ZoomPercent { get; init; } = 100;

@@ -41,6 +41,7 @@ try
             CustomViewportViewBoxY = 99.874016,
             CustomViewportViewBoxWidth = 747.4147,
             CustomViewportViewBoxHeight = 451.06082,
+            CustomViewportRotationDegrees = 137,
             ZoomPercent = 175,
             ImageHorizontalPositionPercent = 70,
             ImageVerticalPositionPercent = 30,
@@ -79,6 +80,8 @@ try
     Check(recovered.GarageOverlay.CustomViewportViewBoxWidth == 747.4147 &&
           recovered.GarageOverlay.CustomViewportViewBoxHeight == 451.06082,
         "custom SVG normalized bounds persistence");
+    Check(recovered.GarageOverlay.CustomViewportRotationDegrees == 137,
+        "custom SVG mask rotation persistence");
     Check(recovered.GarageOverlay.ViewportWidthPercent == 65 &&
           recovered.GarageOverlay.ViewportHeightPercent == 45, "garage viewport dimensions persistence");
     Check(recovered.GarageOverlay.ViewportHorizontalPositionPercent == 80 &&
@@ -100,6 +103,9 @@ try
     Check((new AppSettings { SchemaVersion = 12 }).Normalize().DoorbellOverlay.ViewportOpacityPercent == 100 &&
           (new AppSettings { SchemaVersion = 12 }).Normalize().GarageOverlay.ViewportOpacityPercent == 100,
         "schema 12 overlays migrate to fully opaque viewports");
+    Check((new AppSettings { SchemaVersion = 13 }).Normalize().DoorbellOverlay.CustomViewportRotationDegrees == 0 &&
+          (new AppSettings { SchemaVersion = 13 }).Normalize().GarageOverlay.CustomViewportRotationDegrees == 0,
+        "schema 13 overlays migrate to unrotated custom masks");
 
     Check(CustomViewportPathValidator.IsValid(
             sampleCustomViewportPath, 35.251968, 99.874016, 747.4147, 451.06082),
@@ -162,6 +168,7 @@ try
             ViewportHorizontalPositionPercent = -999,
             ViewportVerticalPositionPercent = 999,
             ViewportOpacityPercent = -999,
+            CustomViewportRotationDegrees = 999,
             VideoSizing = (DoorbellVideoSizing)999,
             ViewportShape = (DoorbellViewportShape)999,
             HorizontalOffsetPercent = 999,
@@ -186,6 +193,8 @@ try
     Check(normalizedOverlay.ViewportHorizontalPositionPercent == 0 &&
           normalizedOverlay.ViewportVerticalPositionPercent == 100, "doorbell viewport position normalization");
     Check(normalizedOverlay.ViewportOpacityPercent == 20, "doorbell viewport opacity normalization");
+    Check(normalizedOverlay.CustomViewportRotationDegrees == 180,
+        "custom SVG mask rotation normalization");
     Check(normalizedOverlay.HorizontalOffsetPercent == 0 &&
           normalizedOverlay.VerticalOffsetPercent == 0, "legacy doorbell offsets are cleared");
     Check(normalizedOverlay.ZoomPercent == 300, "doorbell zoom normalization");

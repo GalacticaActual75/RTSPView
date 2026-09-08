@@ -77,9 +77,16 @@ internal static class CustomViewportRegion
             overlay.CustomViewportViewBoxWidth * (pixelWidth + 1d);
         var y = (point.Y - overlay.CustomViewportViewBoxY) /
             overlay.CustomViewportViewBoxHeight * (pixelHeight + 1d);
+        var radians = Math.Clamp(overlay.CustomViewportRotationDegrees, -180, 180) * Math.PI / 180d;
+        var cosine = Math.Cos(radians);
+        var sine = Math.Sin(radians);
+        var centerX = (pixelWidth + 1d) / 2d;
+        var centerY = (pixelHeight + 1d) / 2d;
+        var rotatedX = centerX + (x - centerX) * cosine - (y - centerY) * sine;
+        var rotatedY = centerY + (x - centerX) * sine + (y - centerY) * cosine;
         return new NativePoint(
-            Math.Clamp((int)Math.Round(x), 0, pixelWidth + 1),
-            Math.Clamp((int)Math.Round(y), 0, pixelHeight + 1));
+            Math.Clamp((int)Math.Round(rotatedX), 0, pixelWidth + 1),
+            Math.Clamp((int)Math.Round(rotatedY), 0, pixelHeight + 1));
     }
 
     [StructLayout(LayoutKind.Sequential)]
