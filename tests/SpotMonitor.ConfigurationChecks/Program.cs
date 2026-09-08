@@ -24,6 +24,19 @@ try
             ImageHorizontalPositionPercent = 25,
             ImageVerticalPositionPercent = 80,
             Camera = AppSettings.CreateDoorbellCamera() with { Enabled = true, RtspUrl = "rtsp://door:door-secret@example.test/doorbell" }
+        },
+        GarageOverlay = AppSettings.CreateGarageOverlay() with
+        {
+            HostCameraSlot = 3,
+            ViewportWidthPercent = 65,
+            ViewportHeightPercent = 45,
+            ViewportHorizontalPositionPercent = 80,
+            ViewportVerticalPositionPercent = 20,
+            ViewportShape = DoorbellViewportShape.Oval,
+            ZoomPercent = 175,
+            ImageHorizontalPositionPercent = 70,
+            ImageVerticalPositionPercent = 30,
+            Camera = AppSettings.CreateGarageCamera() with { Enabled = true, RtspUrl = "rtsp://garage:garage-secret@example.test/garage" }
         }
     };
     await store.SaveAsync(first);
@@ -48,6 +61,27 @@ try
           recovered.DoorbellOverlay.ViewportHeightPercent == 40, "doorbell viewport dimensions persistence");
     Check(recovered.DoorbellOverlay.ImageHorizontalPositionPercent == 25 &&
           recovered.DoorbellOverlay.ImageVerticalPositionPercent == 80, "doorbell image position persistence");
+    Check(recovered.GarageOverlay.Camera.Slot == 11, "garage overlay backup recovery");
+    Check(recovered.GarageOverlay.HostCameraSlot == 3, "garage host camera persistence");
+    Check(recovered.GarageOverlay.ViewportShape == DoorbellViewportShape.Oval,
+        "garage viewport shape persistence");
+    Check(recovered.GarageOverlay.ViewportWidthPercent == 65 &&
+          recovered.GarageOverlay.ViewportHeightPercent == 45, "garage viewport dimensions persistence");
+    Check(recovered.GarageOverlay.ViewportHorizontalPositionPercent == 80 &&
+          recovered.GarageOverlay.ViewportVerticalPositionPercent == 20, "garage viewport position persistence");
+    Check(recovered.GarageOverlay.ZoomPercent == 175 &&
+          recovered.GarageOverlay.ImageHorizontalPositionPercent == 70 &&
+          recovered.GarageOverlay.ImageVerticalPositionPercent == 30, "garage framing persistence");
+
+    var migratedGarage = (new AppSettings
+    {
+        SchemaVersion = 11,
+        GarageOverlay = null!
+    }).Normalize().GarageOverlay;
+    Check(migratedGarage.HostCameraSlot == 3 &&
+          migratedGarage.Camera.Slot == 11 &&
+          migratedGarage.Camera.Name == "Garage" &&
+          !migratedGarage.Camera.Enabled, "schema 11 creates disabled Garage overlay on Camera 3");
 
     var migratedOverlay = (new AppSettings
     {
@@ -173,7 +207,7 @@ try
     try { await store.ImportAsync(future); throw new InvalidOperationException("future schema was accepted"); }
     catch (InvalidDataException) { }
 
-    Console.WriteLine("Configuration checks passed: recovery, sanitized export, doorbell overlay normalization, schema rejection.");
+    Console.WriteLine("Configuration checks passed: recovery, sanitized export, dual-overlay normalization, schema rejection.");
 }
 finally
 {

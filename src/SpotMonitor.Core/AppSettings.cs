@@ -2,12 +2,13 @@ namespace SpotMonitor.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
     public IReadOnlyList<CameraSettings> Cameras { get; init; } = CreateCameraSlots();
     public DoorbellOverlaySettings DoorbellOverlay { get; init; } = new();
+    public DoorbellOverlaySettings GarageOverlay { get; init; } = CreateGarageOverlay();
     public bool RequestHardwareDecoding { get; init; } = true;
     public bool StartFullScreen { get; init; } = true;
     public int PreferredMonitor { get; init; }
@@ -27,6 +28,19 @@ public sealed record AppSettings
         Enabled = false
     };
 
+    public static CameraSettings CreateGarageCamera() => new()
+    {
+        Slot = 11,
+        Name = "Garage",
+        Enabled = false
+    };
+
+    public static DoorbellOverlaySettings CreateGarageOverlay() => new()
+    {
+        HostCameraSlot = 3,
+        Camera = CreateGarageCamera()
+    };
+
     public AppSettings Normalize()
     {
         var normalized = CreateCameraSlots().ToArray();
@@ -40,7 +54,25 @@ public sealed record AppSettings
         for (var index = 0; index < normalized.Length; index++)
             normalized[index] = NormalizeCamera(normalized[index], index + 1, $"Camera {index + 1}");
 
-        var overlay = DoorbellOverlay ?? new DoorbellOverlaySettings();
+        var overlay = NormalizeOverlay(DoorbellOverlay ?? new DoorbellOverlaySettings(), 10, "Doorbell");
+        var garageOverlay = NormalizeOverlay(GarageOverlay ?? CreateGarageOverlay(), 11, "Garage");
+        return this with
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            Cameras = normalized,
+            DoorbellOverlay = overlay,
+            GarageOverlay = garageOverlay,
+            StartFullScreen = SchemaVersion < 3 || StartFullScreen,
+            PreferredMonitor = Math.Max(0, PreferredMonitor),
+            MouseCursorHideSeconds = Math.Clamp(MouseCursorHideSeconds, 1, 30)
+        };
+    }
+
+    private DoorbellOverlaySettings NormalizeOverlay(
+        DoorbellOverlaySettings overlay,
+        int cameraSlot,
+        string defaultName)
+    {
         var position = Enum.IsDefined(overlay.Position) ? overlay.Position : PictureInPicturePosition.BottomLeft;
         var viewportShape = Enum.IsDefined(overlay.ViewportShape) ? overlay.ViewportShape : DoorbellViewportShape.Native;
         var viewportWidthPercent = SchemaVersion < 9 ? overlay.SizePercent : overlay.ViewportWidthPercent;
@@ -51,35 +83,30 @@ public sealed record AppSettings
         var viewportVerticalPositionPercent = SchemaVersion < 11
             ? MigrateViewportPosition(position, overlay.VerticalOffsetPercent, viewportHeightPercent, horizontal: false)
             : overlay.ViewportVerticalPositionPercent;
-        return this with
+        return overlay with
         {
-            SchemaVersion = CurrentSchemaVersion,
-            Cameras = normalized,
-            DoorbellOverlay = overlay with
-            {
-                HostCameraSlot = Math.Clamp(overlay.HostCameraSlot, 1, 9),
-                Position = position,
-                SizePercent = Math.Clamp(overlay.SizePercent, 25, 90),
-                ViewportWidthPercent = Math.Clamp(viewportWidthPercent, 10, 95),
-                ViewportHeightPercent = Math.Clamp(viewportHeightPercent, 10, 95),
-                ViewportHorizontalPositionPercent = Math.Clamp(viewportHorizontalPositionPercent, 0, 100),
-                ViewportVerticalPositionPercent = Math.Clamp(viewportVerticalPositionPercent, 0, 100),
-                VideoSizing = DoorbellVideoSizing.Fit,
-                ViewportShape = viewportShape,
-                HorizontalOffsetPercent = 0,
-                VerticalOffsetPercent = 0,
-                ZoomPercent = Math.Clamp(overlay.ZoomPercent, 100, 300),
-                CropLeftPercent = 0,
-                CropRightPercent = 0,
-                CropTopPercent = 0,
-                CropBottomPercent = 0,
-                ImageHorizontalPositionPercent = Math.Clamp(overlay.ImageHorizontalPositionPercent, 0, 100),
-                ImageVerticalPositionPercent = Math.Clamp(overlay.ImageVerticalPositionPercent, 0, 100),
-                Camera = NormalizeCamera(overlay.Camera ?? CreateDoorbellCamera(), 10, "Doorbell")
-            },
-            StartFullScreen = SchemaVersion < 3 || StartFullScreen,
-            PreferredMonitor = Math.Max(0, PreferredMonitor),
-            MouseCursorHideSeconds = Math.Clamp(MouseCursorHideSeconds, 1, 30)
+            HostCameraSlot = Math.Clamp(overlay.HostCameraSlot, 1, 9),
+            Position = position,
+            SizePercent = Math.Clamp(overlay.SizePercent, 25, 90),
+            ViewportWidthPercent = Math.Clamp(viewportWidthPercent, 10, 95),
+            ViewportHeightPercent = Math.Clamp(viewportHeightPercent, 10, 95),
+            ViewportHorizontalPositionPercent = Math.Clamp(viewportHorizontalPositionPercent, 0, 100),
+            ViewportVerticalPositionPercent = Math.Clamp(viewportVerticalPositionPercent, 0, 100),
+            VideoSizing = DoorbellVideoSizing.Fit,
+            ViewportShape = viewportShape,
+            HorizontalOffsetPercent = 0,
+            VerticalOffsetPercent = 0,
+            ZoomPercent = Math.Clamp(overlay.ZoomPercent, 100, 300),
+            CropLeftPercent = 0,
+            CropRightPercent = 0,
+            CropTopPercent = 0,
+            CropBottomPercent = 0,
+            ImageHorizontalPositionPercent = Math.Clamp(overlay.ImageHorizontalPositionPercent, 0, 100),
+            ImageVerticalPositionPercent = Math.Clamp(overlay.ImageVerticalPositionPercent, 0, 100),
+            Camera = NormalizeCamera(
+                overlay.Camera ?? (cameraSlot == 10 ? CreateDoorbellCamera() : CreateGarageCamera()),
+                cameraSlot,
+                defaultName)
         };
     }
 

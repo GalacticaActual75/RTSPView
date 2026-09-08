@@ -1,11 +1,11 @@
 # SpotMonitor
 
-SpotMonitor is a production-oriented Windows RTSP camera wall with nine independently supervised main streams, an optional independent doorbell picture-in-picture stream, hardware-accelerated decoding, a full-screen appliance viewer, and an authenticated LAN administration dashboard.
+SpotMonitor is a production-oriented Windows RTSP camera wall with nine independently supervised main streams, two optional independent picture-in-picture streams, hardware-accelerated decoding, a full-screen appliance viewer, and an authenticated LAN administration dashboard.
 
 ## Features
 
 - Fixed 3×3 native video wall with AMD, NVIDIA, and Intel hardware-decoding support through LibVLC/D3D11VA.
-- Optional Doorbell picture-in-picture stream that can overlay any camera; use Rectangle, Square, aggressively rounded Rectangle, Circle, or Oval viewports with independent size and position, aspect-preserving cover rendering, 100–300% source zoom, horizontal/vertical source pan, and interactive wall/source previews.
+- Independent Doorbell and Garage picture-in-picture streams that can each overlay any camera. Both support Rectangle, Square, aggressively rounded Rectangle, Circle, or Oval viewports with independent size and position, aspect-preserving cover rendering, 100–300% source zoom, horizontal/vertical source pan, and interactive wall/source previews. Garage defaults disabled over Camera 3.
 - Independent reconnect, stall detection, exponential backoff, and player recreation for every camera.
 - Persistent camera naming, ordering, transport, cache, overlay, monitor, cursor, and always-on-top settings.
 - Automatic connection-state overlays and per-camera feed thumbnails.

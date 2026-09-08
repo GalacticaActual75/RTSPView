@@ -27,10 +27,12 @@ public partial class MainWindow : Window
     private readonly JsonSettingsStore _settingsStore;
     private readonly RollingFileLogger _logger;
     private readonly CameraTile DoorbellTile = new();
+    private readonly CameraTile GarageTile = new();
     private CameraTile[] _tiles = [];
     private CameraTile[] _allTiles = [];
     private Window? _doorbellWindow;
-    private bool _doorbellLayoutQueued;
+    private Window? _garageWindow;
+    private bool _overlayLayoutQueued;
     private AppSettings _settings = new();
     private string _hardwareDecoder = "HW requested";
     private DateTime _settingsLastWriteUtc;
@@ -50,10 +52,10 @@ public partial class MainWindow : Window
     {
         _commandServer = new ViewerCommandServer(HandleCommandAsync);
         InitializeComponent();
-        LocationChanged += (_, _) => QueueDoorbellLayout();
-        SizeChanged += (_, _) => QueueDoorbellLayout();
-        StateChanged += (_, _) => QueueDoorbellLayout();
-        WallGrid.SizeChanged += (_, _) => QueueDoorbellLayout();
+        LocationChanged += (_, _) => QueueOverlayLayouts();
+        SizeChanged += (_, _) => QueueOverlayLayouts();
+        StateChanged += (_, _) => QueueOverlayLayouts();
+        WallGrid.SizeChanged += (_, _) => QueueOverlayLayouts();
         _cursorTimer.Tick += (_, _) =>
         {
             CheckCornerGesture();
@@ -89,8 +91,8 @@ public partial class MainWindow : Window
         {
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
-            if (_settings.DoorbellOverlay.Camera.Enabled)
-                QueueDoorbellLayout();
+            if (_settings.DoorbellOverlay.Camera.Enabled || _settings.GarageOverlay.Camera.Enabled)
+                QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick(_hardwareDecoder);
             _telemetryPublisher.Publish(new ViewerTelemetry
@@ -107,9 +109,9 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        EnsureDoorbellWindow();
+        EnsureOverlayWindows();
         _tiles = [Tile1, Tile2, Tile3, Tile4, Tile5, Tile6, Tile7, Tile8, Tile9];
-        _allTiles = [.. _tiles, DoorbellTile];
+        _allTiles = [.. _tiles, DoorbellTile, GarageTile];
         foreach (var tile in _allTiles) tile.PointerActivity += Tile_PointerActivity;
         _settings = (await _settingsStore.LoadAsync()).Normalize();
         _settingsLastWriteUtc = File.Exists(_settingsPath) ? File.GetLastWriteTimeUtc(_settingsPath) : DateTime.MinValue;
@@ -130,8 +132,9 @@ public partial class MainWindow : Window
             _settings = _settings with { Cameras = cameras };
         }
         for (var index = 0; index < 9; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
-        ApplyDoorbellOverlay();
+        ApplyOverlays();
         DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding);
+        GarageTile.Initialize(_libVlc, _logger, _settings.GarageOverlay.Camera, _settings.RequestHardwareDecoding);
         ApplyOverlayPreferences();
         LoadEditor(0);
         UpdateLanAddressText();
@@ -253,12 +256,12 @@ public partial class MainWindow : Window
             ControlBar.Visibility = Visibility.Visible;
         }
         ApplyAlwaysOnTop();
-        QueueDoorbellLayout();
+        QueueOverlayLayouts();
         RefreshNativeVideoBackgrounds(forceRedraw: true);
         Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, async () =>
         {
             await Task.Delay(250);
-            QueueDoorbellLayout();
+            QueueOverlayLayouts();
             RefreshNativeVideoBackgrounds(forceRedraw: true);
         });
     }
@@ -269,33 +272,24 @@ public partial class MainWindow : Window
         foreach (var tile in _allTiles) tile.EnsureNativeVideoBackground(forceRedraw);
     }
 
-    private void ApplyDoorbellOverlay()
+    private void ApplyOverlays()
     {
-        if (_doorbellWindow is null) return;
-        foreach (var tile in _tiles)
-        {
-            tile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
-            tile.SetRestartButtonCompact(false);
-        }
-        DoorbellTile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
-        DoorbellTile.SetRestartButtonCompact(false);
-        if (!_settings.DoorbellOverlay.Camera.Enabled)
-        {
-            _doorbellWindow.Hide();
-            return;
-        }
-        _tiles[Math.Clamp(_settings.DoorbellOverlay.HostCameraSlot, 1, 9) - 1].SetRestartButtonCompact(true);
-        UpdateDoorbellWindowLayout();
-        QueueDoorbellLayout();
+        UpdateOverlayWindowLayouts();
+        QueueOverlayLayouts();
     }
 
-    private void EnsureDoorbellWindow()
+    private void EnsureOverlayWindows()
     {
-        if (_doorbellWindow is not null) return;
+        _doorbellWindow ??= CreateOverlayWindow("Doorbell", DoorbellTile);
+        _garageWindow ??= CreateOverlayWindow("Garage", GarageTile);
+    }
+
+    private Window CreateOverlayWindow(string name, CameraTile tile)
+    {
         var window = new Window
         {
             Owner = this,
-            Title = "SpotMonitor Doorbell Overlay",
+            Title = $"SpotMonitor {name} Overlay",
             WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
@@ -304,34 +298,43 @@ public partial class MainWindow : Window
             Background = System.Windows.Media.Brushes.Black,
             BorderBrush = System.Windows.Media.Brushes.Black,
             BorderThickness = new Thickness(0),
-            Content = DoorbellTile,
+            Content = tile,
             Left = -32_000,
             Top = -32_000,
             Width = 1,
             Height = 1
         };
-        window.SourceInitialized += (_, _) => ConfigureDoorbellWindow(window);
-        _doorbellWindow = window;
+        window.SourceInitialized += (_, _) => ConfigureOverlayWindow(window);
+        return window;
     }
 
-    private void QueueDoorbellLayout()
+    private void QueueOverlayLayouts()
     {
-        if (!IsLoaded || _doorbellWindow is null || _doorbellLayoutQueued) return;
-        _doorbellLayoutQueued = true;
+        if (!IsLoaded || _doorbellWindow is null || _garageWindow is null || _overlayLayoutQueued) return;
+        _overlayLayoutQueued = true;
         Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
         {
-            _doorbellLayoutQueued = false;
-            UpdateDoorbellWindowLayout();
+            _overlayLayoutQueued = false;
+            UpdateOverlayWindowLayouts();
         }));
     }
 
-    private void UpdateDoorbellWindowLayout()
+    private void UpdateOverlayWindowLayouts()
     {
-        if (_doorbellWindow is null || _tiles.Length != 9) return;
-        var overlay = _settings.DoorbellOverlay;
+        UpdateOverlayWindowLayout(_doorbellWindow, DoorbellTile, _settings.DoorbellOverlay);
+        UpdateOverlayWindowLayout(_garageWindow, GarageTile, _settings.GarageOverlay);
+        PlaceHostRestartButtons();
+    }
+
+    private void UpdateOverlayWindowLayout(
+        Window? overlayWindow,
+        CameraTile overlayTile,
+        DoorbellOverlaySettings overlay)
+    {
+        if (overlayWindow is null || _tiles.Length != 9) return;
         if (!overlay.Camera.Enabled || !IsVisible || WindowState == WindowState.Minimized)
         {
-            _doorbellWindow.Hide();
+            overlayWindow.Hide();
             return;
         }
 
@@ -343,6 +346,29 @@ public partial class MainWindow : Window
         var dpi = VisualTreeHelper.GetDpi(target);
         var targetLeft = screenOrigin.X / dpi.DpiScaleX;
         var targetTop = screenOrigin.Y / dpi.DpiScaleY;
+        var bounds = CalculateOverlayBounds(target, overlay);
+        var left = targetLeft + bounds.Left;
+        var top = targetTop + bounds.Top;
+
+        overlayWindow.Left = Math.Round(left);
+        overlayWindow.Top = Math.Round(top);
+        overlayWindow.Width = Math.Round(bounds.Width);
+        overlayWindow.Height = Math.Round(bounds.Height);
+        overlayTile.ApplyVideoSizing(
+            overlay.ZoomPercent,
+            overlay.ImageHorizontalPositionPercent,
+            overlay.ImageVerticalPositionPercent,
+            bounds.Width,
+            bounds.Height);
+        overlayTile.ApplyViewportEdgeSmoothing(overlay.ViewportShape, bounds.Width, bounds.Height);
+        overlayWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
+        if (!overlayWindow.IsVisible) overlayWindow.Show();
+        ApplyOverlayWindowRegion(overlayWindow, overlay.ViewportShape, bounds.Width, bounds.Height, dpi);
+        BringOverlayWindowToFront(overlayWindow);
+    }
+
+    private static Rect CalculateOverlayBounds(CameraTile target, DoorbellOverlaySettings overlay)
+    {
         var maximumWidth = Math.Max(1,
             target.ActualWidth * Math.Clamp(overlay.ViewportWidthPercent, 10, 95) / 100d);
         var maximumHeight = Math.Max(1,
@@ -350,25 +376,9 @@ public partial class MainWindow : Window
         var (width, height) = CalculateDoorbellViewportSize(overlay, maximumWidth, maximumHeight);
         var horizontalTravel = Math.Max(0, target.ActualWidth - width);
         var verticalTravel = Math.Max(0, target.ActualHeight - height);
-        var left = targetLeft + horizontalTravel * overlay.ViewportHorizontalPositionPercent / 100d;
-        var top = targetTop + verticalTravel * overlay.ViewportVerticalPositionPercent / 100d;
-
-        _doorbellWindow.Left = Math.Round(left);
-        _doorbellWindow.Top = Math.Round(top);
-        _doorbellWindow.Width = Math.Round(width);
-        _doorbellWindow.Height = Math.Round(height);
-        DoorbellTile.ApplyVideoSizing(
-            overlay.ZoomPercent,
-            overlay.ImageHorizontalPositionPercent,
-            overlay.ImageVerticalPositionPercent,
-            width,
-            height);
-        DoorbellTile.ApplyViewportEdgeSmoothing(overlay.ViewportShape, width, height);
-        _doorbellWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
-        if (!_doorbellWindow.IsVisible) _doorbellWindow.Show();
-        ApplyDoorbellWindowRegion(overlay.ViewportShape, width, height, dpi);
-        PlaceHostRestartButton(target, left - targetLeft, top - targetTop, width, height);
-        BringDoorbellWindowToFront();
+        var left = horizontalTravel * overlay.ViewportHorizontalPositionPercent / 100d;
+        var top = verticalTravel * overlay.ViewportVerticalPositionPercent / 100d;
+        return new Rect(left, top, width, height);
     }
 
     private static (double Width, double Height) CalculateDoorbellViewportSize(
@@ -385,10 +395,14 @@ public partial class MainWindow : Window
         return (maximumWidth, maximumHeight);
     }
 
-    private void ApplyDoorbellWindowRegion(DoorbellViewportShape shape, double width, double height, DpiScale dpi)
+    private static void ApplyOverlayWindowRegion(
+        Window overlayWindow,
+        DoorbellViewportShape shape,
+        double width,
+        double height,
+        DpiScale dpi)
     {
-        if (_doorbellWindow is null) return;
-        var handle = new WindowInteropHelper(_doorbellWindow).Handle;
+        var handle = new WindowInteropHelper(overlayWindow).Handle;
         if (handle == IntPtr.Zero) return;
         if (shape is DoorbellViewportShape.Native or DoorbellViewportShape.Square)
         {
@@ -412,19 +426,34 @@ public partial class MainWindow : Window
             DeleteObject(region);
     }
 
-    private static void PlaceHostRestartButton(
-        CameraTile target,
-        double overlayLeft,
-        double overlayTop,
-        double overlayWidth,
-        double overlayHeight)
+    private void PlaceHostRestartButtons()
+    {
+        if (_tiles.Length != 9) return;
+        var overlays = new[] { _settings.DoorbellOverlay, _settings.GarageOverlay };
+        for (var index = 0; index < _tiles.Length; index++)
+        {
+            var target = _tiles[index];
+            target.SetRestartButtonPlacement(RestartButtonPlacement.Center);
+            var overlayBounds = overlays
+                .Where(overlay => overlay.Camera.Enabled && overlay.HostCameraSlot == index + 1)
+                .Select(overlay => CalculateOverlayBounds(target, overlay))
+                .ToArray();
+            target.SetRestartButtonCompact(overlayBounds.Length > 0);
+            if (overlayBounds.Length > 0) PlaceHostRestartButton(target, overlayBounds);
+        }
+        DoorbellTile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
+        DoorbellTile.SetRestartButtonCompact(false);
+        GarageTile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
+        GarageTile.SetRestartButtonCompact(false);
+    }
+
+    private static void PlaceHostRestartButton(CameraTile target, IReadOnlyList<Rect> overlayBounds)
     {
         const double buttonWidth = 24;
         const double buttonHeight = 24;
         const double margin = 0;
         var tileWidth = target.ActualWidth;
         var tileHeight = target.ActualHeight;
-        var overlayBounds = new Rect(overlayLeft, overlayTop, overlayWidth, overlayHeight);
         var candidates = new[]
         {
             RestartCandidate(RestartButtonPlacement.Center, (tileWidth - buttonWidth) / 2, (tileHeight - buttonHeight) / 2),
@@ -437,14 +466,17 @@ public partial class MainWindow : Window
             RestartCandidate(RestartButtonPlacement.BottomLeft, margin, tileHeight - buttonHeight - margin),
             RestartCandidate(RestartButtonPlacement.BottomRight, tileWidth - buttonWidth - margin, tileHeight - buttonHeight - margin)
         };
-        var overlayCenter = new System.Windows.Point(
-            overlayBounds.X + overlayBounds.Width / 2,
-            overlayBounds.Y + overlayBounds.Height / 2);
-        var clearCandidates = candidates.Where(candidate => !candidate.Bounds.IntersectsWith(overlayBounds)).ToArray();
+        var overlayCenters = overlayBounds.Select(bounds => new System.Windows.Point(
+            bounds.X + bounds.Width / 2,
+            bounds.Y + bounds.Height / 2)).ToArray();
+        var clearCandidates = candidates
+            .Where(candidate => overlayBounds.All(bounds => !candidate.Bounds.IntersectsWith(bounds)))
+            .ToArray();
         var best = (clearCandidates.Length > 0 ? clearCandidates : candidates)
             .OrderByDescending(candidate =>
-                Math.Pow(candidate.Bounds.X + candidate.Bounds.Width / 2 - overlayCenter.X, 2) +
-                Math.Pow(candidate.Bounds.Y + candidate.Bounds.Height / 2 - overlayCenter.Y, 2))
+                overlayCenters.Min(center =>
+                    Math.Pow(candidate.Bounds.X + candidate.Bounds.Width / 2 - center.X, 2) +
+                    Math.Pow(candidate.Bounds.Y + candidate.Bounds.Height / 2 - center.Y, 2)))
             .First();
         target.SetRestartButtonPlacement(best.Placement);
 
@@ -454,7 +486,7 @@ public partial class MainWindow : Window
                 Math.Min(buttonWidth, tileWidth), Math.Min(buttonHeight, tileHeight)));
     }
 
-    private static void ConfigureDoorbellWindow(Window window)
+    private static void ConfigureOverlayWindow(Window window)
     {
         var handle = new WindowInteropHelper(window).Handle;
         if (handle == IntPtr.Zero) return;
@@ -466,10 +498,10 @@ public partial class MainWindow : Window
         DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(uint));
     }
 
-    private void BringDoorbellWindowToFront()
+    private void BringOverlayWindowToFront(Window? overlayWindow)
     {
-        if (_doorbellWindow?.IsVisible != true) return;
-        var handle = new WindowInteropHelper(_doorbellWindow).Handle;
+        if (overlayWindow?.IsVisible != true) return;
+        var handle = new WindowInteropHelper(overlayWindow).Handle;
         if (handle == IntPtr.Zero) return;
         SetWindowPos(handle, _settings.KeepViewerAlwaysOnTop ? HwndTopmost : HwndTop, 0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
@@ -479,11 +511,13 @@ public partial class MainWindow : Window
     {
         Topmost = _settings.KeepViewerAlwaysOnTop;
         if (_doorbellWindow is not null) _doorbellWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
+        if (_garageWindow is not null) _garageWindow.Topmost = _settings.KeepViewerAlwaysOnTop;
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
         SetWindowPos(handle, _settings.KeepViewerAlwaysOnTop ? HwndTopmost : HwndNotTopmost, 0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
-        BringDoorbellWindowToFront();
+        BringOverlayWindowToFront(_doorbellWindow);
+        BringOverlayWindowToFront(_garageWindow);
     }
 
     private static readonly IntPtr HwndTopmost = new(-1);
@@ -558,13 +592,13 @@ public partial class MainWindow : Window
     {
         switch (command.Type)
         {
-            case ViewerCommandType.RestartCamera when command.Slot is >= 1 and <= 10 && command.Slot.Value <= _allTiles.Length:
+            case ViewerCommandType.RestartCamera when command.Slot is >= 1 and <= 11 && command.Slot.Value <= _allTiles.Length:
                 _allTiles[command.Slot.Value - 1].Start();
-                var streamName = command.Slot == 10 ? "Doorbell" : $"Camera {command.Slot}";
+                var streamName = command.Slot switch { 10 => "Doorbell", 11 => "Garage", _ => $"Camera {command.Slot}" };
                 _logger.Write("INFO", $"Remote command: restarted {streamName}");
                 return new ViewerCommandResult(command.Id, true, $"{streamName} restarted.");
-            case ViewerCommandType.CaptureCameraSnapshot when command.Slot is >= 1 and <= 10 && command.Slot.Value <= _allTiles.Length:
-                var snapshotName = command.Slot == 10 ? "Doorbell" : $"Camera {command.Slot}";
+            case ViewerCommandType.CaptureCameraSnapshot when command.Slot is >= 1 and <= 11 && command.Slot.Value <= _allTiles.Length:
+                var snapshotName = command.Slot switch { 10 => "Doorbell", 11 => "Garage", _ => $"Camera {command.Slot}" };
                 var captured = await _allTiles[command.Slot.Value - 1].RefreshSnapshotAsync();
                 _logger.Write(captured ? "INFO" : "WARNING", $"Remote command: {snapshotName} snapshot {(captured ? "refreshed" : "failed")}");
                 return new ViewerCommandResult(command.Id, captured,
@@ -606,8 +640,9 @@ public partial class MainWindow : Window
         _settings = dialog.Settings.Normalize();
         _settingsLastWriteUtc = File.GetLastWriteTimeUtc(_settingsPath);
         for (var index = 0; index < _tiles.Length; index++) _tiles[index].Apply(_settings.Cameras[index]);
-        ApplyDoorbellOverlay();
+        ApplyOverlays();
         DoorbellTile.Apply(_settings.DoorbellOverlay.Camera);
+        GarageTile.Apply(_settings.GarageOverlay.Camera);
         ApplyOverlayPreferences();
         LoadEditor(Math.Max(0, SlotBox.SelectedIndex));
         _logger.Write("INFO", "Configuration saved and applied to all changed camera slots");
@@ -623,12 +658,15 @@ public partial class MainWindow : Window
         {
             var updated = (await _settingsStore.LoadAsync()).Normalize();
             var previousDoorbell = _settings.DoorbellOverlay.Camera;
+            var previousGarage = _settings.GarageOverlay.Camera;
             for (var index = 0; index < _tiles.Length; index++)
                 if (_settings.Cameras[index] != updated.Cameras[index]) _tiles[index].Apply(updated.Cameras[index]);
             _settings = updated;
-            ApplyDoorbellOverlay();
+            ApplyOverlays();
             if (previousDoorbell != updated.DoorbellOverlay.Camera)
                 DoorbellTile.Apply(updated.DoorbellOverlay.Camera);
+            if (previousGarage != updated.GarageOverlay.Camera)
+                GarageTile.Apply(updated.GarageOverlay.Camera);
             ApplyOverlayPreferences();
             PositionOnPreferredMonitor();
             SetFullScreen(updated.StartFullScreen);
@@ -656,6 +694,12 @@ public partial class MainWindow : Window
             _doorbellWindow.Content = null;
             _doorbellWindow.Close();
             _doorbellWindow = null;
+        }
+        if (_garageWindow is not null)
+        {
+            _garageWindow.Content = null;
+            _garageWindow.Close();
+            _garageWindow = null;
         }
         _telemetryPublisher.Dispose();
         _commandServer.Dispose();

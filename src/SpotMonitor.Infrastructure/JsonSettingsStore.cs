@@ -51,6 +51,13 @@ public sealed class JsonSettingsStore
                 {
                     RtspUrl = RtspUrlSanitizer.RemoveCredentials(normalized.DoorbellOverlay.Camera.RtspUrl)
                 }
+            },
+            GarageOverlay = normalized.GarageOverlay with
+            {
+                Camera = normalized.GarageOverlay.Camera with
+                {
+                    RtspUrl = RtspUrlSanitizer.RemoveCredentials(normalized.GarageOverlay.Camera.RtspUrl)
+                }
             }
         };
         await WriteAsync(destination, Validate(sanitized), cancellationToken);
@@ -76,6 +83,7 @@ public sealed class JsonSettingsStore
             ValidateCameraUrl(camera, $"Camera {camera.Slot}");
         }
         ValidateCameraUrl(normalized.DoorbellOverlay.Camera, "Doorbell");
+        ValidateCameraUrl(normalized.GarageOverlay.Camera, "Garage");
         return normalized;
     }
 
