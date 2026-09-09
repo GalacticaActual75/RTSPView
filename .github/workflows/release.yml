@@ -73,7 +73,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag='${{ steps.version.outputs.tag }}'
-          $releaseFlags = if ('${{ steps.version.outputs.value }}' -match '-beta\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
+          [string[]]$releaseFlags = if ('${{ steps.version.outputs.value }}' -match '-beta\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
             gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' @releaseFlags --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
           } else {
