@@ -5,6 +5,7 @@ New-Item -ItemType Directory -Path $scratch | Out-Null
 $helper = Join-Path $scratch 'Apply-Update.ps1'
 $source = Get-Content (Join-Path $PSScriptRoot '..\deployment\Apply-Update.ps1') -Raw
 $source.Replace("Join-Path `$env:LOCALAPPDATA 'SpotMonitor\logs'", "Join-Path `$PSScriptRoot 'test-logs'") | Set-Content -LiteralPath $helper
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\deployment\Show-UpdateProgress.ps1') -Destination $scratch
 function Start-Transcript { param($Path, [switch]$Append) }
 function Stop-Transcript { param($ErrorAction) }
 function Start-Sleep { param($Seconds) }
@@ -15,7 +16,7 @@ function Get-Process { param($Name, $ErrorAction) if ($Name -eq 'SpotMonitor.Con
 function Get-Item { param($LiteralPath) [pscustomobject]@{VersionInfo=[pscustomobject]@{ProductVersion=$global:SpotMonitorTestproductVersion}} }
 function Start-Process {
     param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
-    $global:SpotMonitorTeststarted++
+    if ($FilePath -ne 'powershell.exe') { $global:SpotMonitorTeststarted++ }
     $fake = [pscustomobject]@{Handle=1;ExitCode=$global:SpotMonitorTestinstallerExit}
     $fake | Add-Member ScriptMethod WaitForExit { param($Milliseconds) return $true }
     return $fake

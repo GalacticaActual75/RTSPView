@@ -6,7 +6,7 @@ const adminLayout = (() => {
   const pages = {};
   function init() {
     const css = document.createElement('link');
-    css.rel = 'stylesheet'; css.href = 'layout.css?v=beta5'; css.onload = fitOverview; document.head.append(css);
+    css.rel = 'stylesheet'; css.href = 'layout.css?v=beta7'; css.onload = fitOverview; document.head.append(css);
     const main = document.querySelector('main');
     const banner = main.previousElementSibling;
     banner.remove();

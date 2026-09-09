@@ -132,7 +132,7 @@ public sealed class UpdateService
     private static void WriteProgress(string path, string state, string message)
     {
         var temporary = path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(new { state, message, updatedAt = DateTimeOffset.UtcNow }));
+        File.WriteAllText(temporary, JsonSerializer.Serialize(new { state, message, windowSession = "staging", updatedAt = DateTimeOffset.UtcNow }));
         File.Move(temporary, path, true);
     }
 

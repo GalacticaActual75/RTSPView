@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][string]$StatusPath)
+param([Parameter(Mandatory = $true)][string]$StatusPath, [string]$WindowSession = 'staging')
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
@@ -42,6 +42,7 @@ $timer.Interval = 400
 $timer.Add_Tick({
     try {
         $status = Get-Content -LiteralPath $StatusPath -Raw | ConvertFrom-Json
+        if ($status.windowSession -and $status.windowSession -ne $WindowSession) { $window.Close(); return }
         $message.Text = $status.message
         if ($status.logPath) { $script:logPath = $status.logPath; $log.Enabled = Test-Path -LiteralPath $script:logPath }
         if ($status.state -in @('complete', 'failed')) {

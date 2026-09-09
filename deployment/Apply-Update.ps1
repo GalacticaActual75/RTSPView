@@ -14,7 +14,7 @@ function Report-Update([string]$State, [string]$Message) {
     if (!$StatusPath) { return }
     try {
         $temporary = $StatusPath + '.tmp'
-        @{ state = $State; message = $Message; updatedAt = [DateTimeOffset]::UtcNow.ToString('o'); logPath = $logPath } |
+        @{ state = $State; message = $Message; windowSession = 'install'; updatedAt = [DateTimeOffset]::UtcNow.ToString('o'); logPath = $logPath } |
             ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding UTF8
         Move-Item -LiteralPath $temporary -Destination $StatusPath -Force
     } catch { Write-Warning "Unable to publish update status: $_" }
@@ -23,6 +23,14 @@ function Report-Update([string]$State, [string]$Message) {
 try {
     Start-Transcript -Path $logPath -Append | Out-Null
     Report-Update 'working' 'Administrator approval received. Verifying the installer again...'
+    # Launch from the elevated helper, which survives stopping the scheduled wall task.
+    # The staging window closes when it sees the install session in the status file.
+    if ($StatusPath) {
+        $progressScript = Join-Path $PSScriptRoot 'Show-UpdateProgress.ps1'
+        if (!(Test-Path -LiteralPath $progressScript)) { throw 'The update progress helper is missing.' }
+        $uiArguments = @('-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $progressScript + '"'), '-StatusPath', ('"' + $StatusPath + '"'), '-WindowSession', 'install')
+        $null = Start-Process -FilePath 'powershell.exe' -ArgumentList $uiArguments -WindowStyle Hidden -PassThru
+    }
     $resolvedInstaller = (Resolve-Path -LiteralPath $InstallerPath).Path
     $actualHash = (Get-FileHash -LiteralPath $resolvedInstaller -Algorithm SHA256).Hash
     if ($actualHash -ne $ExpectedSha256) { throw 'The staged installer checksum is invalid.' }
