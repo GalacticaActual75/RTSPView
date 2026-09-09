@@ -65,6 +65,35 @@ public sealed class JsonSettingsStore
 
     public Task<AppSettings> ImportAsync(string source, CancellationToken cancellationToken = default) => ReadAndValidateAsync(source, cancellationToken);
 
+    public static AppSettings ParseImport(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Select a SpotMonitor configuration JSON file.");
+        var properties = document.RootElement.EnumerateObject().ToArray();
+        if (!properties.Any(p => p.Name.Equals("SchemaVersion", StringComparison.OrdinalIgnoreCase)) ||
+            !properties.Any(p => p.Name.Equals("Cameras", StringComparison.OrdinalIgnoreCase) || p.Name.Equals("Camera", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("The file must contain a schema version and camera configuration.");
+        if (properties.GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            throw new InvalidDataException("Configuration contains duplicate fields.");
+        var settings = JsonSerializer.Deserialize<AppSettings>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidDataException("Configuration is empty.");
+        if (settings.SchemaVersion < 1 || settings.Cameras is null || settings.Camera is null || settings.Cameras.Any(c => c is null))
+            throw new InvalidDataException("Configuration contains invalid camera or schema fields.");
+        return Validate(settings);
+    }
+
+    public async Task<string> ImportAndSaveAsync(string json, CancellationToken cancellationToken = default)
+    {
+        var settings = ParseImport(json);
+        var previous = await LoadAsync(cancellationToken);
+        var backup = _path + ".before-import-" + Guid.NewGuid().ToString("N") + ".json";
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        await WriteAsync(backup, previous, cancellationToken);
+        await SaveAsync(settings, cancellationToken);
+        return Path.GetFileName(backup);
+    }
+
     private static async Task<AppSettings> ReadAndValidateAsync(string path, CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(path);

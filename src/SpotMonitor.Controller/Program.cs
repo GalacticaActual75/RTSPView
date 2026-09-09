@@ -155,6 +155,38 @@ app.MapPost("/api/update/install", async (ConfirmedAction request, CancellationT
 }).RequireAuthorization();
 
 app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();
+app.MapGet("/api/config/export", async (HttpContext context) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    var settings = await settingsStore.LoadAsync();
+    return Results.File(JsonSerializer.SerializeToUtf8Bytes(settings, new JsonSerializerOptions { WriteIndented = true }),
+        "application/json", "SpotMonitor-config.json");
+}).RequireAuthorization();
+app.MapPost("/api/config/import", async (HttpContext context) =>
+{
+    const int maximumBytes = 2 * 1024 * 1024;
+    using var body = new MemoryStream();
+    var buffer = new byte[8192];
+    int count;
+    while ((count = await context.Request.Body.ReadAsync(buffer, context.RequestAborted)) > 0)
+    {
+        if (body.Length + count > maximumBytes)
+            return Results.BadRequest(new { error = "Configuration files must be no larger than 2 MB." });
+        body.Write(buffer, 0, count);
+    }
+    await configGate.WaitAsync(context.RequestAborted);
+    try
+    {
+        var backup = await settingsStore.ImportAndSaveAsync(System.Text.Encoding.UTF8.GetString(body.ToArray()).TrimStart('\uFEFF'), context.RequestAborted);
+        auditLog.Write("AUDIT", "Configuration imported from web admin; previous configuration backed up as " + backup);
+        return Results.Ok(new { message = "Configuration imported. Applying to the viewer; previous settings were backed up.", backup });
+    }
+    catch (Exception exception) when (exception is InvalidDataException or JsonException)
+    {
+        return Results.BadRequest(new { error = "Invalid configuration: " + exception.Message });
+    }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
 app.MapGet("/api/cameras/{slot:int}/thumbnail", (int slot) =>
 {
     if (slot is < 1 or > 11) return Results.BadRequest(new { error = "Stream slot must be between 1 and 11." });

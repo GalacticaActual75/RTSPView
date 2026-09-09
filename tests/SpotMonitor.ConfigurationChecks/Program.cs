@@ -6,7 +6,20 @@ var root = Path.Combine(Path.GetTempPath(), "SpotMonitor-ConfigurationChecks", G
 Directory.CreateDirectory(root);
 try
 {
-    var path = Path.Combine(root, "settings.json");
+    var transferStore = new JsonSettingsStore(Path.Combine(root, "transfer.json"));
+    await transferStore.SaveAsync(new AppSettings { PreferredMonitor = 3 });
+    var transferred = new AppSettings { PreferredMonitor = 2, Cameras = AppSettings.CreateCameraSlots().Select(c => c with { RtspUrl = "rtsp://user:secret@example.test/live" }).ToArray() };
+    var backupName = await transferStore.ImportAndSaveAsync(System.Text.Json.JsonSerializer.Serialize(transferred, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+    Check((await transferStore.LoadAsync()).PreferredMonitor == 2, "camelCase import applies settings");
+    Check((await transferStore.ImportAsync(Path.Combine(root, backupName))).PreferredMonitor == 3, "import preserves previous configuration backup");
+    Check((await transferStore.LoadAsync()).Cameras[0].RtspUrl.Contains("user:secret"), "full import retains camera credentials");
+    foreach (var invalid in new[] { "{}", "null", "{\"SchemaVersion\":999,\"Cameras\":[]}", "{\"SchemaVersion\":14,\"Cameras\":null}", "{\"SchemaVersion\":14,\"Cameras\":[{\"RtspUrl\":\"https://example.test\"}]}" })
+    {
+        var rejected = false;
+        try { await transferStore.ImportAndSaveAsync(invalid); }
+        catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException) { rejected = true; }
+        Check(rejected && (await transferStore.LoadAsync()).PreferredMonitor == 2, "invalid import leaves configuration intact");
+    }    var path = Path.Combine(root, "settings.json");
     var store = new JsonSettingsStore(path);
     var first = new AppSettings
     {
