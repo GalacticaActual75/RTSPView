@@ -15,7 +15,7 @@ internal static class Program
     private static readonly List<Media> MediaFiles = [];
     private static readonly List<Window> Overlays = [];
     private static readonly List<FrameworkElement> Views = [];
-    private static readonly List<SpotMonitor.Viewer.CompositedVideoPresenter> Presenters = [];
+    private static SpotMonitor.Viewer.CameraTile? CompositedTile;
     [STAThread]
     private static void Main(string[] args)
     {
@@ -47,12 +47,22 @@ internal static class Program
                 FrameworkElement view;
                 if (mode == "composited")
                 {
-                    var image = new Image { Stretch = Stretch.Fill };
-                    var player = new MediaPlayer(vlc) { EnableHardwareDecoding = false };
+                    // Exercise the real tile's visual tree and player lifecycle.
+                    // Reflection only substitutes a local file for its RTSP input;
+                    // the production application keeps its RTSP-only validation.
+                    var tile = new SpotMonitor.Viewer.CameraTile();
+                    var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                    typeof(SpotMonitor.Viewer.CameraTile).GetField("_snapshotDirectory", flags)!.SetValue(tile, Path.Combine(folder, "snapshots"));
+                    tile.Initialize(vlc, new SpotMonitor.Infrastructure.RollingFileLogger(Path.Combine(folder, "logs")),
+                        new SpotMonitor.Core.CameraSettings { Slot = 10, Enabled = false }, true, compositedVideo: true);
+                    if (tile.GetNativeVideoHandle() != IntPtr.Zero) throw new InvalidOperationException("Composited tile created a native video host");
+                    var player = (MediaPlayer)typeof(SpotMonitor.Viewer.CameraTile).GetField("_player", flags)!.GetValue(tile)!;
                     var media = new Media(vlc, new Uri(red));
                     media.AddOption(":avcodec-hw=none"); media.AddOption(":input-repeat=65535"); media.AddOption(":no-audio");
-                    Presenters.Add(new SpotMonitor.Viewer.CompositedVideoPresenter(player, image, () => { }));
-                    Players.Add(player); MediaFiles.Add(media); view = image;
+                    typeof(SpotMonitor.Viewer.CameraTile).GetField("_media", flags)!.SetValue(tile, media);
+                    tile.ApplyVideoSizing(100, 50, 50, 270, 260);
+                    tile.ApplyViewportEdgeSmoothing(new SpotMonitor.Core.DoorbellOverlaySettings(), 270, 260);
+                    Players.Add(player); MediaFiles.Add(media); view = tile; CompositedTile = tile;
                 }
                 else { var nativeView = new VideoView(); Attach(nativeView, vlc, red, mode); view = nativeView; }
                 var overlay = new Window { Owner = main, Title = mode, AllowsTransparency = mode == "composited", WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false, ShowActivated = false, Background = Brushes.Black, Width = 270, Height = 260, Left = origin.X / dpi.DpiScaleX + 35 + Overlays.Count * 325, Top = origin.Y / dpi.DpiScaleY + 85, Content = view };
@@ -75,7 +85,7 @@ internal static class Program
             var alpha = e.Key switch { System.Windows.Input.Key.D2 => (byte)51, System.Windows.Input.Key.D5 => (byte)128, _ => (byte)255 };
             foreach (var overlay in Overlays) SetAlpha(overlay, alpha);
         };
-        main.Closed += (_, _) => { foreach (var presenter in Presenters) presenter.Deactivate(); foreach (var player in Players) { player.Stop(); player.Dispose(); } foreach (var presenter in Presenters) presenter.Dispose(); foreach (var media in MediaFiles) media.Dispose(); };
+        main.Closed += (_, _) => { foreach (var player in Players.Take(Players.Count - (CompositedTile is null ? 0 : 1))) { player.Stop(); player.Dispose(); } CompositedTile?.Dispose(); foreach (var media in MediaFiles) media.Dispose(); };
         File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "progress.log"), "Entering UI loop" + Environment.NewLine);
         app.Run(main);
     }

@@ -6,8 +6,8 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/SpotMonitor.Viewer/SpotMonitor.Viewer.csproj" />
     <Compile Include="../../src/SpotMonitor.Viewer/OverlayWindowOpacity.cs" Link="OverlayWindowOpacity.cs" />
-    <Compile Include="../../src/SpotMonitor.Viewer/CompositedVideoPresenter.cs" Link="CompositedVideoPresenter.cs" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
   </ItemGroup>

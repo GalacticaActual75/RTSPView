@@ -68,17 +68,17 @@
       255
     ],
     "opaque": [
-      253,
+      251,
       0,
       0
     ],
     "actual": [
-      128,
+      127,
       2,
       127
     ],
     "expected": [
-      128,
+      127,
       2,
       127
     ],
@@ -86,8 +86,8 @@
     "captureAvailable": true,
     "attributesAvailable": false,
     "nativeAlpha": 0,
-    "decodedFrames": 168,
-    "displayedFrames": 68
+    "decodedFrames": 166,
+    "displayedFrames": 67
   },
   {
     "renderer": "direct3d11",
@@ -158,17 +158,17 @@
       255
     ],
     "opaque": [
-      253,
+      251,
       0,
       0
     ],
     "actual": [
-      53,
+      52,
       3,
       204
     ],
     "expected": [
-      53,
+      52,
       3,
       204
     ],
@@ -176,8 +176,8 @@
     "captureAvailable": true,
     "attributesAvailable": false,
     "nativeAlpha": 0,
-    "decodedFrames": 192,
-    "displayedFrames": 80
+    "decodedFrames": 190,
+    "displayedFrames": 79
   },
   {
     "renderer": "direct3d11",
@@ -248,17 +248,17 @@
       255
     ],
     "opaque": [
-      253,
+      251,
       0,
       0
     ],
     "actual": [
-      253,
+      251,
       0,
       0
     ],
     "expected": [
-      253,
+      251,
       0,
       0
     ],
@@ -266,8 +266,8 @@
     "captureAvailable": true,
     "attributesAvailable": false,
     "nativeAlpha": 0,
-    "decodedFrames": 216,
-    "displayedFrames": 92
+    "decodedFrames": 214,
+    "displayedFrames": 91
   },
   {
     "test": "ellipse exterior shows host video",
@@ -290,7 +290,7 @@
   {
     "test": "restored overlay retains opacity",
     "actual": [
-      128,
+      127,
       2,
       127
     ],
@@ -301,7 +301,7 @@
     "actual": [
       0,
       0,
-      254
+      252
     ],
     "passed": true
   },
