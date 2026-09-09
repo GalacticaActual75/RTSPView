@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Beta version, for example 1.0.28-beta.1"
+        description: "Beta version, for example 1.0.29-beta.1"
         required: true
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
       - name: Restore and test
         run: |
           dotnet restore SpotMonitor.sln -r win-x64
-          dotnet run --project tests/SpotMonitor.ConfigurationChecks/SpotMonitor.ConfigurationChecks.csproj -c Release --no-restore
+          dotnet run --project tests/SpotMonitor.ConfigurationChecks/SpotMonitor.ConfigurationChecks.csproj -c Release
 
       - name: Publish self-contained applications
         shell: pwsh

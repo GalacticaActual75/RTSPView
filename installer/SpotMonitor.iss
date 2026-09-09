@@ -7,7 +7,7 @@
 
 #define MyNumericVersion GetEnv("SPOTMONITOR_NUMERIC_VERSION")
 #if MyNumericVersion == ""
-  #define MyNumericVersion "1.0.28"
+  #define MyNumericVersion "1.0.29"
 #endif
 
 [Setup]
