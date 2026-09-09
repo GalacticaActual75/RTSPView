@@ -125,7 +125,7 @@ app.MapPost("/api/auth/logout", async (HttpContext context) =>
 
 app.MapGet("/api/status", () => Results.Ok(new
 {
-    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+    version = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)?.InformationalVersion.Split('+')[0] ?? "Development",
     hostname = Environment.MachineName,
     lanAddresses = GetLanAddresses(),
     controllerUptimeSeconds = (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds,
@@ -139,12 +139,24 @@ app.MapGet("/api/telemetry", () =>
     return Results.Ok(new ApplianceTelemetry { ViewerConnected = viewer is not null, Viewer = viewer, System = systemMetrics.GetSnapshot() });
 }).RequireAuthorization();
 app.MapGet("/api/update", async (CancellationToken cancellationToken) => Results.Ok(await updates.CheckAsync(cancellationToken))).RequireAuthorization();
-app.MapPost("/api/update/install", async (ConfirmedAction request, CancellationToken cancellationToken) =>
+app.MapPut("/api/update/channel", async (UpdateChannelRequest request, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        await updates.SelectChannelAsync(request.Channel, cancellationToken);
+        return Results.Ok(await updates.CheckAsync(cancellationToken));
+    }
+    catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+}).RequireAuthorization();
+app.MapPost("/api/update/install", async (UpdateInstallRequest request, CancellationToken cancellationToken) =>
 {
     if (!request.Confirmed) return Results.BadRequest(new { error = "Explicit confirmation is required." });
     try
     {
-        var result = await updates.StageAndLaunchAsync(cancellationToken);
+        var result = await updates.StageAndLaunchAsync(request.Channel, request.Version, cancellationToken);
         return result.Started ? Results.Ok(result) : Results.BadRequest(new { error = result.Message });
     }
     catch (Exception exception)
@@ -398,6 +410,8 @@ static string[] ReadRecentLogLines(string directory, int count)
 
 sealed record LoginRequest(string? Password);
 sealed record ConfirmedAction(bool Confirmed);
+sealed record UpdateChannelRequest(string Channel);
+sealed record UpdateInstallRequest(bool Confirmed, string Channel, string Version);
 sealed record PasswordChangeRequest(string? CurrentPassword, string? NewPassword);
 sealed record CameraReorderRequest(int FromSlot, int ToSlot);
 

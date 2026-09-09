@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example 1.0.1"
+        description: "Release version, for example 1.0.29 or 1.0.30-beta.1"
         required: true
 
 permissions:
@@ -28,14 +28,18 @@ jobs:
         shell: pwsh
         run: |
           $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.version }}' } else { '${{ github.ref_name }}'.TrimStart('v') }
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid release version: $version" }
+          if ($version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$') { throw "Invalid release version: $version" }
           "value=$version" >> $env:GITHUB_OUTPUT
+          "numeric=$($version.Split('-')[0])" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
       - name: Restore and test
         run: |
           dotnet restore SpotMonitor.sln -r win-x64
           dotnet run --project tests/SpotMonitor.ConfigurationChecks/SpotMonitor.ConfigurationChecks.csproj -c Release
+
+      - name: Check update helper failure reporting
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
 
       - name: Publish self-contained applications
         shell: pwsh
@@ -50,7 +54,9 @@ jobs:
         shell: pwsh
         run: |
           $env:SPOTMONITOR_VERSION='${{ steps.version.outputs.value }}'
+          $env:SPOTMONITOR_NUMERIC_VERSION='${{ steps.version.outputs.numeric }}'
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/SpotMonitor.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
           $installer = Get-ChildItem dist/SpotMonitor-Setup-*-win-x64.exe | Select-Object -First 1
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
           "$hash  $($installer.Name)" | Set-Content "dist/$($installer.BaseName).sha256.txt"
@@ -67,8 +73,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag='${{ steps.version.outputs.tag }}'
+          $releaseFlags = if ('${{ steps.version.outputs.value }}' -match '-beta\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' @releaseFlags --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
           } else {
-            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --verify-tag --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --verify-tag @releaseFlags --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
           }

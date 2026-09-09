@@ -1,0 +1,312 @@
+[
+  {
+    "renderer": "direct3d11",
+    "percent": 50,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      239,
+      4,
+      0
+    ],
+    "actual": [
+      239,
+      4,
+      0
+    ],
+    "expected": [
+      121,
+      4,
+      127
+    ],
+    "passed": false,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 186,
+    "displayedFrames": 74
+  },
+  {
+    "renderer": "wingdi",
+    "percent": 50,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      239,
+      4,
+      0
+    ],
+    "actual": [
+      239,
+      4,
+      0
+    ],
+    "expected": [
+      121,
+      4,
+      127
+    ],
+    "passed": false,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 178,
+    "displayedFrames": 70
+  },
+  {
+    "renderer": "composited",
+    "percent": 50,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      251,
+      0,
+      0
+    ],
+    "actual": [
+      127,
+      2,
+      127
+    ],
+    "expected": [
+      127,
+      2,
+      127
+    ],
+    "passed": true,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 166,
+    "displayedFrames": 67
+  },
+  {
+    "renderer": "direct3d11",
+    "percent": 20,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      239,
+      4,
+      0
+    ],
+    "actual": [
+      239,
+      4,
+      0
+    ],
+    "expected": [
+      50,
+      4,
+      204
+    ],
+    "passed": false,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 210,
+    "displayedFrames": 86
+  },
+  {
+    "renderer": "wingdi",
+    "percent": 20,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      239,
+      4,
+      0
+    ],
+    "actual": [
+      239,
+      4,
+      0
+    ],
+    "expected": [
+      50,
+      4,
+      204
+    ],
+    "passed": false,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 202,
+    "displayedFrames": 82
+  },
+  {
+    "renderer": "composited",
+    "percent": 20,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      251,
+      0,
+      0
+    ],
+    "actual": [
+      52,
+      3,
+      204
+    ],
+    "expected": [
+      52,
+      3,
+      204
+    ],
+    "passed": true,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 190,
+    "displayedFrames": 79
+  },
+  {
+    "renderer": "direct3d11",
+    "percent": 100,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      239,
+      4,
+      0
+    ],
+    "actual": [
+      239,
+      4,
+      0
+    ],
+    "expected": [
+      239,
+      4,
+      0
+    ],
+    "passed": true,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 234,
+    "displayedFrames": 98
+  },
+  {
+    "renderer": "wingdi",
+    "percent": 100,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      239,
+      4,
+      0
+    ],
+    "actual": [
+      239,
+      4,
+      0
+    ],
+    "expected": [
+      239,
+      4,
+      0
+    ],
+    "passed": true,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 226,
+    "displayedFrames": 94
+  },
+  {
+    "renderer": "composited",
+    "percent": 100,
+    "background": [
+      3,
+      4,
+      255
+    ],
+    "opaque": [
+      251,
+      0,
+      0
+    ],
+    "actual": [
+      251,
+      0,
+      0
+    ],
+    "expected": [
+      251,
+      0,
+      0
+    ],
+    "passed": true,
+    "captureAvailable": true,
+    "attributesAvailable": false,
+    "nativeAlpha": 0,
+    "decodedFrames": 214,
+    "displayedFrames": 91
+  },
+  {
+    "test": "ellipse exterior shows host video",
+    "actual": [
+      3,
+      4,
+      255
+    ],
+    "passed": true
+  },
+  {
+    "test": "hidden overlay reveals host",
+    "actual": [
+      3,
+      4,
+      255
+    ],
+    "passed": true
+  },
+  {
+    "test": "restored overlay retains opacity",
+    "actual": [
+      127,
+      2,
+      127
+    ],
+    "passed": true
+  },
+  {
+    "test": "stop/restart replaces old frame with new video",
+    "actual": [
+      0,
+      0,
+      252
+    ],
+    "passed": true
+  },
+  {
+    "test": "snapshot from composited player",
+    "passed": true
+  }
+]

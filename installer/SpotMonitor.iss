@@ -5,6 +5,11 @@
   #define MyAppVersion "0.0.0-dev"
 #endif
 
+#define MyNumericVersion GetEnv("SPOTMONITOR_NUMERIC_VERSION")
+#if MyNumericVersion == ""
+  #define MyNumericVersion "1.0.29"
+#endif
+
 [Setup]
 AppId={{B49BC897-9B86-4C97-85BA-9FA1CF27A835}
 AppName={#MyAppName}
@@ -27,9 +32,9 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyNumericVersion}
 VersionInfoProductName={#MyAppName}
-VersionInfoProductVersion={#MyAppVersion}
+VersionInfoProductVersion={#MyNumericVersion}
 
 [Tasks]
 Name: "autostart"; Description: "Start and supervise SpotMonitor when this user signs in"; GroupDescription: "Startup:"; Flags: checkedonce
@@ -44,6 +49,7 @@ Source: "..\deployment\Stop-SpotMonitor.cmd"; DestDir: "{app}"; Flags: ignorever
 Source: "..\deployment\Open-Web-Admin.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\deployment\Repair-LAN-Firewall.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\deployment\Apply-Update.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
+Source: "..\deployment\Show-UpdateProgress.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\SpotMonitor"; Filename: "{app}\Start-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"

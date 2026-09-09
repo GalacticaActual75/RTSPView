@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/SpotMonitor.Viewer/SpotMonitor.Viewer.csproj" />
+    <Compile Include="../../src/SpotMonitor.Viewer/OverlayWindowOpacity.cs" Link="OverlayWindowOpacity.cs" />
+    <PackageReference Include="LibVLCSharp.WPF" Version="3.10.0" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
+  </ItemGroup>
+</Project>

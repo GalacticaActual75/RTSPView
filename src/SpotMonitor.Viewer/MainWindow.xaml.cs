@@ -133,9 +133,9 @@ public partial class MainWindow : Window
             _settings = _settings with { Cameras = cameras };
         }
         for (var index = 0; index < 9; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
+        DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding, compositedVideo: true);
+        GarageTile.Initialize(_libVlc, _logger, _settings.GarageOverlay.Camera, _settings.RequestHardwareDecoding, compositedVideo: true);
         ApplyOverlays();
-        DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding);
-        GarageTile.Initialize(_libVlc, _logger, _settings.GarageOverlay.Camera, _settings.RequestHardwareDecoding);
         ApplyOverlayPreferences();
         LoadEditor(0);
         UpdateLanAddressText();
@@ -291,6 +291,7 @@ public partial class MainWindow : Window
         {
             Owner = this,
             Title = $"SpotMonitor {name} Overlay",
+            AllowsTransparency = true,
             WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
@@ -419,6 +420,7 @@ public partial class MainWindow : Window
             bounds.Width,
             bounds.Height);
         overlayTile.ApplyViewportEdgeSmoothing(overlay, bounds.Width, bounds.Height);
+        OverlayWindowOpacity.Apply(overlayWindow, overlay.ViewportOpacityPercent);
         overlayWindow.Topmost = false;
         if (!overlayWindow.IsVisible) overlayWindow.Show();
         ShowOverlayWindowHierarchy(overlayWindow, overlayTile);
@@ -432,7 +434,7 @@ public partial class MainWindow : Window
         foreach (Window ownedWindow in overlayWindow.OwnedWindows.Cast<Window>().ToArray())
         {
             ownedWindow.ShowActivated = false;
-            ownedWindow.Opacity = 1;
+            ownedWindow.Opacity = overlayWindow.Opacity;
             if (!ownedWindow.IsVisible) ownedWindow.Show();
         }
     }
