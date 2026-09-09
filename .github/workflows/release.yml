@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Beta version, for example 1.0.29-beta.1"
+        description: "Beta version, for example 1.0.29-beta.2"
         required: true
 
 permissions:
@@ -53,6 +53,7 @@ jobs:
           $env:SPOTMONITOR_VERSION='${{ steps.version.outputs.value }}'
           $env:SPOTMONITOR_NUMERIC_VERSION='${{ steps.version.outputs.numeric }}'
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/SpotMonitor.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
           $installer = Get-ChildItem dist/SpotMonitor-Setup-*-win-x64.exe | Select-Object -First 1
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
           "$hash  $($installer.Name)" | Set-Content "dist/$($installer.BaseName).sha256.txt"

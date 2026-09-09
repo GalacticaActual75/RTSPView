@@ -34,7 +34,7 @@ RestartApplications=no
 SetupLogging=yes
 VersionInfoVersion={#MyNumericVersion}
 VersionInfoProductName={#MyAppName}
-VersionInfoProductVersion={#MyAppVersion}
+VersionInfoProductVersion={#MyNumericVersion}
 
 [Tasks]
 Name: "autostart"; Description: "Start and supervise SpotMonitor when this user signs in"; GroupDescription: "Startup:"; Flags: checkedonce
