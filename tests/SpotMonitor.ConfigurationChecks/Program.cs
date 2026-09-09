@@ -6,6 +6,11 @@ var root = Path.Combine(Path.GetTempPath(), "SpotMonitor-ConfigurationChecks", G
 Directory.CreateDirectory(root);
 try
 {
+    Check(BetaReleaseVersion.Parse("1.0.29-beta.3") > BetaReleaseVersion.Parse("1.0.29-beta.2"), "beta revisions update within one base version");
+    Check(BetaReleaseVersion.Parse("1.0.30-beta.1") > BetaReleaseVersion.Parse("1.0.29-beta.99"), "beta base version takes precedence");
+    var stableRejected = false;
+    try { BetaReleaseVersion.Parse("1.0.28"); } catch (InvalidDataException) { stableRejected = true; }
+    Check(stableRejected, "beta updater rejects a stable manifest");
     var transferStore = new JsonSettingsStore(Path.Combine(root, "transfer.json"));
     await transferStore.SaveAsync(new AppSettings { PreferredMonitor = 3 });
     var transferred = new AppSettings { PreferredMonitor = 2, Cameras = AppSettings.CreateCameraSlots().Select(c => c with { RtspUrl = "rtsp://user:secret@example.test/live" }).ToArray() };

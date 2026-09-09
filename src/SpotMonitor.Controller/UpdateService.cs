@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Reflection;
+using SpotMonitor.Core;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -21,7 +23,7 @@ public sealed class UpdateService
 
     public async Task<UpdateStatus> CheckAsync(CancellationToken cancellationToken = default)
     {
-        var installed = NormalizeVersion(typeof(UpdateService).Assembly.GetName().Version);
+        var installed = InstalledBetaVersion();
         try
         {
             var manifestPath = Path.Combine(ChannelPath, "update.json");
@@ -34,10 +36,10 @@ public sealed class UpdateService
             Validate(manifest);
             var installerPath = ResolveInstaller(manifest.Installer);
             if (!File.Exists(installerPath)) throw new FileNotFoundException("The published installer is missing.", installerPath);
-            var latest = Version.Parse(manifest.Version);
+            var latest = BetaReleaseVersion.Parse(manifest.Version);
             var updateAvailable = latest > installed;
             return new(installed, latest, true, updateAvailable,
-                updateAvailable ? $"SpotMonitor {latest.ToString(3)} is ready to install." : "SpotMonitor is up to date.", ChannelPath);
+                updateAvailable ? $"SpotMonitor {manifest.Version} is ready to install." : "SpotMonitor is up to date.", ChannelPath);
         }
         catch (Exception exception)
         {
@@ -55,8 +57,8 @@ public sealed class UpdateService
             var manifest = await JsonSerializer.DeserializeAsync<UpdateManifest>(manifestStream, cancellationToken: cancellationToken)
                 ?? throw new InvalidDataException("The update manifest is empty.");
             Validate(manifest);
-            var latest = Version.Parse(manifest.Version);
-            var installed = NormalizeVersion(typeof(UpdateService).Assembly.GetName().Version);
+            var latest = BetaReleaseVersion.Parse(manifest.Version);
+            var installed = InstalledBetaVersion();
             if (latest <= installed) return new(false, "SpotMonitor is already up to date.");
 
             var source = ResolveInstaller(manifest.Installer);
@@ -83,17 +85,22 @@ public sealed class UpdateService
             foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updater, "-InstallerPath", staged, "-ExpectedSha256", manifest.Sha256 })
                 startInfo.ArgumentList.Add(argument);
             _ = Process.Start(startInfo) ?? throw new InvalidOperationException("Windows did not start the update helper.");
-            _logger.Write("AUDIT", $"SpotMonitor {latest.ToString(3)} update staged and elevation requested from web admin");
-            return new(true, $"SpotMonitor {latest.ToString(3)} is staged. Approve the Windows prompt on the camera-wall host; the page will disconnect while the update installs.");
+            _logger.Write("AUDIT", $"SpotMonitor {manifest.Version} update staged and elevation requested from web admin");
+            return new(true, $"SpotMonitor {manifest.Version} is staged. Approve the Windows prompt on the camera-wall host; the page will disconnect while the update installs.");
         }
         finally { _gate.Release(); }
     }
 
-    private static Version NormalizeVersion(Version? version) => new(version?.Major ?? 0, version?.Minor ?? 0, Math.Max(0, version?.Build ?? 0));
-
+    private static Version InstalledBetaVersion()
+    {
+        var assembly = typeof(UpdateService).Assembly;
+        var label = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0];
+        if (label is not null && label.Contains("-beta.", StringComparison.Ordinal)) return BetaReleaseVersion.Parse(label);
+        return assembly.GetName().Version ?? new Version(0, 0, 0, 0);
+    }
     private static void Validate(UpdateManifest manifest)
     {
-        if (!Version.TryParse(manifest.Version, out var version) || version.Build < 0) throw new InvalidDataException("The update version is invalid.");
+        _ = BetaReleaseVersion.Parse(manifest.Version);
         if (string.IsNullOrWhiteSpace(manifest.Installer) || Path.GetFileName(manifest.Installer) != manifest.Installer || !manifest.Installer.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The installer filename is invalid.");
         if (!Regex.IsMatch(manifest.Sha256 ?? string.Empty, "^[A-Fa-f0-9]{64}$")) throw new InvalidDataException("The installer checksum is invalid.");
