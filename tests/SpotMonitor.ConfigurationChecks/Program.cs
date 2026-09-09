@@ -6,6 +6,29 @@ var root = Path.Combine(Path.GetTempPath(), "SpotMonitor-ConfigurationChecks", G
 Directory.CreateDirectory(root);
 try
 {
+    var betaInstalled = UpdateRelease.Parse("1.0.29-beta.8");
+    var stableCurrent = UpdateRelease.Parse("1.0.29");
+    Check(UpdateRelease.CanInstall(betaInstalled, stableCurrent, "stable"), "beta to same-base stable is offered");
+    Check(UpdateRelease.CanInstall(betaInstalled, UpdateRelease.Parse("1.0.28"), "stable"), "explicit switch to older stable is offered");
+    Check(UpdateRelease.CanInstall(stableCurrent, betaInstalled, "beta"), "stable to same-base beta is offered");
+    Check(!UpdateRelease.CanInstall(betaInstalled, UpdateRelease.Parse("1.0.29-beta.7"), "beta"), "same-channel beta downgrade is blocked");
+    Check(!UpdateRelease.CanInstall(stableCurrent, stableCurrent, "stable"), "same stable release is not reinstalled");
+    Check(UpdateRelease.CanInstall(betaInstalled, UpdateRelease.Parse("1.0.29-beta.9"), "beta"), "next beta revision is offered");
+    foreach (var invalid in new[] { "main", "..", "\\\\elsewhere\\share", "" })
+    {
+        var rejected = false;
+        try { UpdateRelease.ValidateChannel(invalid); } catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "unknown channel rejected");
+    }
+    var mismatchRejected = false;
+    try { UpdateRelease.CanInstall(betaInstalled, stableCurrent, "beta"); } catch (InvalidDataException) { mismatchRejected = true; }
+    Check(mismatchRejected, "wrong-channel manifest rejected");
+    var channels = new UpdateChannelStore(root);
+    Check(channels.Read("beta") == "beta", "first-run beta default");
+    channels.Save("stable");
+    Check(new UpdateChannelStore(root).Read("beta") == "stable", "stable selection survives beta reinstall/restart");
+    channels.Save("beta");
+    Check(new UpdateChannelStore(root).Read("stable") == "beta", "beta selection survives stable reinstall/restart");
     Check(BetaReleaseVersion.Parse("1.0.29-beta.3") > BetaReleaseVersion.Parse("1.0.29-beta.2"), "beta revisions update within one base version");
     Check(BetaReleaseVersion.Parse("1.0.30-beta.1") > BetaReleaseVersion.Parse("1.0.29-beta.99"), "beta base version takes precedence");
     var stableRejected = false;

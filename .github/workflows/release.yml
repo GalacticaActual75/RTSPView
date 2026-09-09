@@ -1,13 +1,13 @@
-name: Build Windows beta prerelease
+name: Build Windows release
 
 on:
   push:
     tags:
-      - "v*-beta.*"
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Beta version, for example 1.0.29-beta.2"
+        description: "Release version, for example 1.0.29 or 1.0.30-beta.1"
         required: true
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
         shell: pwsh
         run: |
           $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.version }}' } else { '${{ github.ref_name }}'.TrimStart('v') }
-          if ($version -notmatch '^\d+\.\d+\.\d+-beta\.\d+$') { throw "Invalid release version: $version" }
+          if ($version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$') { throw "Invalid release version: $version" }
           "value=$version" >> $env:GITHUB_OUTPUT
           "numeric=$($version.Split('-')[0])" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
@@ -73,8 +73,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag='${{ steps.version.outputs.tag }}'
+          $releaseFlags = if ('${{ steps.version.outputs.value }}' -match '-beta\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' --prerelease --latest=false --generate-notes --title "SpotMonitor Beta ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' @releaseFlags --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
           } else {
-            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --verify-tag --prerelease --latest=false --generate-notes --title "SpotMonitor Beta ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --verify-tag @releaseFlags --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
           }

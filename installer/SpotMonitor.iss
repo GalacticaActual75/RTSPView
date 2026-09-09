@@ -14,7 +14,7 @@
 AppId={{B49BC897-9B86-4C97-85BA-9FA1CF27A835}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppVerName={#MyAppName} Beta {#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\SpotMonitor
 DefaultGroupName=SpotMonitor

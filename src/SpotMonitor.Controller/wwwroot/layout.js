@@ -6,12 +6,11 @@ const adminLayout = (() => {
   const pages = {};
   function init() {
     const css = document.createElement('link');
-    css.rel = 'stylesheet'; css.href = 'layout.css?v=beta7'; css.onload = fitOverview; document.head.append(css);
+    css.rel = 'stylesheet'; css.href = 'layout.css?v=channels1'; css.onload = fitOverview; document.head.append(css);
     const main = document.querySelector('main');
     const banner = main.previousElementSibling;
     banner.remove();
-    document.querySelector('header .tag').textContent = 'BETA';
-    document.querySelector('header .tag').title = 'Beta channel. Export your configuration before testing a new build.';
+    document.querySelector('header .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
     for (const [id, title] of Object.entries({overview:'Overview', cameras:'Cameras', overlays:'Overlays', system:'System'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
@@ -58,6 +57,12 @@ const adminLayout = (() => {
     pages.overlays.prepend(overlayHead, overlayNav);
     const viewer = document.querySelector('.viewer-display-panel'), display = document.querySelector('#displayForm'), updates = document.querySelector('#updatePanel');
     display.className = 'panel control-panel'; updates.className = 'panel control-panel';
+    const channelSettings = document.createElement('div'); channelSettings.className = 'update-channel-settings';
+    channelSettings.innerHTML = '<label>Update channel<select id="updateChannel"><option value="stable">Stable (main)</option><option value="beta">Beta</option></select></label><dl class="update-versions"><div><dt>Installed</dt><dd id="installedRelease">Checking…</dd></div><div><dt>Available on selected channel</dt><dd id="availableRelease">Checking…</dd></div></dl><p>Changing channels does not install anything. Install the selected release to switch this host.</p><a href="/api/config/export" download="SpotMonitor-config.json">Export configuration before installing</a>';
+    updates.insertBefore(channelSettings, document.querySelector('#updateState'));
+    const installDialog = document.createElement('dialog'); installDialog.id = 'updateConfirm';
+    installDialog.innerHTML = '<form method="dialog"><h2>Install selected release?</h2><p id="updateConfirmText"></p><p>The camera wall will restart. Follow progress on the Windows host.</p><a href="/api/config/export" download="SpotMonitor-config.json">Export configuration for rollback</a><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="install">Install now</button></div></form>';
+    document.body.append(installDialog);
     viewer.querySelector('h2').textContent = 'Maintenance';
     viewer.querySelector('p').textContent = 'These commands take effect immediately on the Windows host.';
     pages.system.append(display, updates, document.querySelector('#configPanel'), viewer, document.querySelector('#passwordForm'), document.querySelector('#logView').closest('section'));
@@ -174,5 +179,12 @@ const adminLayout = (() => {
     update();
   }
   window.addEventListener('beforeunload', event => {if(document.querySelector('[data-dirty="true"]')){event.preventDefault();event.returnValue='';}});
-  return {init, metrics, card};
+  function release(version) {
+    const beta = version.includes('-beta.');
+    const badge = document.querySelector('header .tag');
+    badge.textContent = beta ? 'BETA' : 'STABLE'; badge.title = 'Installed release: ' + version;
+    badge.classList.toggle('stable', !beta);
+    document.title = beta ? 'SpotMonitor Beta Admin' : 'SpotMonitor Admin';
+  }
+  return {init, metrics, card, release};
 })();

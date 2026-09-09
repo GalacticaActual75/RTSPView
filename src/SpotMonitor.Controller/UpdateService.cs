@@ -10,51 +10,72 @@ namespace SpotMonitor.Controller;
 
 public sealed class UpdateService
 {
-    public const string ChannelPath = @"UPDATE_CHANNEL_DIRECTORY";
+    private static string ChannelPath(string channel) => UpdateRelease.ValidateChannel(channel) == "beta"
+        ? @"UPDATE_CHANNEL_DIRECTORY" : @"UPDATE_CHANNEL_DIRECTORY";
     private readonly string _dataDirectory;
     private readonly RollingFileLogger _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _launched;
     private string? _activeProgressPath;
+    private readonly UpdateChannelStore _channels;
 
     public UpdateService(string dataDirectory, RollingFileLogger logger)
     {
         _dataDirectory = dataDirectory;
         _logger = logger;
+        _channels = new UpdateChannelStore(dataDirectory);
     }
 
     public async Task<UpdateStatus> CheckAsync(CancellationToken cancellationToken = default)
     {
-        var installed = InstalledBetaVersion();
+        var installed = InstalledRelease();
+        var channel = _channels.Read(installed.Channel);
+        var channelPath = ChannelPath(channel);
         try
         {
-            var manifestPath = Path.Combine(ChannelPath, "update.json");
+            var manifestPath = Path.Combine(channelPath, "update.json");
             if (!File.Exists(manifestPath))
-                return new(installed, null, false, false, "No update has been published to the LAN channel yet.", ChannelPath);
+                return new(installed.Label, null, false, false, "No update has been published to this channel yet.", channelPath, installed.Channel, channel);
 
             await using var stream = new FileStream(manifestPath, FileMode.Open, FileAccess.Read, FileShare.Read);
             var manifest = await JsonSerializer.DeserializeAsync<UpdateManifest>(stream, cancellationToken: cancellationToken)
                 ?? throw new InvalidDataException("The update manifest is empty.");
-            Validate(manifest);
-            var installerPath = ResolveInstaller(manifest.Installer);
+            Validate(manifest, channel);
+            var installerPath = ResolveInstaller(manifest.Installer, channel);
             if (!File.Exists(installerPath)) throw new FileNotFoundException("The published installer is missing.", installerPath);
-            var latest = BetaReleaseVersion.Parse(manifest.Version);
-            var updateAvailable = latest > installed;
-            return new(installed, latest, true, updateAvailable,
-                updateAvailable ? $"SpotMonitor {manifest.Version} is ready to install." : "SpotMonitor is up to date.", ChannelPath);
+            var latest = UpdateRelease.Parse(manifest.Version);
+            var updateAvailable = UpdateRelease.CanInstall(installed, latest, channel);
+            return new(installed.Label, latest.Label, true, updateAvailable,
+                updateAvailable ? $"SpotMonitor {manifest.Version} is ready to install." : "SpotMonitor is up to date on this channel.", channelPath, installed.Channel, channel);
         }
         catch (Exception exception)
         {
-            return new(installed, null, false, false, $"Update channel unavailable: {exception.Message}", ChannelPath);
+            return new(installed.Label, null, false, false, $"Update channel unavailable: {exception.Message}", channelPath, installed.Channel, channel);
         }
     }
 
-    public async Task<UpdateLaunchResult> StageAndLaunchAsync(CancellationToken cancellationToken = default)
+    public async Task SelectChannelAsync(string channel, CancellationToken cancellationToken = default)
+    {
+        UpdateRelease.ValidateChannel(channel);
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_launched) throw new InvalidOperationException("Wait for the running update to finish before changing channels.");
+            _channels.Save(channel);
+            _logger.Write("AUDIT", $"Update channel selected: {channel}. No installation requested.");
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<UpdateLaunchResult> StageAndLaunchAsync(string expectedChannel, string expectedVersion, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
         string? progressPath = null;
         try
         {
+            var installed = InstalledRelease();
+            var channel = _channels.Read(installed.Channel);
+            if (channel != UpdateRelease.ValidateChannel(expectedChannel)) throw new InvalidOperationException("The selected channel changed. Check for updates again.");
             if (_launched && _activeProgressPath is not null)
             {
                 try
@@ -68,27 +89,27 @@ public sealed class UpdateService
             var updateDirectory = Path.Combine(_dataDirectory, "updates");
             Directory.CreateDirectory(updateDirectory);
             progressPath = Path.Combine(updateDirectory, $"progress-{Guid.NewGuid():N}.json");
-            WriteProgress(progressPath, "working", "Checking the beta update channel...");
+            WriteProgress(progressPath, "working", $"Checking the {channel} update channel...");
             var progressScript = Path.Combine(AppContext.BaseDirectory, "Show-UpdateProgress.ps1");
             if (!File.Exists(progressScript)) throw new FileNotFoundException("The update progress helper is missing.", progressScript);
             var progressStart = new ProcessStartInfo("powershell.exe") { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden };
             foreach (var argument in new[] { "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", progressScript, "-StatusPath", progressPath })
                 progressStart.ArgumentList.Add(argument);
             _ = Process.Start(progressStart) ?? throw new InvalidOperationException("Windows did not start the update progress window.");
-            var manifestPath = Path.Combine(ChannelPath, "update.json");
+            var manifestPath = Path.Combine(ChannelPath(channel), "update.json");
             await using var manifestStream = new FileStream(manifestPath, FileMode.Open, FileAccess.Read, FileShare.Read);
             var manifest = await JsonSerializer.DeserializeAsync<UpdateManifest>(manifestStream, cancellationToken: cancellationToken)
                 ?? throw new InvalidDataException("The update manifest is empty.");
-            Validate(manifest);
-            var latest = BetaReleaseVersion.Parse(manifest.Version);
-            var installed = InstalledBetaVersion();
-            if (latest <= installed)
+            Validate(manifest, channel);
+            if (manifest.Version != expectedVersion) throw new InvalidOperationException("The available release changed. Check for updates and confirm the new version.");
+            var latest = UpdateRelease.Parse(manifest.Version);
+            if (!UpdateRelease.CanInstall(installed, latest, channel))
             {
                 WriteProgress(progressPath, "complete", "SpotMonitor is already up to date. No changes were made.");
                 return new(false, "SpotMonitor is already up to date.");
             }
 
-            var source = ResolveInstaller(manifest.Installer);
+            var source = ResolveInstaller(manifest.Installer, channel);
             var staged = Path.Combine(updateDirectory, Path.GetFileName(source));
             WriteProgress(progressPath, "working", $"Copying SpotMonitor {manifest.Version} from the LAN channel...");
             await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true))
@@ -136,24 +157,23 @@ public sealed class UpdateService
         File.Move(temporary, path, true);
     }
 
-    private static Version InstalledBetaVersion()
+    private static UpdateRelease InstalledRelease()
     {
         var assembly = typeof(UpdateService).Assembly;
         var label = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0];
-        if (label is not null && label.Contains("-beta.", StringComparison.Ordinal)) return BetaReleaseVersion.Parse(label);
-        return assembly.GetName().Version ?? new Version(0, 0, 0, 0);
+        return UpdateRelease.Parse(label ?? "0.0.0");
     }
-    private static void Validate(UpdateManifest manifest)
+    private static void Validate(UpdateManifest manifest, string channel)
     {
-        _ = BetaReleaseVersion.Parse(manifest.Version);
+        if (UpdateRelease.Parse(manifest.Version).Channel != channel) throw new InvalidDataException("The manifest does not match the selected channel.");
         if (string.IsNullOrWhiteSpace(manifest.Installer) || Path.GetFileName(manifest.Installer) != manifest.Installer || !manifest.Installer.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The installer filename is invalid.");
         if (!Regex.IsMatch(manifest.Sha256 ?? string.Empty, "^[A-Fa-f0-9]{64}$")) throw new InvalidDataException("The installer checksum is invalid.");
     }
 
-    private static string ResolveInstaller(string filename)
+    private static string ResolveInstaller(string filename, string channel)
     {
-        var root = Path.GetFullPath(ChannelPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var root = Path.GetFullPath(ChannelPath(channel)).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var resolved = Path.GetFullPath(Path.Combine(root, filename));
         if (!resolved.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The installer path escapes the update channel.");
         return resolved;
@@ -167,5 +187,5 @@ public sealed class UpdateService
 }
 
 public sealed record UpdateManifest(string Version, string Installer, string Sha256, DateTimeOffset PublishedAt);
-public sealed record UpdateStatus(Version InstalledVersion, Version? LatestVersion, bool ChannelAvailable, bool UpdateAvailable, string Message, string ChannelPath);
+public sealed record UpdateStatus(string InstalledVersion, string? LatestVersion, bool ChannelAvailable, bool UpdateAvailable, string Message, string ChannelPath, string InstalledChannel, string SelectedChannel);
 public sealed record UpdateLaunchResult(bool Started, string Message);

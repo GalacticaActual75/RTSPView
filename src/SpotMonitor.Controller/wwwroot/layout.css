@@ -2,6 +2,12 @@
 body{background:#0c1119;font-size:14px}
 header{height:60px;background:#101721;backdrop-filter:none;gap:24px;padding:0 clamp(16px,2vw,32px)}
 .tag{background:#4c3915;color:#ffdc8b;border:1px solid #775a22;border-radius:5px;padding:3px 7px}
+.tag.stable{background:#153e31;color:#9de0bc;border-color:#2b7654}
+.update-channel-settings{margin-top:16px}.update-channel-settings>label{max-width:260px}
+.update-versions{display:flex;gap:24px;flex-wrap:wrap;margin:16px 0}.update-versions dt{color:var(--muted);font-size:12px}.update-versions dd{margin:4px 0 0;font-weight:650}
+.update-channel-settings a{color:#8ec2ff}.update-channel-settings p{margin-bottom:8px!important}
+#updateConfirm{width:min(520px,calc(100% - 32px));background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:24px}
+#updateConfirm::backdrop{background:#0009}#updateConfirm p{line-height:1.6;color:var(--muted)}#updateConfirm a{color:#8ec2ff}
 .main-nav{display:flex;gap:6px;margin-right:auto}
 .mobile-nav{display:none}
 .main-nav button{background:transparent;color:var(--muted);padding:10px 18px}
