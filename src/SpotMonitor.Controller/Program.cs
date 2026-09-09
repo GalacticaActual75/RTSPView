@@ -125,7 +125,7 @@ app.MapPost("/api/auth/logout", async (HttpContext context) =>
 
 app.MapGet("/api/status", () => Results.Ok(new
 {
-    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+    version = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)?.InformationalVersion.Split('+')[0] ?? "Development",
     hostname = Environment.MachineName,
     lanAddresses = GetLanAddresses(),
     controllerUptimeSeconds = (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds,
