@@ -38,6 +38,9 @@ jobs:
           dotnet restore SpotMonitor.sln -r win-x64
           dotnet run --project tests/SpotMonitor.ConfigurationChecks/SpotMonitor.ConfigurationChecks.csproj -c Release
 
+      - name: Check update helper failure reporting
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
+
       - name: Publish self-contained applications
         shell: pwsh
         run: |

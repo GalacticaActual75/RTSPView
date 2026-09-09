@@ -40,6 +40,7 @@ const adminLayout = (() => {
     overviewHead.append(performance, sizeLabel);
     pages.overview.append(stats, overviewHead);
     const cameraGrid = document.querySelector('#cameras');
+    cameraGrid.previousElementSibling.querySelector('h2').remove();
     pages.cameras.append(cameraGrid.previousElementSibling);
     const overlayNav = document.createElement('nav'); overlayNav.className = 'overlay-nav'; overlayNav.setAttribute('aria-label','Select overlay');
     for (const [id, title] of [['doorbell','Doorbell'],['garage','Garage']]) {
@@ -53,7 +54,7 @@ const adminLayout = (() => {
       const grid = document.querySelector('#' + id); grid.previousElementSibling.remove(); grid.hidden = id !== 'doorbell'; pages.overlays.append(grid);
     }
     const overlayHead = document.createElement('div'); overlayHead.className = 'section-title';
-    overlayHead.innerHTML = '<h2>Overlay editor</h2><p>Adjust the preview, then save to apply changes to the camera wall.</p>';
+    overlayHead.innerHTML = '<p>Adjust the preview, then save to apply changes to the camera wall.</p>';
     pages.overlays.prepend(overlayHead, overlayNav);
     const viewer = document.querySelector('.viewer-display-panel'), display = document.querySelector('#displayForm'), updates = document.querySelector('#updatePanel');
     display.className = 'panel control-panel'; updates.className = 'panel control-panel';

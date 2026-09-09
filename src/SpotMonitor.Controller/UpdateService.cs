@@ -14,6 +14,8 @@ public sealed class UpdateService
     private readonly string _dataDirectory;
     private readonly RollingFileLogger _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private bool _launched;
+    private string? _activeProgressPath;
 
     public UpdateService(string dataDirectory, RollingFileLogger logger)
     {
@@ -50,8 +52,29 @@ public sealed class UpdateService
     public async Task<UpdateLaunchResult> StageAndLaunchAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
+        string? progressPath = null;
         try
         {
+            if (_launched && _activeProgressPath is not null)
+            {
+                try
+                {
+                    using var status = JsonDocument.Parse(File.ReadAllText(_activeProgressPath));
+                    if (status.RootElement.GetProperty("state").GetString() == "failed") _launched = false;
+                }
+                catch { /* A running helper may be replacing the status file. */ }
+            }
+            if (_launched) return new(false, "An update has already been launched. Check the progress window on the Windows host.");
+            var updateDirectory = Path.Combine(_dataDirectory, "updates");
+            Directory.CreateDirectory(updateDirectory);
+            progressPath = Path.Combine(updateDirectory, $"progress-{Guid.NewGuid():N}.json");
+            WriteProgress(progressPath, "working", "Checking the beta update channel...");
+            var progressScript = Path.Combine(AppContext.BaseDirectory, "Show-UpdateProgress.ps1");
+            if (!File.Exists(progressScript)) throw new FileNotFoundException("The update progress helper is missing.", progressScript);
+            var progressStart = new ProcessStartInfo("powershell.exe") { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden };
+            foreach (var argument in new[] { "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", progressScript, "-StatusPath", progressPath })
+                progressStart.ArgumentList.Add(argument);
+            _ = Process.Start(progressStart) ?? throw new InvalidOperationException("Windows did not start the update progress window.");
             var manifestPath = Path.Combine(ChannelPath, "update.json");
             await using var manifestStream = new FileStream(manifestPath, FileMode.Open, FileAccess.Read, FileShare.Read);
             var manifest = await JsonSerializer.DeserializeAsync<UpdateManifest>(manifestStream, cancellationToken: cancellationToken)
@@ -59,13 +82,19 @@ public sealed class UpdateService
             Validate(manifest);
             var latest = BetaReleaseVersion.Parse(manifest.Version);
             var installed = InstalledBetaVersion();
-            if (latest <= installed) return new(false, "SpotMonitor is already up to date.");
+            if (latest <= installed)
+            {
+                WriteProgress(progressPath, "complete", "SpotMonitor is already up to date. No changes were made.");
+                return new(false, "SpotMonitor is already up to date.");
+            }
 
             var source = ResolveInstaller(manifest.Installer);
-            var updateDirectory = Path.Combine(_dataDirectory, "updates");
-            Directory.CreateDirectory(updateDirectory);
             var staged = Path.Combine(updateDirectory, Path.GetFileName(source));
-            File.Copy(source, staged, true);
+            WriteProgress(progressPath, "working", $"Copying SpotMonitor {manifest.Version} from the LAN channel...");
+            await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true))
+            await using (var output = new FileStream(staged, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true))
+                await input.CopyToAsync(output, cancellationToken);
+            WriteProgress(progressPath, "working", "Verifying the downloaded installer...");
             var actualHash = await ComputeSha256Async(staged, cancellationToken);
             if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(actualHash), Convert.FromHexString(manifest.Sha256)))
             {
@@ -82,13 +111,29 @@ public sealed class UpdateService
                 Verb = "runas",
                 WindowStyle = ProcessWindowStyle.Hidden
             };
-            foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updater, "-InstallerPath", staged, "-ExpectedSha256", manifest.Sha256 })
+            WriteProgress(progressPath, "working", "Waiting for Windows approval. Approve the administrator prompt on this host if shown.");
+            foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updater, "-InstallerPath", staged, "-ExpectedSha256", manifest.Sha256, "-StatusPath", progressPath, "-ExpectedVersion", manifest.Version })
                 startInfo.ArgumentList.Add(argument);
             _ = Process.Start(startInfo) ?? throw new InvalidOperationException("Windows did not start the update helper.");
+            _launched = true;
+            _activeProgressPath = progressPath;
             _logger.Write("AUDIT", $"SpotMonitor {manifest.Version} update staged and elevation requested from web admin");
-            return new(true, $"SpotMonitor {manifest.Version} is staged. Approve the Windows prompt on the camera-wall host; the page will disconnect while the update installs.");
+            return new(true, $"SpotMonitor {manifest.Version} is staged. Follow the update progress window on the Windows host. The page will disconnect during installation.");
+        }
+        catch (Exception exception)
+        {
+            if (progressPath is not null)
+                try { WriteProgress(progressPath, "failed", $"Update did not start: {exception.Message}"); } catch { /* Preserve the original error. */ }
+            throw;
         }
         finally { _gate.Release(); }
+    }
+
+    private static void WriteProgress(string path, string state, string message)
+    {
+        var temporary = path + ".tmp";
+        File.WriteAllText(temporary, JsonSerializer.Serialize(new { state, message, updatedAt = DateTimeOffset.UtcNow }));
+        File.Move(temporary, path, true);
     }
 
     private static Version InstalledBetaVersion()
