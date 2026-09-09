@@ -1,13 +1,13 @@
-name: Build Windows release
+name: Build Windows beta prerelease
 
 on:
   push:
     tags:
-      - "v*"
+      - "v*-beta.*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example 1.0.1"
+        description: "Beta version, for example 1.0.28-beta.1"
         required: true
 
 permissions:
@@ -28,8 +28,9 @@ jobs:
         shell: pwsh
         run: |
           $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.version }}' } else { '${{ github.ref_name }}'.TrimStart('v') }
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid release version: $version" }
+          if ($version -notmatch '^\d+\.\d+\.\d+-beta\.\d+$') { throw "Invalid release version: $version" }
           "value=$version" >> $env:GITHUB_OUTPUT
+          "numeric=$($version.Split('-')[0])" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
       - name: Restore and test
@@ -50,6 +51,7 @@ jobs:
         shell: pwsh
         run: |
           $env:SPOTMONITOR_VERSION='${{ steps.version.outputs.value }}'
+          $env:SPOTMONITOR_NUMERIC_VERSION='${{ steps.version.outputs.numeric }}'
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/SpotMonitor.iss
           $installer = Get-ChildItem dist/SpotMonitor-Setup-*-win-x64.exe | Select-Object -First 1
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
@@ -68,7 +70,7 @@ jobs:
         run: |
           $tag='${{ steps.version.outputs.tag }}'
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' --prerelease --latest=false --generate-notes --title "SpotMonitor Beta ${{ steps.version.outputs.value }}"
           } else {
-            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --verify-tag --generate-notes --title "SpotMonitor ${{ steps.version.outputs.value }}"
+            gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --verify-tag --prerelease --latest=false --generate-notes --title "SpotMonitor Beta ${{ steps.version.outputs.value }}"
           }

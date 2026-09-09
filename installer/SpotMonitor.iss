@@ -5,11 +5,16 @@
   #define MyAppVersion "0.0.0-dev"
 #endif
 
+#define MyNumericVersion GetEnv("SPOTMONITOR_NUMERIC_VERSION")
+#if MyNumericVersion == ""
+  #define MyNumericVersion "1.0.28"
+#endif
+
 [Setup]
 AppId={{B49BC897-9B86-4C97-85BA-9FA1CF27A835}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppVerName={#MyAppName} {#MyAppVersion}
+AppVerName={#MyAppName} Beta {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\SpotMonitor
 DefaultGroupName=SpotMonitor
@@ -27,7 +32,7 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyNumericVersion}
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
 
