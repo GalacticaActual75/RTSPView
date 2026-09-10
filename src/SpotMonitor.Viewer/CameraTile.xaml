@@ -3,7 +3,7 @@
    <Grid x:Name="RenderRoot">
     <Canvas x:Name="CompositedCanvas" ClipToBounds="True" Visibility="Collapsed"><Image x:Name="CompositedImage" Stretch="Fill"/></Canvas>
     <vlc:VideoView x:Name="VideoView" Background="Black">
-      <Grid x:Name="OverlayRoot" Background="#02000000" MouseEnter="OverlayRoot_MouseEnter" MouseLeave="OverlayRoot_MouseLeave" MouseMove="OverlayRoot_MouseMove">
+      <Grid x:Name="OverlayRoot" Visibility="Collapsed" Background="#02000000" MouseEnter="OverlayRoot_MouseEnter" MouseLeave="OverlayRoot_MouseLeave" MouseMove="OverlayRoot_MouseMove">
         <Border x:Name="OverlayPanel" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="8" Padding="8,4" CornerRadius="3" Background="#B0101010">
           <StackPanel>
             <TextBlock x:Name="NameText" Foreground="White" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>

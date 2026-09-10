@@ -11,6 +11,8 @@ public sealed record AppSettings
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
     public IReadOnlyList<CameraSettings> Cameras { get; init; } = CreateCameraSlots();
+    // Player capacity is separate from camera entries the user has added.
+    public int CameraCount { get; init; } = 9;
     public DoorbellOverlaySettings DoorbellOverlay { get; init; } = new();
     public DoorbellOverlaySettings GarageOverlay { get; init; } = CreateGarageOverlay();
     public const int MaximumAdditionalOverlays = 14;
@@ -67,10 +69,19 @@ public sealed record AppSettings
         var layouts = SchemaVersion < 15 ? new WallLayout[] { new() } : Layouts;
         var activeId = SchemaVersion < 15 ? "default" : ActiveLayoutId;
         WallLayout.Validate(layouts, activeId);
+        var cameraCount = Math.Clamp(CameraCount, 9, MainCameraSlots.Length);
+        for (var index = 9; index < normalized.Length; index++)
+        {
+            var camera = normalized[index];
+            if (camera.Enabled || !string.IsNullOrWhiteSpace(camera.RtspUrl) || camera.Name != $"Camera {index + 1}" ||
+                layouts.Any(layout => layout.Tiles.Any(tile => tile.CameraSlot == camera.Slot)))
+                cameraCount = Math.Max(cameraCount, index + 1);
+        }
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
             Cameras = normalized,
+            CameraCount = cameraCount,
             Layouts = layouts,
             ActiveLayoutId = activeId,
             DoorbellOverlay = overlay,

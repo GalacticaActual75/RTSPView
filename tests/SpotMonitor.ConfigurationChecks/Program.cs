@@ -38,6 +38,11 @@ try
     Check(legacyWall.Cameras.Count == 16 && legacyWall.Layouts.Single().Tiles.Count == 9 && legacyWall.ActiveLayoutId == "default", "legacy wall migrates to Default 3x3 with room for 16 cameras");
     Check(legacyWall.Cameras.Take(9).All(c => c.Name == $"Existing {c.Slot}" && c.RtspUrl == $"rtsp://example.test/{c.Slot}"), "layout migration preserves existing camera identities and URLs");
     Check(legacyWall.Cameras.Skip(9).All(c => !c.Enabled && c.Slot > 11), "new main cameras are disabled and do not collide with overlays");
+    Check(legacyWall.CameraCount == 9, "unused player capacity does not appear as camera entries");
+    Check((legacyWall with { CameraCount = 10 }).Normalize().CameraCount == 10, "added empty camera remains registered");
+    var configuredExtra = legacyWall.Cameras.ToArray();
+    configuredExtra[11] = configuredExtra[11] with { RtspUrl = "rtsp://example.test/extra" };
+    Check((legacyWall with { Cameras = configuredExtra }).Normalize().CameraCount == 12, "existing extra camera configuration remains visible");
     Check(!legacyWall.Cameras.Select(c => c.Slot).Intersect(multiLoaded.AllOverlays().Select(o => o.Camera.Slot)).Any(), "all sixteen overlay IDs stay separate from main cameras");
     var migrationFile = Path.Combine(root, "legacy-wall.json");
     const string originalWall = "{\"SchemaVersion\":14,\"Cameras\":[{\"Slot\":1,\"Name\":\"Original wall\"}]}";
@@ -51,6 +56,7 @@ try
         Tiles = AppSettings.MainCameraSlots.Select((slot,i) => new WallTile { CameraSlot = slot, Row = i / 4, Column = i % 4 }).ToArray() };
     var designed = (legacyWall with { Layouts = [new(), sixteen], ActiveLayoutId = sixteen.Id }).Normalize();
     Check(designed.Layouts.Last().Tiles.Last().CameraSlot == 32 && designed.Cameras.SequenceEqual(legacyWall.Cameras), "4x4 layout uses independent camera references without changing streams");
+    Check(designed.CameraCount == 16, "existing layouts retain referenced camera entries");
     var layoutStore = new JsonSettingsStore(Path.Combine(root, "layout-roundtrip.json"));
     await layoutStore.SaveAsync(designed);
     var reloadedLayouts = await layoutStore.LoadAsync();

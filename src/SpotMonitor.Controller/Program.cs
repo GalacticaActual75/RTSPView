@@ -303,6 +303,22 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
     }
     finally { configGate.Release(); }
 }).RequireAuthorization();
+app.MapPost("/api/cameras", async () =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        var settings = await settingsStore.LoadAsync();
+        if (settings.CameraCount >= AppSettings.MainCameraSlots.Length)
+            return Results.BadRequest(new { error = "The maximum of 16 cameras has been reached." });
+        var updated = settings with { CameraCount = settings.CameraCount + 1 };
+        await settingsStore.SaveAsync(updated);
+        auditLog.Write("AUDIT", $"Camera {updated.CameraCount} added from web admin");
+        return Results.Ok(updated.Cameras[updated.CameraCount - 1]);
+    }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
+
 app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
 {
     if (!AppSettings.MainCameraSlots.Contains(slot) || camera.Slot != slot) return Results.BadRequest(new { error = "Choose a valid main camera ID matching the payload." });

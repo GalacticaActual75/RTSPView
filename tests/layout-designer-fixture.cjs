@@ -6,13 +6,17 @@ const root = path.resolve(__dirname, '../src/SpotMonitor.Controller/wwwroot');
 const slots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
 const camera = (slot,name) => ({slot,name,enabled:true,rtspUrl:'',transport:1,networkCacheMilliseconds:1000,startupTimeoutSeconds:20,watchdogTimeoutSeconds:20,maximumReconnectBackoffSeconds:30,lowLatency:false,decodeAudio:false});
 const overlay = (slot,name,hostCameraSlot) => ({hostCameraSlot,camera:camera(slot,name),viewportShape:0,viewportWidthPercent:50,viewportHeightPercent:50,viewportHorizontalPositionPercent:0,viewportVerticalPositionPercent:100,viewportOpacityPercent:100,zoomPercent:100,imageHorizontalPositionPercent:50,imageVerticalPositionPercent:50,customViewportPathData:'',customViewportSourceName:'',customViewportViewBoxX:0,customViewportViewBoxY:0,customViewportViewBoxWidth:1,customViewportViewBoxHeight:1,customViewportRotationDegrees:0});
-let config = {schemaVersion:15,cameras:slots.map((slot,i)=>camera(slot,'Camera '+(i+1))),doorbellOverlay:overlay(10,'Doorbell',2),garageOverlay:overlay(11,'Garage',3),additionalOverlays:[overlay(12,'Patio',1)],layouts:[{id:'default',name:'Default',rows:3,columns:3,tiles:slots.slice(0,9).map((cameraSlot,i)=>({cameraSlot,row:Math.floor(i/3),column:i%3,rowSpan:1,columnSpan:1}))}],activeLayoutId:'default',startFullScreen:true,preferredMonitor:0,hideMouseCursor:true,mouseCursorHideSeconds:3,showCameraNames:true,showCameraStats:true,keepViewerAlwaysOnTop:true};
+let config = {schemaVersion:15,cameraCount:9,cameras:slots.map((slot,i)=>camera(slot,'Camera '+(i+1))),doorbellOverlay:overlay(10,'Doorbell',2),garageOverlay:overlay(11,'Garage',3),additionalOverlays:[overlay(12,'Patio',1)],layouts:[{id:'default',name:'Default',rows:3,columns:3,tiles:slots.slice(0,9).map((cameraSlot,i)=>({cameraSlot,row:Math.floor(i/3),column:i%3,rowSpan:1,columnSpan:1}))}],activeLayoutId:'default',startFullScreen:true,preferredMonitor:0,hideMouseCursor:true,mouseCursorHideSeconds:3,showCameraNames:true,showCameraStats:true,keepViewerAlwaysOnTop:true};
 http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');res.setHeader('Cache-Control','no-store');
   const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
   if(url.pathname==='/api/session')return json({authenticated:true,csrfToken:'fixture'});
-  if(url.pathname==='/api/status')return json({hostname:'Isolated layout preview',lanAddresses:['localhost'],version:'1.0.30',currentTime:new Date().toISOString()});
+  if(url.pathname==='/api/status')return json({hostname:'Isolated layout preview',lanAddresses:['localhost'],version:'1.0.31-beta.6',currentTime:new Date().toISOString()});
   if(url.pathname==='/api/config')return json(config);
+  if(url.pathname==='/api/cameras'&&req.method==='POST'){
+    if(config.cameraCount>=16){res.statusCode=400;return json({error:'The maximum of 16 cameras has been reached.'});}
+    return json(config.cameras[config.cameraCount++]);
+  }
   if(url.pathname==='/api/layouts'&&req.method==='PUT'){
     let body='';for await(const chunk of req)body+=chunk;
     const request=JSON.parse(body);config={...config,...request};return json(request);

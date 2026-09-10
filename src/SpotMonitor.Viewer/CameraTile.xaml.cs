@@ -91,6 +91,36 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         InitializeComponent();
         VideoView.Loaded += (_, _) => ApplyVideoSizing(_player);
         VideoView.SizeChanged += (_, _) => ApplyVideoSizing(_player);
+        IsVisibleChanged += (_, _) => SynchronizeStatusWindowVisibility();
+        Loaded += (_, _) => SynchronizeStatusWindowVisibility();
+        // VideoView moves OverlayRoot into a separate top-level window. Parent
+        // visibility does not inherit across that boundary, including on first load.
+        OverlayRoot.Loaded += (_, _) => SynchronizeStatusWindowVisibility();
+    }
+
+    public void SetWallVisibility(bool visible)
+    {
+        if (!visible) OverlayRoot.Visibility = Visibility.Collapsed;
+        Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        SynchronizeStatusWindowVisibility();
+    }
+
+    private void SynchronizeStatusWindowVisibility()
+    {
+        OverlayRoot.Visibility = IsVisible ? Visibility.Visible : Visibility.Collapsed;
+        if (_useCompositedOutput) return;
+        var statusWindow = Window.GetWindow(OverlayRoot);
+        // Composited overlays use their actual owner, which MainWindow manages.
+        if (statusWindow is null || statusWindow == Window.GetWindow(this)) return;
+        if (!IsVisible)
+        {
+            if (statusWindow.IsVisible) statusWindow.Hide();
+            HideHoverControls();
+        }
+        else if (!statusWindow.IsVisible && ActualWidth > 0 && ActualHeight > 0)
+        {
+            statusWindow.Show();
+        }
     }
 
     public void Initialize(LibVLC libVlc, RollingFileLogger logger, CameraSettings settings, bool requestHardwareDecoding, bool compositedVideo = false)

@@ -40,7 +40,12 @@ const adminLayout = (() => {
     pages.overview.append(stats, overviewHead);
     const cameraGrid = document.querySelector('#cameras');
     cameraGrid.previousElementSibling.querySelector('h2').remove();
-    pages.cameras.append(cameraGrid.previousElementSibling);
+    const cameraHeader = cameraGrid.previousElementSibling;
+    cameraHeader.classList.add('camera-page-toolbar');
+    const count = document.createElement('span'); count.id='cameraCount';
+    const addCameraButton = document.createElement('button'); addCameraButton.type='button'; addCameraButton.id='addCamera'; addCameraButton.textContent='+ Add camera'; addCameraButton.onclick=()=>addCameraEntry();
+    cameraHeader.replaceChildren(count,addCameraButton);
+    pages.cameras.append(cameraHeader);
     const overlayNav = document.createElement('nav'); overlayNav.className = 'overlay-nav'; overlayNav.setAttribute('aria-label','Select overlay');
     for (const [id, title] of [['doorbell','Doorbell'],['garage','Garage']]) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;

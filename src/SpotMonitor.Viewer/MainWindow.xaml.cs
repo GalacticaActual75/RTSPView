@@ -143,13 +143,15 @@ public partial class MainWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         EnsureOverlayWindows();
-        _tiles = AppSettings.MainCameraSlots.Select(_ => new CameraTile()).ToArray();
+        _tiles = AppSettings.MainCameraSlots.Select(_ => new CameraTile { Visibility = Visibility.Collapsed }).ToArray();
         foreach (var tile in _tiles) WallGrid.Children.Add(tile);
-        SlotBox.ItemsSource = Enumerable.Range(1, _tiles.Length).ToArray();
+        SlotBox.ItemsSource = Enumerable.Range(1, _settings.CameraCount).ToArray();
         SlotBox.SelectedIndex = 0;
         _allTiles = [.. _tiles, DoorbellTile, GarageTile];
         foreach (var tile in _allTiles) tile.PointerActivity += Tile_PointerActivity;
         _settings = (await _settingsStore.LoadAsync()).Normalize();
+        SlotBox.ItemsSource = Enumerable.Range(1, _settings.CameraCount).ToArray();
+        SlotBox.SelectedIndex = 0;
         _settingsLastWriteUtc = File.Exists(_settingsPath) ? File.GetLastWriteTimeUtc(_settingsPath) : DateTime.MinValue;
         var commandLineUrl = ReadArgument("--rtsp");
         var fillAll = Environment.GetCommandLineArgs().Any(value => value.Equals("--fill-all", StringComparison.OrdinalIgnoreCase));
@@ -193,12 +195,16 @@ public partial class MainWindow : Window
         {
             var tile = _tiles[index];
             var placement = layout.Tiles.FirstOrDefault(item => item.CameraSlot == AppSettings.MainCameraSlots[index]);
-            tile.Visibility = placement is null ? Visibility.Collapsed : Visibility.Visible;
-            if (placement is null) continue;
+            if (placement is null)
+            {
+                tile.SetWallVisibility(false);
+                continue;
+            }
             Grid.SetRow(tile, placement.Row);
             Grid.SetColumn(tile, placement.Column);
             Grid.SetRowSpan(tile, placement.RowSpan);
             Grid.SetColumnSpan(tile, placement.ColumnSpan);
+            tile.SetWallVisibility(true);
         }
         QueueOverlayLayouts();
     }
@@ -865,7 +871,10 @@ public partial class MainWindow : Window
             var previousGarage = _settings.GarageOverlay.Camera;
             for (var index = 0; index < _tiles.Length; index++)
                 if (_settings.Cameras[index] != updated.Cameras[index]) _tiles[index].Apply(updated.Cameras[index]);
+            var selectedCamera = Math.Max(0, SlotBox.SelectedIndex);
             _settings = updated;
+            SlotBox.ItemsSource = Enumerable.Range(1, _settings.CameraCount).ToArray();
+            SlotBox.SelectedIndex = Math.Min(selectedCamera, _settings.CameraCount - 1);
             SyncAdditionalOverlays();
             ApplyWallLayout();
             ApplyOverlays();
