@@ -3,12 +3,12 @@
 In Overlays, open Doorbell or Garage and select **Choose or draw shape** under Appearance.
 
 - Choose rectangle, square, rounded rectangle, rounded square, circle, oval, triangle, diamond, or hexagon.
-- Select **Draw outline**, then drag one continuous outline over the camera snapshot. Releasing closes the shape. Mouse, pen, and touch are supported.
+- Select **Draw outline**, then drag one continuous outline over the background camera snapshot. Releasing closes the shape. Mouse, pen, and touch are supported.
 - Adjust **Smoothing** from 0 to 100%. Smoothing always uses the original stroke during this editing session. After saving and reloading, the resulting SVG outline is retained; the original mouse samples are not stored.
 - **Undo** restores the previous shape choice or stroke. **Cancel** leaves the overlay unchanged.
 - **Use shape** updates the unsaved wall preview. **Save overlay** applies it to the viewer.
 
-The drawing preview uses the current viewport aspect ratio, video zoom, and image position. Drawn coordinates preserve their placement within that viewport, including space outside the outline. Drawing is one closed contour; uploaded SVG remains available for complex masks and holes. Existing SVG masks display in the editor with their rotation; drawing a replacement starts unrotated.
+The drawing preview shows the background camera selected in Show over, using the same 16:9 framing as Wall preview. Drawing automatically sets the overlay width, height, and position to enclose the outline; the saved custom viewBox preserves its exact location on that background. The overlay camera is composited inside the outline with its existing zoom, image position, and opacity. The existing 10–95% viewport size limits still apply. Drawing is one closed contour; uploaded SVG remains available for complex masks and holes. Existing SVG masks display in the editor with their rotation; drawing a replacement starts unrotated.
 
 All existing viewport sizing, position, opacity, rotation for custom masks, framing, and SVG upload controls remain. Rounded square creates a custom rounded mask and adjusts the initial dimensions to a square; independent width/height controls can subsequently stretch it. Other custom presets use the current width and height.
 

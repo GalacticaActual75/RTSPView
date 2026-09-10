@@ -24,3 +24,16 @@ assert.ok(!/NaN/.test(context.outline([{x:0,y:0},{x:10,y:0},{x:0,y:10}],100)));
 const extreme=Array.from({length:2000},(_,i)=>({x:i%2?1000:0,y:i%3?1000:0}));
 assert.ok(context.outline(extreme,100).length<65536,'Long strokes remain within mask storage limits');
 console.log('Shape editor checks passed: smoothing, closed paths, bounds, degenerate strokes, storage limits.');
+vm.runInContext('this.placement=viewportShapeEditor.placement;',context);
+for(const raw of [[{x:610,y:420},{x:860,y:730}],[{x:0,y:0},{x:30,y:30}],[{x:970,y:970},{x:1000,y:1000}]]){
+ const p=context.placement(raw);assert.ok(p);
+ for(const point of raw){
+  const localX=(point.x-p.x)/(p.width*10),localY=(point.y-p.y)/(p.height*10);
+  assert.ok(localX>=0&&localX<=1&&localY>=0&&localY<=1);
+  const wallX=(1000-p.width*10)*p.horizontal/100+localX*p.width*10;
+  const wallY=(1000-p.height*10)*p.vertical/100+localY*p.height*10;
+  assert.ok(Math.abs(wallX-point.x)<.001&&Math.abs(wallY-point.y)<.001,'Saved mask stays at the drawn background location');
+ }
+}
+assert.equal(context.placement([{x:0,y:0},{x:1000,y:1000}]),null);
+console.log('Background drawing placement checks passed.');
