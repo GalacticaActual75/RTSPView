@@ -45,6 +45,10 @@ public sealed class JsonSettingsStore
         {
             Cameras = normalized.Cameras.Select(camera => camera with { RtspUrl = RtspUrlSanitizer.RemoveCredentials(camera.RtspUrl) }).ToArray(),
             Camera = normalized.Camera with { RtspUrl = RtspUrlSanitizer.RemoveCredentials(normalized.Camera.RtspUrl) },
+            AdditionalOverlays = normalized.AdditionalOverlays.Select(overlay => overlay with
+            {
+                Camera = overlay.Camera with { RtspUrl = RtspUrlSanitizer.RemoveCredentials(overlay.Camera.RtspUrl) }
+            }).ToArray(),
             DoorbellOverlay = normalized.DoorbellOverlay with
             {
                 Camera = normalized.DoorbellOverlay.Camera with
@@ -104,6 +108,9 @@ public sealed class JsonSettingsStore
 
     private static AppSettings Validate(AppSettings settings)
     {
+        if (settings.AdditionalOverlays is null || settings.AdditionalOverlays.Count > AppSettings.MaximumAdditionalOverlays ||
+            settings.AdditionalOverlays.Any(overlay => overlay is null))
+            throw new InvalidDataException("Configuration supports up to 16 overlays and cannot contain empty overlay entries.");
         if (settings.SchemaVersion > AppSettings.CurrentSchemaVersion)
             throw new InvalidDataException($"Configuration schema {settings.SchemaVersion} is newer than this application supports.");
         var normalized = settings.Normalize();
@@ -113,6 +120,7 @@ public sealed class JsonSettingsStore
         }
         ValidateCameraUrl(normalized.DoorbellOverlay.Camera, "Doorbell");
         ValidateCameraUrl(normalized.GarageOverlay.Camera, "Garage");
+        foreach (var overlay in normalized.AdditionalOverlays) ValidateCameraUrl(overlay.Camera, overlay.Camera.Name);
         return normalized;
     }
 

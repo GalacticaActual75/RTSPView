@@ -32,6 +32,38 @@ public partial class MainWindow : Window
     private CameraTile[] _allTiles = [];
     private Window? _doorbellWindow;
     private Window? _garageWindow;
+    private readonly Dictionary<int, (CameraTile Tile, Window Window, CameraSettings Camera)> _additionalOverlays = new();
+
+    private void SyncAdditionalOverlays()
+    {
+        var wanted = _settings.AdditionalOverlays.Select(overlay => overlay.Camera.Slot).ToHashSet();
+        foreach (var slot in _additionalOverlays.Keys.Where(slot => !wanted.Contains(slot)).ToArray())
+        {
+            var removed = _additionalOverlays[slot];
+            HideOverlayWindowHierarchy(removed.Window, removed.Tile);
+            removed.Tile.PointerActivity -= Tile_PointerActivity;
+            removed.Tile.Dispose();
+            removed.Window.Content = null;
+            removed.Window.Close();
+            _additionalOverlays.Remove(slot);
+        }
+        foreach (var overlay in _settings.AdditionalOverlays)
+        {
+            var camera = overlay.Camera;
+            if (!_additionalOverlays.TryGetValue(camera.Slot, out var entry))
+            {
+                var tile = new CameraTile();
+                tile.PointerActivity += Tile_PointerActivity;
+                var window = CreateOverlayWindow(camera.Name, tile);
+                tile.Initialize(_libVlc, _logger, camera, _settings.RequestHardwareDecoding, compositedVideo: true);
+                entry = (tile, window, camera);
+            }
+            else if (entry.Camera != camera) entry.Tile.Apply(camera);
+            entry.Window.Title = $"SpotMonitor {camera.Name} Overlay";
+            _additionalOverlays[camera.Slot] = (entry.Tile, entry.Window, camera);
+        }
+        _allTiles = [.. _tiles, DoorbellTile, GarageTile, .. _additionalOverlays.OrderBy(item => item.Key).Select(item => item.Value.Tile)];
+    }
     private bool _overlayLayoutQueued;
     private AppSettings _settings = new();
     private string _hardwareDecoder = "HW requested";
@@ -92,7 +124,7 @@ public partial class MainWindow : Window
         {
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
-            if (_settings.DoorbellOverlay.Camera.Enabled || _settings.GarageOverlay.Camera.Enabled)
+            if (_settings.AllOverlays().Any(overlay => overlay.Camera.Enabled))
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick(_hardwareDecoder);
@@ -135,6 +167,7 @@ public partial class MainWindow : Window
         for (var index = 0; index < 9; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
         DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding, compositedVideo: true);
         GarageTile.Initialize(_libVlc, _logger, _settings.GarageOverlay.Camera, _settings.RequestHardwareDecoding, compositedVideo: true);
+        SyncAdditionalOverlays();
         ApplyOverlays();
         ApplyOverlayPreferences();
         LoadEditor(0);
@@ -355,6 +388,7 @@ public partial class MainWindow : Window
     {
         HideOverlayWindowHierarchy(_doorbellWindow, DoorbellTile);
         HideOverlayWindowHierarchy(_garageWindow, GarageTile);
+        foreach (var entry in _additionalOverlays.Values) HideOverlayWindowHierarchy(entry.Window, entry.Tile);
     }
 
     private static void HideOverlayWindowHierarchy(Window? overlayWindow, CameraTile overlayTile)
@@ -382,6 +416,9 @@ public partial class MainWindow : Window
     {
         UpdateOverlayWindowLayout(_doorbellWindow, DoorbellTile, _settings.DoorbellOverlay);
         UpdateOverlayWindowLayout(_garageWindow, GarageTile, _settings.GarageOverlay);
+        foreach (var overlay in _settings.AdditionalOverlays)
+            if (_additionalOverlays.TryGetValue(overlay.Camera.Slot, out var entry))
+                UpdateOverlayWindowLayout(entry.Window, entry.Tile, overlay);
         PlaceHostRestartButtons();
     }
 
@@ -519,7 +556,7 @@ public partial class MainWindow : Window
     private void PlaceHostRestartButtons()
     {
         if (_tiles.Length != 9) return;
-        var overlays = new[] { _settings.DoorbellOverlay, _settings.GarageOverlay };
+        var overlays = _settings.AllOverlays().ToArray();
         for (var index = 0; index < _tiles.Length; index++)
         {
             var target = _tiles[index];
@@ -535,6 +572,11 @@ public partial class MainWindow : Window
         DoorbellTile.SetRestartButtonCompact(false);
         GarageTile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
         GarageTile.SetRestartButtonCompact(false);
+        foreach (var entry in _additionalOverlays.Values)
+        {
+            entry.Tile.SetRestartButtonPlacement(RestartButtonPlacement.Center);
+            entry.Tile.SetRestartButtonCompact(false);
+        }
     }
 
     private static void PlaceHostRestartButton(CameraTile target, IReadOnlyList<Rect> overlayBounds)
@@ -607,6 +649,7 @@ public partial class MainWindow : Window
         Topmost = _settings.KeepViewerAlwaysOnTop;
         if (_doorbellWindow is not null) _doorbellWindow.Topmost = false;
         if (_garageWindow is not null) _garageWindow.Topmost = false;
+        foreach (var entry in _additionalOverlays.Values) entry.Window.Topmost = false;
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
         SetWindowPos(handle, _settings.KeepViewerAlwaysOnTop ? HwndTopmost : HwndNotTopmost, 0, 0, 0, 0,
@@ -615,6 +658,7 @@ public partial class MainWindow : Window
         {
             BringOverlayWindowToFront(_doorbellWindow);
             BringOverlayWindowToFront(_garageWindow);
+            foreach (var entry in _additionalOverlays.Values) BringOverlayWindowToFront(entry.Window);
         }
         else
             HideOverlayWindows();
@@ -720,13 +764,13 @@ public partial class MainWindow : Window
     {
         switch (command.Type)
         {
-            case ViewerCommandType.RestartCamera when command.Slot is >= 1 and <= 11 && command.Slot.Value <= _allTiles.Length:
+            case ViewerCommandType.RestartCamera when command.Slot is >= 1 and <= AppSettings.MaximumStreamSlot && command.Slot.Value <= _allTiles.Length:
                 _allTiles[command.Slot.Value - 1].Start();
-                var streamName = command.Slot switch { 10 => "Doorbell", 11 => "Garage", _ => $"Camera {command.Slot}" };
+                var streamName = _allTiles[command.Slot.Value - 1].GetTelemetry().Name;
                 _logger.Write("INFO", $"Remote command: restarted {streamName}");
                 return new ViewerCommandResult(command.Id, true, $"{streamName} restarted.");
-            case ViewerCommandType.CaptureCameraSnapshot when command.Slot is >= 1 and <= 11 && command.Slot.Value <= _allTiles.Length:
-                var snapshotName = command.Slot switch { 10 => "Doorbell", 11 => "Garage", _ => $"Camera {command.Slot}" };
+            case ViewerCommandType.CaptureCameraSnapshot when command.Slot is >= 1 and <= AppSettings.MaximumStreamSlot && command.Slot.Value <= _allTiles.Length:
+                var snapshotName = _allTiles[command.Slot.Value - 1].GetTelemetry().Name;
                 var captured = await _allTiles[command.Slot.Value - 1].RefreshSnapshotAsync();
                 _logger.Write(captured ? "INFO" : "WARNING", $"Remote command: {snapshotName} snapshot {(captured ? "refreshed" : "failed")}");
                 return new ViewerCommandResult(command.Id, captured,
@@ -766,6 +810,7 @@ public partial class MainWindow : Window
         var dialog = new ConfigurationWindow(_settings, _settingsStore) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         _settings = dialog.Settings.Normalize();
+        SyncAdditionalOverlays();
         _settingsLastWriteUtc = File.GetLastWriteTimeUtc(_settingsPath);
         for (var index = 0; index < _tiles.Length; index++) _tiles[index].Apply(_settings.Cameras[index]);
         ApplyOverlays();
@@ -790,6 +835,7 @@ public partial class MainWindow : Window
             for (var index = 0; index < _tiles.Length; index++)
                 if (_settings.Cameras[index] != updated.Cameras[index]) _tiles[index].Apply(updated.Cameras[index]);
             _settings = updated;
+            SyncAdditionalOverlays();
             ApplyOverlays();
             if (previousDoorbell != updated.DoorbellOverlay.Camera)
                 DoorbellTile.Apply(updated.DoorbellOverlay.Camera);
@@ -817,6 +863,12 @@ public partial class MainWindow : Window
         _cursorTimer.Stop();
         Mouse.OverrideCursor = null;
         foreach (var tile in _allTiles) tile.Dispose();
+        foreach (var entry in _additionalOverlays.Values)
+        {
+            entry.Window.Content = null;
+            entry.Window.Close();
+        }
+        _additionalOverlays.Clear();
         if (_doorbellWindow is not null)
         {
             _doorbellWindow.Content = null;

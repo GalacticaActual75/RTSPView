@@ -201,15 +201,52 @@ app.MapPost("/api/config/import", async (HttpContext context) =>
 }).RequireAuthorization();
 app.MapGet("/api/cameras/{slot:int}/thumbnail", (int slot) =>
 {
-    if (slot is < 1 or > 11) return Results.BadRequest(new { error = "Stream slot must be between 1 and 11." });
+    if (slot is < 1 or > AppSettings.MaximumStreamSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
     var path = Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg");
     return File.Exists(path) ? Results.File(path, "image/jpeg") : Results.NotFound(new { error = "No thumbnail has been captured yet." });
 }).RequireAuthorization();
 app.MapPost("/api/cameras/{slot:int}/thumbnail/refresh", async (int slot, CancellationToken cancellationToken) =>
 {
-    if (slot is < 1 or > 11) return Results.BadRequest(new { error = "Stream slot must be between 1 and 11." });
+    if (slot is < 1 or > AppSettings.MaximumStreamSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
     var result = await viewerCommands.SendAsync(ViewerCommandType.CaptureCameraSnapshot, slot, cancellationToken);
     return CommandResult(result);
+}).RequireAuthorization();
+
+app.MapPost("/api/overlays", async () =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        var settings = await settingsStore.LoadAsync();
+        if (settings.AdditionalOverlays.Count >= AppSettings.MaximumAdditionalOverlays)
+            return Results.BadRequest(new { error = "A maximum of 16 overlays is supported." });
+        var count = settings.AdditionalOverlays.Count;
+        var overlay = new DoorbellOverlaySettings { Camera = new CameraSettings { Slot = count + 12, Name = $"Overlay {count + 3}", Enabled = false } };
+        var updated = (settings with { AdditionalOverlays = settings.AdditionalOverlays.Append(overlay).ToArray() }).Normalize();
+        await settingsStore.SaveAsync(updated);
+        auditLog.Write("AUDIT", $"Overlay added from web admin: slot {count + 12}");
+        return Results.Ok(updated.AdditionalOverlays.Last());
+    }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
+
+app.MapPut("/api/overlays/{slot:int}", async (int slot, DoorbellOverlaySettings overlay) =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        var settings = await settingsStore.LoadAsync();
+        var index = slot - 12;
+        if (index < 0 || index >= settings.AdditionalOverlays.Count) return Results.NotFound(new { error = "Overlay no longer exists. Reload the page." });
+        var overlays = settings.AdditionalOverlays.ToArray();
+        overlays[index] = overlay with { Camera = (overlay.Camera ?? new CameraSettings()) with { Slot = slot } };
+        var updated = (settings with { AdditionalOverlays = overlays }).Normalize();
+        await settingsStore.SaveAsync(updated);
+        auditLog.Write("AUDIT", $"Overlay changed from web admin: slot {slot}");
+        return Results.Ok(updated.AdditionalOverlays[index]);
+    }
+    catch (InvalidDataException exception) { return Results.BadRequest(new { error = exception.Message }); }
+    finally { configGate.Release(); }
 }).RequireAuthorization();
 
 app.MapPut("/api/doorbell", async (DoorbellOverlaySettings overlay) =>
@@ -311,7 +348,7 @@ app.MapPost("/api/cameras/reorder", async (CameraReorderRequest request) =>
 
 app.MapPost("/api/control/cameras/{slot:int}/restart", async (int slot, CancellationToken cancellationToken) =>
 {
-    if (slot is < 1 or > 11) return Results.BadRequest(new { error = "Stream slot must be between 1 and 11." });
+    if (slot is < 1 or > AppSettings.MaximumStreamSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
     var result = await viewerCommands.SendAsync(ViewerCommandType.RestartCamera, slot, cancellationToken);
     auditLog.Write("AUDIT", $"Remote camera {slot} restart requested: {result.Message}");
     return CommandResult(result);

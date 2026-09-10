@@ -65,7 +65,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #8e
 .toggle-control input:checked+.toggle-track:after{transform:translateX(18px)}
 .toggle-control input:focus-visible+.toggle-track{outline:2px solid #8ec2ff;outline-offset:3px}
 .toggle-control input:disabled+.toggle-track{opacity:.5}
-.overlay-nav{display:flex;gap:8px;margin:20px 0}.overlay-nav button{background:#202a38;color:var(--muted)}.overlay-nav button[aria-pressed=true]{background:#2b8cff;color:white}
+.overlay-nav{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}.overlay-nav button{background:#202a38;color:var(--muted)}.overlay-nav button[aria-pressed=true]{background:#2b8cff;color:white}
 .doorbell-grid{grid-template-columns:minmax(340px,400px) minmax(0,1fr);gap:24px}
 .doorbell-preview-panel{top:calc(var(--admin-header-height,60px) + 16px)}.doorbell-preview-head{display:block}.doorbell-preview-actions{margin-top:14px;justify-content:space-between;flex-wrap:wrap}.preview-mode-switch{flex-wrap:wrap}.preview-mode-switch button{white-space:nowrap}
 .doorbell-preview-stage{width:min(100%,max(280px,calc((100dvh - 290px) * 16 / 9)));margin-inline:auto}

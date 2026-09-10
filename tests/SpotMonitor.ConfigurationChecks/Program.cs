@@ -6,6 +6,33 @@ var root = Path.Combine(Path.GetTempPath(), "SpotMonitor-ConfigurationChecks", G
 Directory.CreateDirectory(root);
 try
 {
+    var multiStore = new JsonSettingsStore(Path.Combine(root, "multiple-overlays.json"));
+    var multi = new AppSettings
+    {
+        AdditionalOverlays = Enumerable.Range(0, AppSettings.MaximumAdditionalOverlays).Select(index => new DoorbellOverlaySettings
+        {
+            Camera = new CameraSettings { Slot = 999, Name = $"Extra {index}", Enabled = true, RtspUrl = "rtsp://extra:private@example.test/stream" },
+            HostCameraSlot = index % 9 + 1, ViewportShape = DoorbellViewportShape.Custom,
+            CustomViewportPathData = "M0 0 L1000 0 L500 1000 Z", CustomViewportViewBoxWidth = 1000, CustomViewportViewBoxHeight = 1000,
+            ViewportOpacityPercent = 60
+        }).ToArray()
+    };
+    await multiStore.SaveAsync(multi);
+    var multiLoaded = await multiStore.LoadAsync();
+    Check(multiLoaded.AllOverlays().Count() == 16 && multiLoaded.AdditionalOverlays.Last().Camera.Slot == AppSettings.MaximumStreamSlot, "added overlay slots are unique and persistent");
+    Check(multiLoaded.DoorbellOverlay.Camera.Slot == 10 && multiLoaded.GarageOverlay.Camera.Slot == 11, "existing overlays retain identities");
+    var multiImported = JsonSettingsStore.ParseImport(System.Text.Json.JsonSerializer.Serialize(multiLoaded));
+    Check(multiImported.AdditionalOverlays[0].ViewportShape == DoorbellViewportShape.Custom && multiImported.AdditionalOverlays[0].ViewportOpacityPercent == 60, "added masks and opacity survive import");
+    var sanitizedMultiPath = Path.Combine(root, "multiple-sanitized.json");
+    await multiStore.ExportWithoutCredentialsAsync(multiLoaded, sanitizedMultiPath);
+    Check(!(await File.ReadAllTextAsync(sanitizedMultiPath)).Contains("extra:private"), "added overlay credentials removed from sanitized export");
+    Check(JsonSettingsStore.ParseImport("{\"SchemaVersion\":14,\"Cameras\":[]}").AdditionalOverlays.Count == 0, "legacy configuration remains compatible");
+    foreach (var invalidMulti in new[] { multi with { AdditionalOverlays = multi.AdditionalOverlays.Append(new DoorbellOverlaySettings()).ToArray() }, multi with { AdditionalOverlays = [new DoorbellOverlaySettings { Camera = new CameraSettings { RtspUrl = "https://invalid.test" } }] } })
+    {
+        var rejected = false;
+        try { await multiStore.SaveAsync(invalidMulti); } catch (InvalidDataException) { rejected = true; }
+        Check(rejected && (await multiStore.LoadAsync()).AdditionalOverlays.Count == 14, "invalid added overlays cannot overwrite stored configuration");
+    }
     var betaInstalled = UpdateRelease.Parse("1.0.29-beta.8");
     var stableCurrent = UpdateRelease.Parse("1.0.29");
     Check(UpdateRelease.CanInstall(betaInstalled, stableCurrent, "stable"), "beta to same-base stable is offered");

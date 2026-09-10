@@ -44,17 +44,15 @@ const adminLayout = (() => {
     const overlayNav = document.createElement('nav'); overlayNav.className = 'overlay-nav'; overlayNav.setAttribute('aria-label','Select overlay');
     for (const [id, title] of [['doorbell','Doorbell'],['garage','Garage']]) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
-      button.onclick = () => {
-        for (const name of ['doorbell','garage']) document.querySelector('#' + name).hidden = name !== id;
-        for (const item of overlayNav.children) item.setAttribute('aria-pressed', String(item === button));
-        window.dispatchEvent(new Event('resize'));
-      };
+      button.dataset.overlayTarget = id; button.onclick = () => selectOverlay(id);
       button.setAttribute('aria-pressed', String(id === 'doorbell')); overlayNav.append(button);
-      const grid = document.querySelector('#' + id); grid.previousElementSibling.remove(); grid.hidden = id !== 'doorbell'; pages.overlays.append(grid);
+      const grid = document.querySelector('#' + id); grid.classList.add('overlay-workspace');grid.previousElementSibling.remove(); grid.hidden = id !== 'doorbell'; pages.overlays.append(grid);
     }
     const overlayHead = document.createElement('div'); overlayHead.className = 'section-title';
     overlayHead.innerHTML = '<p>Adjust the preview, then save to apply changes to the camera wall.</p>';
     pages.overlays.prepend(overlayHead, overlayNav);
+    const add = document.createElement('button');add.type='button';add.id='addOverlay';add.textContent='+';add.setAttribute('aria-label','Add overlay');add.title='Add overlay';add.onclick=()=>addOverlay();overlayNav.append(add);
+    const addState=document.createElement('p');addState.id='addOverlayState';addState.setAttribute('role','status');overlayHead.append(addState);
     const viewer = document.querySelector('.viewer-display-panel'), display = document.querySelector('#displayForm'), updates = document.querySelector('#updatePanel');
     display.className = 'panel control-panel'; updates.className = 'panel control-panel';
     const channelSettings = document.createElement('div'); channelSettings.className = 'update-channel-settings';
@@ -186,5 +184,17 @@ const adminLayout = (() => {
     badge.classList.toggle('stable', !beta);
     document.title = beta ? 'SpotMonitor Beta Admin' : 'SpotMonitor Admin';
   }
-  return {init, metrics, card, release};
+  function selectOverlay(id) {
+    for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))grid.hidden=grid.id!==id;
+    for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))button.setAttribute('aria-pressed',String(button.dataset.overlayTarget===id));
+    window.dispatchEvent(new Event('resize'));
+  }
+  function overlayGrid(id,title) {
+    let grid=document.getElementById(id);
+    if(!grid){grid=document.createElement('div');grid.id=id;grid.className='camera-grid doorbell-grid overlay-workspace';grid.hidden=true;pages.overlays.append(grid);const button=document.createElement('button');button.type='button';button.dataset.overlayTarget=id;button.onclick=()=>selectOverlay(id);button.setAttribute('aria-pressed','false');document.getElementById('addOverlay').before(button)}
+    pages.overlays.querySelector(`[data-overlay-target="${id}"]`).textContent=title;
+    return grid;
+  }
+  function clearExtraOverlays(){for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))if(!['doorbell','garage'].includes(grid.id))grid.remove();for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))if(!['doorbell','garage'].includes(button.dataset.overlayTarget))button.remove();selectOverlay('doorbell')}
+  return {init, metrics, card, release, overlayGrid, selectOverlay, clearExtraOverlays};
 })();

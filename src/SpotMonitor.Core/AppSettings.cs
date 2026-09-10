@@ -9,6 +9,10 @@ public sealed record AppSettings
     public IReadOnlyList<CameraSettings> Cameras { get; init; } = CreateCameraSlots();
     public DoorbellOverlaySettings DoorbellOverlay { get; init; } = new();
     public DoorbellOverlaySettings GarageOverlay { get; init; } = CreateGarageOverlay();
+    public const int MaximumAdditionalOverlays = 14;
+    public const int MaximumStreamSlot = 11 + MaximumAdditionalOverlays;
+    public IReadOnlyList<DoorbellOverlaySettings> AdditionalOverlays { get; init; } = [];
+    public IEnumerable<DoorbellOverlaySettings> AllOverlays() => new[] { DoorbellOverlay, GarageOverlay }.Concat(AdditionalOverlays);
     public bool RequestHardwareDecoding { get; init; } = true;
     public bool StartFullScreen { get; init; } = true;
     public int PreferredMonitor { get; init; }
@@ -62,6 +66,8 @@ public sealed record AppSettings
             Cameras = normalized,
             DoorbellOverlay = overlay,
             GarageOverlay = garageOverlay,
+            AdditionalOverlays = (AdditionalOverlays ?? []).Take(MaximumAdditionalOverlays)
+                .Select((item, index) => NormalizeOverlay(item ?? new(), index + 12, $"Overlay {index + 3}")).ToArray(),
             StartFullScreen = SchemaVersion < 3 || StartFullScreen,
             PreferredMonitor = Math.Max(0, PreferredMonitor),
             MouseCursorHideSeconds = Math.Clamp(MouseCursorHideSeconds, 1, 30)
