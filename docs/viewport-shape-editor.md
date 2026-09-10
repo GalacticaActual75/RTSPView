@@ -3,7 +3,8 @@
 In Overlays, open Doorbell or Garage and select **Choose or draw shape** under Appearance.
 
 - Choose rectangle, square, rounded rectangle, rounded square, circle, oval, triangle, diamond, or hexagon.
-- Select **Draw outline**, then drag one continuous outline over the background camera snapshot. Releasing closes the shape. Mouse, pen, and touch are supported.
+- Select **Free draw**, then drag one continuous outline over the background camera snapshot. Releasing closes the shape. Mouse, pen, and touch are supported.
+- Select **Point outline** to click corners on the background camera. Click the green first point, **Close outline**, or press Enter to finish (at least three corners). **Undo**, Backspace, or Delete removes the last point while drawing; Escape cancels the unfinished outline. Point outlines start at 0% smoothing to retain exact corners, with optional smoothing afterward. Up to 256 corners are supported.
 - Adjust **Smoothing** from 0 to 100%. Smoothing always uses the original stroke during this editing session. After saving and reloading, the resulting SVG outline is retained; the original mouse samples are not stored.
 - **Undo** restores the previous shape choice or stroke. **Cancel** leaves the overlay unchanged.
 - **Use shape** updates the unsaved wall preview. **Save overlay** applies it to the viewer.

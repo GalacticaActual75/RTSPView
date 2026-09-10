@@ -39,16 +39,23 @@ const viewportShapeEditor = (() => {
     const horizontal=Math.round(left/(1000-width*10)*100),vertical=Math.round(top/(1000-height*10)*100);
     return {width,height,horizontal,vertical,x:(1000-width*10)*horizontal/100,y:(1000-height*10)*vertical/100};
   }
+  function pointOutline(points, smoothing) {
+    if(points.length<3)return '';
+    return Number(smoothing)===0?'M'+points.map(p=>`${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L')+' Z':outline(points,Number(smoothing));
+  }
   function open(form) {
     const dialog=document.createElement('dialog');dialog.className='shape-editor';
     dialog.setAttribute('aria-labelledby','shape-editor-title');
-    dialog.innerHTML=`<h2 id="shape-editor-title">Viewport shape</h2><p>Choose a shape, or draw where the overlay belongs on the background camera. The outline closes when you release.</p><div class="shape-presets"></div><div class="shape-tools"><button type="button" class="secondary" data-action="draw">Draw outline</button><button type="button" class="secondary" data-action="undo" disabled>Undo</button><label>Smoothing <input type="range" min="0" max="100" value="40" aria-label="Shape smoothing"><output>40%</output></label></div><canvas aria-label="Draw viewport outline over background camera"></canvas><p class="shape-message" role="status"></p><div class="shape-footer"><button type="button" class="secondary" data-action="cancel">Cancel</button><button type="button" data-action="apply" disabled>Use shape</button></div>`;
+    dialog.innerHTML=`<h2 id="shape-editor-title">Viewport shape</h2><p>Choose a shape, or draw where the overlay belongs on the background camera. Use Free draw to drag an outline, or Point outline to click its corners.</p><div class="shape-presets"></div><div class="shape-tools"><button type="button" class="secondary" data-action="draw">Draw outline</button><button type="button" class="secondary" data-action="undo" disabled>Undo</button><label>Smoothing <input type="range" min="0" max="100" value="40" aria-label="Shape smoothing"><output>40%</output></label></div><canvas aria-label="Draw viewport outline over background camera"></canvas><p class="shape-message" role="status"></p><div class="shape-footer"><button type="button" class="secondary" data-action="cancel">Cancel</button><button type="button" data-action="apply" disabled>Use shape</button></div>`;
     document.body.appendChild(dialog);
     const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),image=new Image(),overlayImage=new Image(),slider=dialog.querySelector('input'),message=dialog.querySelector('.shape-message'),apply=dialog.querySelector('[data-action=apply]'),undo=dialog.querySelector('[data-action=undo]');
     const num=(name,fallback)=>{const field=form.elements[name];return field&&field.value!==''&&Number.isFinite(Number(field.value))?Number(field.value):fallback};
     let aspect=16/9*num('viewportWidthPercent',50)/num('viewportHeightPercent',50);
     if([1,3].includes(num('viewportShape',0))) aspect=1;
-    let selected=null,raw=[],history=[],drawing=false,armed=false,path='';
+    let selected=null,raw=[],history=[],drawing=false,armed=false,path='',pointMode=false,hover=null;
+    const drawButton=dialog.querySelector('[data-action=draw]');drawButton.textContent='Free draw';
+    const pointButton=document.createElement('button');pointButton.type='button';pointButton.className='secondary';pointButton.textContent='Point outline';drawButton.after(pointButton);
+    const finishButton=document.createElement('button');finishButton.type='button';finishButton.className='secondary';finishButton.textContent='Close outline';finishButton.hidden=true;pointButton.after(finishButton);
     function resize(){canvas.width=1600;canvas.height=900;canvas.style.aspectRatio='16 / 9'}
     resize();
     function viewport(){
@@ -60,7 +67,7 @@ const viewportShapeEditor = (() => {
     function pathForSelection(){
       if(!selected) return '';
       if(selected.path) return selected.path;
-      if(selected.raw) return outline(selected.raw,Number(slider.value));
+      if(selected.raw) return selected.pointMode?pointOutline(selected.raw,slider.value):outline(selected.raw,Number(slider.value));
       if([3,4].includes(selected.id)) return 'M0 500 A500 500 0 1 0 1000 500 A500 500 0 1 0 0 500 Z';
       if(selected.id===2){const rx=220*Math.min(1,1/aspect),ry=220*Math.min(1,aspect);return `M${rx} 0 H${1000-rx} Q1000 0 1000 ${ry} V${1000-ry} Q1000 1000 ${1000-rx} 1000 H${rx} Q0 1000 0 ${1000-ry} V${ry} Q0 0 ${rx} 0 Z`}
       return 'M0 0 H1000 V1000 H0 Z';
@@ -79,23 +86,34 @@ const viewportShapeEditor = (() => {
         if(overlayImage.naturalWidth){ctx.save();ctx.clip(shape,'evenodd');ctx.globalAlpha=num('viewportOpacityPercent',100)/100;const scale=Math.max(box.width*1.6/overlayImage.naturalWidth,box.height*.9/overlayImage.naturalHeight)*num('zoomPercent',100)/100,w=box.width*1.6/scale,h=box.height*.9/scale;ctx.drawImage(overlayImage,(overlayImage.naturalWidth-w)*num('imageHorizontalPositionPercent',50)/100,(overlayImage.naturalHeight-h)*num('imageVerticalPositionPercent',50)/100,w,h,box.x,box.y,box.width,box.height);ctx.restore()}
         ctx.strokeStyle='#57bdff';ctx.lineWidth=3;ctx.stroke(shape);
       }
-      if(drawing&&raw.length){ctx.beginPath();raw.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.strokeStyle='#57bdff';ctx.lineWidth=4;ctx.stroke()}
-      ctx.restore();apply.disabled=!selected||!path||drawing;undo.disabled=!history.length;slider.disabled=!selected?.raw;
+      if((drawing||armed&&pointMode)&&raw.length){ctx.beginPath();raw.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.strokeStyle='#57bdff';ctx.lineWidth=4;ctx.stroke();if(pointMode){if(hover){ctx.setLineDash([8,6]);ctx.lineTo(hover.x,hover.y);ctx.stroke();ctx.setLineDash([])}raw.forEach((p,i)=>{ctx.beginPath();ctx.ellipse(p.x,p.y,5,9,0,0,Math.PI*2);ctx.fillStyle=i===0?'#38d6a4':'#57bdff';ctx.fill()})}}
+      ctx.restore();apply.disabled=!selected||!path||drawing||armed;undo.disabled=armed?raw.length===0:!history.length;slider.disabled=armed||!selected?.raw;
+      finishButton.hidden=!(armed&&pointMode);finishButton.disabled=raw.length<3;
+      drawButton.setAttribute('aria-pressed',String(armed&&!pointMode));pointButton.setAttribute('aria-pressed',String(armed&&pointMode));
     }
-    function remember(){history.push({selected,aspect});if(history.length>20)history.shift()}
+    function remember(){history.push({selected,aspect,smoothing:slider.value});if(history.length>20)history.shift()}
     for(const name of [...Object.keys(presets),...Object.keys(extra)]){
       const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=name;
-      button.onclick=()=>{remember();armed=false;selected=name in presets?{id:presets[name],name}:{id:5,path:extra[name],name};aspect=['Square','Circle','Rounded square'].includes(name)?1:16/9*num('viewportWidthPercent',50)/num('viewportHeightPercent',50);resize();message.textContent=`${name} selected. Sizing and framing remain available after applying.`;render()};dialog.querySelector('.shape-presets').appendChild(button);
+      button.onclick=()=>{remember();armed=false;drawing=false;raw=[];hover=null;selected=name in presets?{id:presets[name],name}:{id:5,path:extra[name],name};aspect=['Square','Circle','Rounded square'].includes(name)?1:16/9*num('viewportWidthPercent',50)/num('viewportHeightPercent',50);resize();message.textContent=`${name} selected. Sizing and framing remain available after applying.`;render()};dialog.querySelector('.shape-presets').appendChild(button);
     }
-    dialog.querySelector('[data-action=draw]').onclick=()=>{armed=true;message.textContent='Draw a closed outline with your mouse, pen, or finger. A new outline replaces the previous one.';canvas.focus();render()};
+    drawButton.onclick=()=>start(false);
+    pointButton.onclick=()=>start(true);
+    function start(points){armed=true;pointMode=points;drawing=false;raw=[];hover=null;message.textContent=points?'Click to add corners. Click the green first point, Close outline, or press Enter to finish. Undo / Backspace removes the last point; Escape cancels this outline.':'Draw a closed outline with your mouse, pen, or finger. Release to finish.';canvas.focus();render()}
     canvas.tabIndex=0;
     const point=e=>{const r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(1000,(e.clientX-r.left)/r.width*1000)),y:Math.max(0,Math.min(1000,(e.clientY-r.top)/r.height*1000))}};
-    canvas.onpointerdown=e=>{if(!armed||e.button!==0)return;drawing=true;raw=[point(e)];canvas.setPointerCapture(e.pointerId);render()};
-    canvas.onpointermove=e=>{if(!drawing)return;const p=point(e);if(Math.hypot(p.x-raw.at(-1).x,p.y-raw.at(-1).y)>3&&raw.length<2000){raw.push(p);render()}};
-    canvas.onpointerup=e=>{if(!drawing)return;drawing=false;armed=false;canvas.releasePointerCapture(e.pointerId);const xs=raw.map(p=>p.x),ys=raw.map(p=>p.y),area=Math.abs(raw.reduce((a,p,i)=>{const n=raw[(i+1)%raw.length];return a+p.x*n.y-n.x*p.y},0))/2;
-      if(raw.length<6||Math.max(...xs)-Math.min(...xs)<30||Math.max(...ys)-Math.min(...ys)<30||area<900){message.textContent='Draw a larger outline with some enclosed area.'}else if(!placement(raw)){message.textContent='Keep the outline within 95% of the background width and height, matching the viewport size limits.'}else{remember();selected={id:5,raw:[...raw],placement:placement(raw),name:'Drawn shape'};message.textContent='The overlay fills the area you drew on the background. Adjust smoothing, then Use shape to keep its size and position.'}render()};
+    canvas.onpointerdown=e=>{if(!armed||e.button!==0)return;canvas.focus();const p=point(e);if(pointMode){const rect=canvas.getBoundingClientRect();if(raw.length>=3&&Math.hypot((p.x-raw[0].x)*rect.width/1000,(p.y-raw[0].y)*rect.height/1000)<=12){finish();return}if(raw.length<256&&(!raw.length||Math.hypot(p.x-raw.at(-1).x,p.y-raw.at(-1).y)>3))raw.push(p);hover=null;message.textContent=`${raw.length} points. Add corners or close the outline (at least 3 points).`;render();return}drawing=true;raw=[p];canvas.setPointerCapture(e.pointerId);render()};
+    canvas.onpointermove=e=>{if(armed&&pointMode){hover=point(e);render();return}if(!drawing)return;const p=point(e);if(Math.hypot(p.x-raw.at(-1).x,p.y-raw.at(-1).y)>3&&raw.length<2000){raw.push(p);render()}};
+    canvas.onpointerleave=()=>{hover=null;if(pointMode)render()};
+    canvas.onpointerup=e=>{if(!drawing)return;drawing=false;canvas.releasePointerCapture(e.pointerId);finish()};
+    function finish(){
+      const xs=raw.map(p=>p.x),ys=raw.map(p=>p.y),area=Math.abs(raw.reduce((a,p,i)=>{const n=raw[(i+1)%raw.length];return a+p.x*n.y-n.x*p.y},0))/2;
+      if(raw.length<(pointMode?3:6)||Math.max(...xs)-Math.min(...xs)<30||Math.max(...ys)-Math.min(...ys)<30||area<900){message.textContent='Make a larger outline with some enclosed area.'}else if(!placement(raw)){message.textContent='Keep the outline within 95% of the background width and height, matching the viewport size limits.'}else{remember();selected={id:5,raw:[...raw],pointMode,placement:placement(raw),name:pointMode?'Point outline':'Drawn shape'};slider.value=pointMode?'0':'40';dialog.querySelector('output').textContent=slider.value+'%';armed=false;hover=null;message.textContent='The overlay fills your outline. Adjust smoothing, then Use shape to keep its size and position.'}if(!pointMode)armed=false;render();
+    }
+    finishButton.onclick=finish;
+    canvas.onkeydown=e=>{if(!armed)return;if(e.key==='Enter'&&pointMode){e.preventDefault();finish()}else if(['Backspace','Delete'].includes(e.key)&&pointMode){e.preventDefault();raw.pop();render()}};
+    dialog.addEventListener('cancel',e=>{if(armed){e.preventDefault();armed=false;drawing=false;raw=[];hover=null;message.textContent='Outline canceled. Your previous shape is unchanged.';render()}});
     canvas.onpointercancel=()=>{drawing=false;raw=[];render()};
-    undo.onclick=()=>{const previous=history.pop();if(previous){selected=previous.selected;aspect=previous.aspect;resize();render()}};
+    undo.onclick=()=>{if(armed){raw.pop();render();return}const previous=history.pop();if(previous){selected=previous.selected;aspect=previous.aspect;slider.value=previous.smoothing;dialog.querySelector('output').textContent=slider.value+'%';resize();render()}};
     slider.oninput=()=>{dialog.querySelector('output').textContent=slider.value+'%';render()};
     const close=()=>dialog.close();dialog.querySelector('[data-action=cancel]').onclick=close;
     dialog.addEventListener('close',()=>{image.onload=null;image.onerror=null;overlayImage.onload=null;overlayImage.onerror=null;dialog.remove();form.querySelector('.open-shape-editor')?.focus()},{once:true});
@@ -115,5 +133,5 @@ const viewportShapeEditor = (() => {
     image.onload=render;image.onerror=()=>{message.textContent='Background camera snapshot unavailable. Check the camera selected in Show over.'};image.src='/api/cameras/'+num('hostCameraSlot',2)+'/thumbnail?v='+Date.now();overlayImage.onload=render;overlayImage.src=form.querySelector('.feed-thumbnail').src;
     dialog.showModal();message.textContent='Draw where the overlay should appear on background Camera '+num('hostCameraSlot',2)+'. The outline sets its size and position.';render();
   }
-  return {open,outline,placement};
+  return {open,outline,placement,pointOutline};
 })();

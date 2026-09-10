@@ -37,3 +37,9 @@ for(const raw of [[{x:610,y:420},{x:860,y:730}],[{x:0,y:0},{x:30,y:30}],[{x:970,
 }
 assert.equal(context.placement([{x:0,y:0},{x:1000,y:1000}]),null);
 console.log('Background drawing placement checks passed.');
+vm.runInContext('this.pointOutline=viewportShapeEditor.pointOutline;',context);
+const triangle=[{x:100,y:100},{x:500,y:100},{x:300,y:600}];
+assert.equal(context.pointOutline(triangle,0),'M100.00 100.00 L500.00 100.00 L300.00 600.00 Z','Point mode retains exact corners without smoothing');
+assert.equal(context.pointOutline(triangle.slice(0,2),0),'');
+assert.ok(context.pointOutline(triangle,40).includes('Q'),'Point outlines support optional smoothing');
+console.log('Point outline checks passed.');
