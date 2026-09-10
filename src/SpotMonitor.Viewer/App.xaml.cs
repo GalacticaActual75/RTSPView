@@ -28,7 +28,7 @@ public partial class App : System.Windows.Application
             LibVLCSharp.Shared.Core.Initialize(Directory.Exists(bundledLibVlc) ? bundledLibVlc : null);
             await Dispatcher.Yield(DispatcherPriority.Background);
 
-            splash.SetStatus("Preparing nine independent camera players…");
+            splash.SetStatus("Preparing camera players…");
             var mainWindow = new MainWindow();
             MainWindow = mainWindow;
             mainWindow.ContentRendered += (_, _) => splash.Close();

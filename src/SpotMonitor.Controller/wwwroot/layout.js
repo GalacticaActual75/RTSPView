@@ -12,7 +12,7 @@ const adminLayout = (() => {
     banner.remove();
     document.querySelector('header .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
-    for (const [id, title] of Object.entries({overview:'Overview', cameras:'Cameras', overlays:'Overlays', system:'System'})) {
+    for (const [id, title] of Object.entries({overview:'Overview', cameras:'Cameras', layouts:'Layouts',overlays:'Overlays', system:'System'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
       button.dataset.page = id; button.onclick = () => select(id); nav.append(button);
       const page = document.createElement('section'); page.id = 'page-' + id; page.className = 'admin-page'; page.setAttribute('aria-label', title);
@@ -81,7 +81,7 @@ const adminLayout = (() => {
       button.setAttribute('aria-current', button.dataset.page === id ? 'page' : 'false');
     }
     if (id === 'overview' || id === 'cameras') pages[id].append(document.querySelector('#cameras'));
-    document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Cameras',overlays:'Overlays',system:'System'}[id];
+    document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Cameras',layouts:'Layouts',overlays:'Overlays',system:'System'}[id];
     window.dispatchEvent(new Event('resize'));
     window.scrollTo({top:0, behavior:'instant'});
     fitOverview();
@@ -123,7 +123,7 @@ const adminLayout = (() => {
     const settings = form.querySelector('.camera-settings');
     if (!overlayMode) {
       const open = document.createElement('button'); open.type = 'button'; open.className = 'overview-open';
-      const label = () => open.setAttribute('aria-label', `Configure ${form.elements.name.value}, position ${form.dataset.slot}`);
+      const label = () => open.setAttribute('aria-label', `Configure ${form.elements.name.value}`);
       label(); form.addEventListener('change', label);
       open.onclick = () => {
         select('cameras');

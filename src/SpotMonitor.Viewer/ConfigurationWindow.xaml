@@ -3,7 +3,7 @@
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
       <TextBlock Text="Camera slot" VerticalAlignment="Center" Margin="0,0,10,0"/>
-      <ComboBox x:Name="SlotBox" Width="90" Height="30" SelectionChanged="SlotBox_SelectionChanged"><ComboBoxItem>1</ComboBoxItem><ComboBoxItem>2</ComboBoxItem><ComboBoxItem>3</ComboBoxItem><ComboBoxItem>4</ComboBoxItem><ComboBoxItem>5</ComboBoxItem><ComboBoxItem>6</ComboBoxItem><ComboBoxItem>7</ComboBoxItem><ComboBoxItem>8</ComboBoxItem><ComboBoxItem>9</ComboBoxItem></ComboBox>
+      <ComboBox x:Name="SlotBox" Width="90" Height="30" SelectionChanged="SlotBox_SelectionChanged"></ComboBox>
       <CheckBox x:Name="EnabledBox" Content="Enabled" VerticalAlignment="Center" Margin="24,0,0,0"/>
     </StackPanel>
     <Grid Grid.Row="1">

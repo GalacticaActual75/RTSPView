@@ -32,6 +32,14 @@ public sealed class JsonSettingsStore
     {
         var normalized = Validate(settings);
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        // Keep the original file beyond the rolling .bak so schema-14 releases can be restored.
+        var migrationBackup = _path + ".before-layouts.json";
+        if (File.Exists(_path) && !File.Exists(migrationBackup))
+        {
+            using var original = JsonDocument.Parse(await File.ReadAllTextAsync(_path, cancellationToken));
+            if (original.RootElement.TryGetProperty("SchemaVersion", out var schema) && schema.GetInt32() < 15)
+                File.Copy(_path, migrationBackup, false);
+        }
         var temporary = _path + ".tmp";
         await WriteAsync(temporary, normalized, cancellationToken);
         if (File.Exists(_path)) File.Replace(temporary, _path, BackupPath, true);

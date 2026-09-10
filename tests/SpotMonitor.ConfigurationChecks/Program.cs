@@ -19,7 +19,7 @@ try
     };
     await multiStore.SaveAsync(multi);
     var multiLoaded = await multiStore.LoadAsync();
-    Check(multiLoaded.AllOverlays().Count() == 16 && multiLoaded.AdditionalOverlays.Last().Camera.Slot == AppSettings.MaximumStreamSlot, "added overlay slots are unique and persistent");
+    Check(multiLoaded.AllOverlays().Count() == 16 && multiLoaded.AdditionalOverlays.Last().Camera.Slot == 25, "added overlay slots are unique and persistent");
     Check(multiLoaded.DoorbellOverlay.Camera.Slot == 10 && multiLoaded.GarageOverlay.Camera.Slot == 11, "existing overlays retain identities");
     var multiImported = JsonSettingsStore.ParseImport(System.Text.Json.JsonSerializer.Serialize(multiLoaded));
     Check(multiImported.AdditionalOverlays[0].ViewportShape == DoorbellViewportShape.Custom && multiImported.AdditionalOverlays[0].ViewportOpacityPercent == 60, "added masks and opacity survive import");
@@ -32,6 +32,47 @@ try
         var rejected = false;
         try { await multiStore.SaveAsync(invalidMulti); } catch (InvalidDataException) { rejected = true; }
         Check(rejected && (await multiStore.LoadAsync()).AdditionalOverlays.Count == 14, "invalid added overlays cannot overwrite stored configuration");
+    }
+    var legacyWall = new AppSettings { SchemaVersion = 14, Cameras = Enumerable.Range(1, 9)
+        .Select(i => new CameraSettings { Slot = i, Name = $"Existing {i}", RtspUrl = $"rtsp://example.test/{i}" }).ToArray() }.Normalize();
+    Check(legacyWall.Cameras.Count == 16 && legacyWall.Layouts.Single().Tiles.Count == 9 && legacyWall.ActiveLayoutId == "default", "legacy wall migrates to Default 3x3 with room for 16 cameras");
+    Check(legacyWall.Cameras.Take(9).All(c => c.Name == $"Existing {c.Slot}" && c.RtspUrl == $"rtsp://example.test/{c.Slot}"), "layout migration preserves existing camera identities and URLs");
+    Check(legacyWall.Cameras.Skip(9).All(c => !c.Enabled && c.Slot > 11), "new main cameras are disabled and do not collide with overlays");
+    Check(!legacyWall.Cameras.Select(c => c.Slot).Intersect(multiLoaded.AllOverlays().Select(o => o.Camera.Slot)).Any(), "all sixteen overlay IDs stay separate from main cameras");
+    var migrationFile = Path.Combine(root, "legacy-wall.json");
+    const string originalWall = "{\"SchemaVersion\":14,\"Cameras\":[{\"Slot\":1,\"Name\":\"Original wall\"}]}";
+    await File.WriteAllTextAsync(migrationFile, originalWall);
+    var migrationStore = new JsonSettingsStore(migrationFile);
+    var migratedWall = await migrationStore.LoadAsync();
+    await migrationStore.SaveAsync(migratedWall);
+    await migrationStore.SaveAsync(migratedWall with { ShowCameraStats = false });
+    Check(await File.ReadAllTextAsync(migrationFile + ".before-layouts.json") == originalWall, "pre-layout backup survives subsequent saves for rollback");
+    var sixteen = new WallLayout { Id = "sixteen", Name = "All cameras", Rows = 4, Columns = 4,
+        Tiles = AppSettings.MainCameraSlots.Select((slot,i) => new WallTile { CameraSlot = slot, Row = i / 4, Column = i % 4 }).ToArray() };
+    var designed = (legacyWall with { Layouts = [new(), sixteen], ActiveLayoutId = sixteen.Id }).Normalize();
+    Check(designed.Layouts.Last().Tiles.Last().CameraSlot == 32 && designed.Cameras.SequenceEqual(legacyWall.Cameras), "4x4 layout uses independent camera references without changing streams");
+    var layoutStore = new JsonSettingsStore(Path.Combine(root, "layout-roundtrip.json"));
+    await layoutStore.SaveAsync(designed);
+    var reloadedLayouts = await layoutStore.LoadAsync();
+    Check(reloadedLayouts.ActiveLayoutId == "sixteen" && reloadedLayouts.Layouts.Last().Tiles.SequenceEqual(sixteen.Tiles), "saved layouts survive settings reload");
+    foreach (var invalidLayout in new[] {
+        sixteen with { Rows = 5 },
+        sixteen with { Tiles = [new() { CameraSlot = 10 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 2 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 1, Column = 1 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1, Row = int.MaxValue }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1, ColumnSpan = 5 }] },
+        sixteen with { Tiles = [] }, sixteen with { Tiles = null! } })
+    {
+        var rejectedLayout = false;
+        try { WallLayout.Validate([invalidLayout], invalidLayout.Id); } catch (InvalidDataException) { rejectedLayout = true; }
+        Check(rejectedLayout, "invalid layout rejected before persistence");
+    }
+    foreach (var invalidSet in new[] { new WallLayoutsRequest { Layouts = [sixteen], ActiveLayoutId = "missing" }, new WallLayoutsRequest { Layouts = [sixteen, sixteen], ActiveLayoutId = "sixteen" } })
+    {
+        var rejectedLayout = false;
+        try { WallLayout.Validate(invalidSet.Layouts, invalidSet.ActiveLayoutId); } catch (InvalidDataException) { rejectedLayout = true; }
+        Check(rejectedLayout, "missing active or duplicate layout IDs rejected");
     }
     var betaInstalled = UpdateRelease.Parse("1.0.29-beta.8");
     var stableCurrent = UpdateRelease.Parse("1.0.29");

@@ -305,44 +305,34 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
 }).RequireAuthorization();
 app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
 {
-    if (slot is < 1 or > 9 || camera.Slot != slot) return Results.BadRequest(new { error = "Camera slot must be between 1 and 9 and match the payload." });
+    if (!AppSettings.MainCameraSlots.Contains(slot) || camera.Slot != slot) return Results.BadRequest(new { error = "Choose a valid main camera ID matching the payload." });
     await configGate.WaitAsync();
     try
     {
         var settings = await settingsStore.LoadAsync();
         var cameras = settings.Cameras.ToArray();
-        cameras[slot - 1] = camera with { Slot = slot };
+        cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)] = camera with { Slot = slot };
         await settingsStore.SaveAsync(settings with { Cameras = cameras });
-        auditLog.Write("AUDIT", $"Camera {slot} configuration changed from web admin: {RtspUrlSanitizer.Redact(cameras[slot - 1].RtspUrl)}");
-        return Results.Ok(cameras[slot - 1]);
+        auditLog.Write("AUDIT", $"Camera {slot} configuration changed from web admin: {RtspUrlSanitizer.Redact(cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)].RtspUrl)}");
+        return Results.Ok(cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)]);
     }
     catch (InvalidDataException exception) { return Results.BadRequest(new { error = exception.Message }); }
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
-app.MapPost("/api/cameras/reorder", async (CameraReorderRequest request) =>
+app.MapPut("/api/layouts", async (WallLayoutsRequest request) =>
 {
-    if (request.FromSlot is < 1 or > 9 || request.ToSlot is < 1 or > 9)
-        return Results.BadRequest(new { error = "Camera positions must be between 1 and 9." });
-    if (request.FromSlot == request.ToSlot) return Results.Ok(new { message = "Camera is already in that position." });
     await configGate.WaitAsync();
     try
     {
+        WallLayout.Validate(request.Layouts, request.ActiveLayoutId);
         var settings = await settingsStore.LoadAsync();
-        var cameras = settings.Cameras.ToArray();
-        var sourceCamera = cameras[request.FromSlot - 1];
-        var destinationCamera = cameras[request.ToSlot - 1];
-        cameras[request.FromSlot - 1] = destinationCamera with { Slot = request.FromSlot };
-        cameras[request.ToSlot - 1] = sourceCamera with { Slot = request.ToSlot };
-        await settingsStore.SaveAsync(settings with { Cameras = cameras });
-        foreach (var slot in new[] { request.FromSlot, request.ToSlot })
-        {
-            var thumbnail = Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg");
-            if (File.Exists(thumbnail)) File.Delete(thumbnail);
-        }
-        auditLog.Write("AUDIT", $"Camera positions {request.FromSlot} and {request.ToSlot} swapped from web admin");
-        return Results.Ok(new { message = $"Camera {request.FromSlot} moved to position {request.ToSlot}; the previous camera was swapped back." });
+        var updated = settings with { Layouts = request.Layouts, ActiveLayoutId = request.ActiveLayoutId };
+        await settingsStore.SaveAsync(updated);
+        auditLog.Write("AUDIT", "Wall layouts saved from web admin");
+        return Results.Ok(new { updated.Layouts, updated.ActiveLayoutId });
     }
+    catch (InvalidDataException exception) { return Results.BadRequest(new { error = exception.Message }); }
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
@@ -450,7 +440,7 @@ sealed record ConfirmedAction(bool Confirmed);
 sealed record UpdateChannelRequest(string Channel);
 sealed record UpdateInstallRequest(bool Confirmed, string Channel, string Version);
 sealed record PasswordChangeRequest(string? CurrentPassword, string? NewPassword);
-sealed record CameraReorderRequest(int FromSlot, int ToSlot);
+
 
 sealed class FlexibleRtspTransportConverter : JsonConverter<RtspTransport>
 {

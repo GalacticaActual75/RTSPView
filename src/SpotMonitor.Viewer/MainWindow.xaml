@@ -1,17 +1,12 @@
-<Window x:Class="SpotMonitor.Viewer.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:SpotMonitor.Viewer" Title="SpotMonitor Beta — 3×3 Camera Wall" Width="1600" Height="950" MinWidth="900" MinHeight="600" Background="#050505" Foreground="White" WindowStartupLocation="Manual" MouseMove="Window_MouseMove">
+<Window x:Class="SpotMonitor.Viewer.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:SpotMonitor.Viewer" Title="SpotMonitor Beta — Camera Wall" Width="1600" Height="950" MinWidth="900" MinHeight="600" Background="#050505" Foreground="White" WindowStartupLocation="Manual" MouseMove="Window_MouseMove">
   <Grid>
     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <Grid x:Name="WallGrid" Background="Black">
-      <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-      <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-      <local:CameraTile x:Name="Tile1" Grid.Row="0" Grid.Column="0"/><local:CameraTile x:Name="Tile2" Grid.Row="0" Grid.Column="1"/><local:CameraTile x:Name="Tile3" Grid.Row="0" Grid.Column="2"/>
-      <local:CameraTile x:Name="Tile4" Grid.Row="1" Grid.Column="0"/><local:CameraTile x:Name="Tile5" Grid.Row="1" Grid.Column="1"/><local:CameraTile x:Name="Tile6" Grid.Row="1" Grid.Column="2"/>
-      <local:CameraTile x:Name="Tile7" Grid.Row="2" Grid.Column="0"/><local:CameraTile x:Name="Tile8" Grid.Row="2" Grid.Column="1"/><local:CameraTile x:Name="Tile9" Grid.Row="2" Grid.Column="2"/>
     </Grid>
     <Border x:Name="ControlBar" Grid.Row="1" Background="#15171A" Padding="12">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <TextBlock VerticalAlignment="Center" Text="Camera" Margin="0,0,8,0"/>
-        <ComboBox x:Name="SlotBox" Grid.Column="1" Width="65" Height="32" SelectedIndex="0" SelectionChanged="SlotBox_SelectionChanged"><ComboBoxItem>1</ComboBoxItem><ComboBoxItem>2</ComboBoxItem><ComboBoxItem>3</ComboBoxItem><ComboBoxItem>4</ComboBoxItem><ComboBoxItem>5</ComboBoxItem><ComboBoxItem>6</ComboBoxItem><ComboBoxItem>7</ComboBoxItem><ComboBoxItem>8</ComboBoxItem><ComboBoxItem>9</ComboBoxItem></ComboBox>
+        <ComboBox x:Name="SlotBox" Grid.Column="1" Width="65" Height="32" SelectedIndex="0" SelectionChanged="SlotBox_SelectionChanged"></ComboBox>
         <TextBox x:Name="UrlBox" Grid.Column="2" Height="32" Margin="10,0" Padding="8,5" Background="#24272B" Foreground="White" BorderBrush="#3B4046" ToolTip="RTSP URL"/>
         <ComboBox x:Name="TransportBox" Grid.Column="3" Width="90" Height="32" SelectedIndex="1"><ComboBoxItem>Auto</ComboBoxItem><ComboBoxItem>TCP</ComboBoxItem><ComboBoxItem>UDP</ComboBoxItem></ComboBox>
         <Button Grid.Column="4" Width="105" Height="32" Margin="10,0,0,0" Content="Save + Start" Click="SaveButton_Click" Background="#1976D2" Foreground="White" BorderThickness="0"/>

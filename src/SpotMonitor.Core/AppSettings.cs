@@ -2,7 +2,11 @@ namespace SpotMonitor.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 14;
+    public const int CurrentSchemaVersion = 15;
+    // IDs 10–25 remain reserved for existing overlay streams.
+    public static readonly int[] MainCameraSlots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
+    public IReadOnlyList<WallLayout> Layouts { get; init; } = [new()];
+    public string ActiveLayoutId { get; init; } = "default";
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
@@ -10,7 +14,7 @@ public sealed record AppSettings
     public DoorbellOverlaySettings DoorbellOverlay { get; init; } = new();
     public DoorbellOverlaySettings GarageOverlay { get; init; } = CreateGarageOverlay();
     public const int MaximumAdditionalOverlays = 14;
-    public const int MaximumStreamSlot = 11 + MaximumAdditionalOverlays;
+    public const int MaximumStreamSlot = 32;
     public IReadOnlyList<DoorbellOverlaySettings> AdditionalOverlays { get; init; } = [];
     public IEnumerable<DoorbellOverlaySettings> AllOverlays() => new[] { DoorbellOverlay, GarageOverlay }.Concat(AdditionalOverlays);
     public bool RequestHardwareDecoding { get; init; } = true;
@@ -23,7 +27,7 @@ public sealed record AppSettings
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
 
     public static IReadOnlyList<CameraSettings> CreateCameraSlots() =>
-        Enumerable.Range(1, 9).Select(slot => new CameraSettings { Slot = slot, Name = $"Camera {slot}" }).ToArray();
+        MainCameraSlots.Select((slot, index) => new CameraSettings { Slot = slot, Name = $"Camera {index + 1}", Enabled = index < 9 }).ToArray();
 
     public static CameraSettings CreateDoorbellCamera() => new()
     {
@@ -48,22 +52,27 @@ public sealed record AppSettings
     public AppSettings Normalize()
     {
         var normalized = CreateCameraSlots().ToArray();
-        foreach (var camera in Cameras.Take(9))
+        foreach (var camera in Cameras.Take(16))
         {
-            var index = camera.Slot is >= 1 and <= 9 ? camera.Slot - 1 : Array.IndexOf(Cameras.ToArray(), camera);
-            if (index is >= 0 and < 9) normalized[index] = camera with { Slot = index + 1 };
+            var index = MainCameraSlots.Contains(camera.Slot) ? Array.IndexOf(MainCameraSlots, camera.Slot) : Array.IndexOf(Cameras.ToArray(), camera);
+            if (index is >= 0 and < 16) normalized[index] = camera with { Slot = MainCameraSlots[index] };
         }
         if (normalized.All(camera => string.IsNullOrWhiteSpace(camera.RtspUrl)) && !string.IsNullOrWhiteSpace(Camera.RtspUrl))
             normalized[0] = Camera with { Slot = 1 };
         for (var index = 0; index < normalized.Length; index++)
-            normalized[index] = NormalizeCamera(normalized[index], index + 1, $"Camera {index + 1}");
+            normalized[index] = NormalizeCamera(normalized[index], MainCameraSlots[index], $"Camera {index + 1}");
 
         var overlay = NormalizeOverlay(DoorbellOverlay ?? new DoorbellOverlaySettings(), 10, "Doorbell");
         var garageOverlay = NormalizeOverlay(GarageOverlay ?? CreateGarageOverlay(), 11, "Garage");
+        var layouts = SchemaVersion < 15 ? new WallLayout[] { new() } : Layouts;
+        var activeId = SchemaVersion < 15 ? "default" : ActiveLayoutId;
+        WallLayout.Validate(layouts, activeId);
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
             Cameras = normalized,
+            Layouts = layouts,
+            ActiveLayoutId = activeId,
             DoorbellOverlay = overlay,
             GarageOverlay = garageOverlay,
             AdditionalOverlays = (AdditionalOverlays ?? []).Take(MaximumAdditionalOverlays)
@@ -99,7 +108,7 @@ public sealed record AppSettings
             : overlay.ViewportVerticalPositionPercent;
         return overlay with
         {
-            HostCameraSlot = Math.Clamp(overlay.HostCameraSlot, 1, 9),
+            HostCameraSlot = MainCameraSlots.Contains(overlay.HostCameraSlot) ? overlay.HostCameraSlot : 9,
             Position = position,
             SizePercent = Math.Clamp(overlay.SizePercent, 25, 90),
             ViewportWidthPercent = Math.Clamp(viewportWidthPercent, 10, 95),

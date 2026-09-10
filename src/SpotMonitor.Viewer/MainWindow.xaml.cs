@@ -143,7 +143,10 @@ public partial class MainWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         EnsureOverlayWindows();
-        _tiles = [Tile1, Tile2, Tile3, Tile4, Tile5, Tile6, Tile7, Tile8, Tile9];
+        _tiles = AppSettings.MainCameraSlots.Select(_ => new CameraTile()).ToArray();
+        foreach (var tile in _tiles) WallGrid.Children.Add(tile);
+        SlotBox.ItemsSource = Enumerable.Range(1, _tiles.Length).ToArray();
+        SlotBox.SelectedIndex = 0;
         _allTiles = [.. _tiles, DoorbellTile, GarageTile];
         foreach (var tile in _allTiles) tile.PointerActivity += Tile_PointerActivity;
         _settings = (await _settingsStore.LoadAsync()).Normalize();
@@ -153,7 +156,7 @@ public partial class MainWindow : Window
         if (commandLineUrl is not null)
         {
             var cameras = _settings.Cameras.ToArray();
-            var slots = fillAll ? Enumerable.Range(0, 9) : [0];
+            var slots = fillAll ? Enumerable.Range(0, _tiles.Length) : [0];
             foreach (var index in slots) cameras[index] = cameras[index] with { RtspUrl = commandLineUrl, Enabled = true };
             _settings = _settings with { Cameras = cameras };
         }
@@ -164,10 +167,11 @@ public partial class MainWindow : Window
             foreach (var (slot, url) in cameraArguments) cameras[slot - 1] = cameras[slot - 1] with { RtspUrl = url, Enabled = true };
             _settings = _settings with { Cameras = cameras };
         }
-        for (var index = 0; index < 9; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
+        for (var index = 0; index < _tiles.Length; index++) _tiles[index].Initialize(_libVlc, _logger, _settings.Cameras[index], _settings.RequestHardwareDecoding);
         DoorbellTile.Initialize(_libVlc, _logger, _settings.DoorbellOverlay.Camera, _settings.RequestHardwareDecoding, compositedVideo: true);
         GarageTile.Initialize(_libVlc, _logger, _settings.GarageOverlay.Camera, _settings.RequestHardwareDecoding, compositedVideo: true);
         SyncAdditionalOverlays();
+        ApplyWallLayout();
         ApplyOverlays();
         ApplyOverlayPreferences();
         LoadEditor(0);
@@ -176,6 +180,27 @@ public partial class MainWindow : Window
         SetFullScreen(_settings.StartFullScreen);
         _cursorTimer.Start();
         _diagnosticsTimer.Start();
+    }
+
+    private void ApplyWallLayout()
+    {
+        var layout = _settings.Layouts.Single(item => item.Id == _settings.ActiveLayoutId);
+        WallGrid.RowDefinitions.Clear();
+        WallGrid.ColumnDefinitions.Clear();
+        for (var row = 0; row < layout.Rows; row++) WallGrid.RowDefinitions.Add(new RowDefinition());
+        for (var column = 0; column < layout.Columns; column++) WallGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        for (var index = 0; index < _tiles.Length; index++)
+        {
+            var tile = _tiles[index];
+            var placement = layout.Tiles.FirstOrDefault(item => item.CameraSlot == AppSettings.MainCameraSlots[index]);
+            tile.Visibility = placement is null ? Visibility.Collapsed : Visibility.Visible;
+            if (placement is null) continue;
+            Grid.SetRow(tile, placement.Row);
+            Grid.SetColumn(tile, placement.Column);
+            Grid.SetRowSpan(tile, placement.RowSpan);
+            Grid.SetColumnSpan(tile, placement.ColumnSpan);
+        }
+        QueueOverlayLayouts();
     }
 
     private static string? ReadArgument(string name)
@@ -190,7 +215,7 @@ public partial class MainWindow : Window
     {
         var result = new Dictionary<int, string>();
         var arguments = Environment.GetCommandLineArgs();
-        for (var slot = 1; slot <= 9; slot++)
+        for (var slot = 1; slot <= AppSettings.MainCameraSlots.Length; slot++)
         {
             var name = $"--camera{slot}";
             for (var index = 1; index < arguments.Length - 1; index++)
@@ -201,7 +226,7 @@ public partial class MainWindow : Window
 
     private void SlotBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (IsLoaded) LoadEditor(Math.Max(0, SlotBox.SelectedIndex));
+        if (IsLoaded && SlotBox.SelectedIndex >= 0) LoadEditor(Math.Max(0, SlotBox.SelectedIndex));
     }
 
     private void LoadEditor(int index)
@@ -427,15 +452,19 @@ public partial class MainWindow : Window
         CameraTile overlayTile,
         DoorbellOverlaySettings overlay)
     {
-        if (overlayWindow is null || _tiles.Length != 9) return;
+        if (overlayWindow is null || _tiles.Length == 0) return;
         if (!overlay.Camera.Enabled || !CanDisplayOverlayWindows())
         {
             HideOverlayWindowHierarchy(overlayWindow, overlayTile);
             return;
         }
 
-        var target = _tiles[Math.Clamp(overlay.HostCameraSlot, 1, 9) - 1];
-        if (target.ActualWidth <= 0 || target.ActualHeight <= 0) return;
+        var target = _tiles[Array.IndexOf(AppSettings.MainCameraSlots, overlay.HostCameraSlot)];
+        if (!target.IsVisible || target.ActualWidth <= 0 || target.ActualHeight <= 0)
+        {
+            HideOverlayWindowHierarchy(overlayWindow, overlayTile);
+            return;
+        }
         System.Windows.Point screenOrigin;
         try { screenOrigin = target.PointToScreen(new System.Windows.Point(0, 0)); }
         catch (InvalidOperationException) { return; }
@@ -555,14 +584,14 @@ public partial class MainWindow : Window
 
     private void PlaceHostRestartButtons()
     {
-        if (_tiles.Length != 9) return;
+        if (_tiles.Length == 0) return;
         var overlays = _settings.AllOverlays().ToArray();
         for (var index = 0; index < _tiles.Length; index++)
         {
             var target = _tiles[index];
             target.SetRestartButtonPlacement(RestartButtonPlacement.Center);
             var overlayBounds = overlays
-                .Where(overlay => overlay.Camera.Enabled && overlay.HostCameraSlot == index + 1)
+                .Where(overlay => overlay.Camera.Enabled && overlay.HostCameraSlot == AppSettings.MainCameraSlots[index])
                 .Select(overlay => CalculateOverlayBounds(target, overlay))
                 .ToArray();
             target.SetRestartButtonCompact(overlayBounds.Length > 0);
@@ -762,16 +791,17 @@ public partial class MainWindow : Window
 
     private async Task<ViewerCommandResult> HandleCommandOnUiAsync(ViewerCommand command)
     {
+        var commandTile = _allTiles.FirstOrDefault(tile => tile.GetTelemetry().Slot == command.Slot);
         switch (command.Type)
         {
-            case ViewerCommandType.RestartCamera when command.Slot is >= 1 and <= AppSettings.MaximumStreamSlot && command.Slot.Value <= _allTiles.Length:
-                _allTiles[command.Slot.Value - 1].Start();
-                var streamName = _allTiles[command.Slot.Value - 1].GetTelemetry().Name;
+            case ViewerCommandType.RestartCamera when commandTile is not null:
+                commandTile.Start();
+                var streamName = commandTile.GetTelemetry().Name;
                 _logger.Write("INFO", $"Remote command: restarted {streamName}");
                 return new ViewerCommandResult(command.Id, true, $"{streamName} restarted.");
-            case ViewerCommandType.CaptureCameraSnapshot when command.Slot is >= 1 and <= AppSettings.MaximumStreamSlot && command.Slot.Value <= _allTiles.Length:
-                var snapshotName = _allTiles[command.Slot.Value - 1].GetTelemetry().Name;
-                var captured = await _allTiles[command.Slot.Value - 1].RefreshSnapshotAsync();
+            case ViewerCommandType.CaptureCameraSnapshot when commandTile is not null:
+                var snapshotName = commandTile.GetTelemetry().Name;
+                var captured = await commandTile.RefreshSnapshotAsync();
                 _logger.Write(captured ? "INFO" : "WARNING", $"Remote command: {snapshotName} snapshot {(captured ? "refreshed" : "failed")}");
                 return new ViewerCommandResult(command.Id, captured,
                     captured ? $"{snapshotName} snapshot refreshed." : $"{snapshotName} snapshot could not be captured.");
@@ -811,6 +841,7 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() != true) return;
         _settings = dialog.Settings.Normalize();
         SyncAdditionalOverlays();
+        ApplyWallLayout();
         _settingsLastWriteUtc = File.GetLastWriteTimeUtc(_settingsPath);
         for (var index = 0; index < _tiles.Length; index++) _tiles[index].Apply(_settings.Cameras[index]);
         ApplyOverlays();
@@ -836,6 +867,7 @@ public partial class MainWindow : Window
                 if (_settings.Cameras[index] != updated.Cameras[index]) _tiles[index].Apply(updated.Cameras[index]);
             _settings = updated;
             SyncAdditionalOverlays();
+            ApplyWallLayout();
             ApplyOverlays();
             if (previousDoorbell != updated.DoorbellOverlay.Camera)
                 DoorbellTile.Apply(updated.DoorbellOverlay.Camera);

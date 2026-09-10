@@ -23,6 +23,7 @@ public partial class ConfigurationWindow : Window
         InitializeComponent();
         _settings = settings.Normalize();
         _store = store;
+        SlotBox.ItemsSource = Enumerable.Range(1, _settings.Cameras.Count).ToArray();
         SlotBox.SelectedIndex = 0;
         LoadSlot(0);
     }
