@@ -1,0 +1,8 @@
+.shape-editor{box-sizing:border-box;width:min(920px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #344556;border-radius:16px;background:#101820;color:#e7edf5;padding:24px}
+.shape-editor::backdrop{background:#000a;backdrop-filter:blur(3px)}
+.shape-editor h2{margin:0}.shape-editor p{color:#aabccc;line-height:1.5}
+.shape-presets,.shape-tools,.shape-footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0}
+.shape-tools label{display:flex;gap:10px;align-items:center;margin-left:auto}.shape-tools input{width:140px}.shape-tools output{min-width:3em}
+.shape-editor canvas{display:block;width:auto;height:auto;max-width:100%;max-height:min(48dvh,max(160px,calc(100dvh - 420px)));margin:auto;background:#192530;touch-action:none;cursor:crosshair;border:1px solid #496075;border-radius:4px}
+.shape-footer{justify-content:flex-end;margin-bottom:0;position:sticky;bottom:-24px;background:#101820;padding:12px 0}.shape-message{min-height:3em}.shape-editor button:disabled{opacity:.45;cursor:default}.open-shape-editor{align-self:end}
+@media(max-width:540px){.shape-editor{padding:16px}.shape-tools label{margin-left:0;flex-wrap:wrap}}

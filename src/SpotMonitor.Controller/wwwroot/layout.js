@@ -152,7 +152,7 @@ const adminLayout = (() => {
       for (const title of placement.querySelectorAll('.overlay-group-title')) title.remove();
       makeGroup('Placement', ['hostCameraSlot','viewportWidthPercent','viewportHeightPercent','viewportHorizontalPositionPercent','viewportVerticalPositionPercent']);
       const appearance = makeGroup('Appearance',['viewportShape','viewportOpacityPercent']);
-      appearance.append(placement.querySelector('.custom-viewport-upload'));
+      appearance.append(placement.querySelector('.open-shape-editor'),placement.querySelector('.custom-viewport-upload'));
       makeGroup('Framing',['zoomPercent','imageHorizontalPositionPercent','imageVerticalPositionPercent']);
       placement.append(placement.querySelector('.reset-doorbell-framing'));
       const help = placement.querySelector('.overlay-help'), details = document.createElement('details');

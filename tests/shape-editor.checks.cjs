@@ -1,0 +1,26 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+const context=vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/SpotMonitor.Controller/wwwroot/shape-editor.js'),'utf8')+'\nthis.outline=viewportShapeEditor.outline;',context);
+const stroke=Array.from({length:300},(_,i)=>{const angle=i/300*Math.PI*2,r=300+(i%2?12:-12);return{x:500+r*Math.cos(angle),y:500+r*Math.sin(angle)}});
+for(const amount of [0,40,100]){
+ const result=context.outline(stroke,amount);
+ assert.ok(result.startsWith('M')&&result.endsWith(' Z'));
+ assert.ok(result.length<65536);
+ assert.ok(!/NaN|Infinity/.test(result));
+ const numbers=result.match(/\d+(?:\.\d+)?/g).map(Number);
+ assert.ok(numbers.every(n=>n>=0&&n<=1000),'Smoothing stays inside the drawing surface');
+ assert.ok((result.match(/[MLQZ]/g)||[]).length<4096);
+}
+assert.notEqual(context.outline(stroke,0),context.outline(stroke,100));
+const radiusDeviation=amount=>{
+ const numbers=context.outline(stroke,amount).match(/\d+(?:\.\d+)?/g).map(Number);
+ const radii=[];for(let i=0;i<numbers.length;i+=2)radii.push(Math.hypot(numbers[i]-500,numbers[i+1]-500));
+ const mean=radii.reduce((a,b)=>a+b,0)/radii.length;return radii.reduce((a,r)=>a+(r-mean)**2,0)/radii.length;
+};
+assert.ok(radiusDeviation(100)<radiusDeviation(0),'Smoothing reduces mouse wobble');
+assert.equal(context.outline([],40),'');
+assert.equal(context.outline([{x:1,y:1},{x:1,y:1},{x:1,y:1}],100),'');
+assert.ok(!/NaN/.test(context.outline([{x:0,y:0},{x:10,y:0},{x:0,y:10}],100)));
+const extreme=Array.from({length:2000},(_,i)=>({x:i%2?1000:0,y:i%3?1000:0}));
+assert.ok(context.outline(extreme,100).length<65536,'Long strokes remain within mask storage limits');
+console.log('Shape editor checks passed: smoothing, closed paths, bounds, degenerate strokes, storage limits.');
