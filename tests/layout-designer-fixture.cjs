@@ -11,7 +11,7 @@ http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');res.setHeader('Cache-Control','no-store');
   const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
   if(url.pathname==='/api/session')return json({authenticated:true,csrfToken:'fixture'});
-  if(url.pathname==='/api/status')return json({hostname:'Isolated layout preview',lanAddresses:['localhost'],version:'1.0.31-beta.6',currentTime:new Date().toISOString()});
+  if(url.pathname==='/api/status')return json({hostname:'Isolated layout preview',lanAddresses:['localhost'],version:'1.0.31-beta.7',currentTime:new Date().toISOString()});
   if(url.pathname==='/api/config')return json(config);
   if(url.pathname==='/api/cameras'&&req.method==='POST'){
     if(config.cameraCount>=16){res.statusCode=400;return json({error:'The maximum of 16 cameras has been reached.'});}

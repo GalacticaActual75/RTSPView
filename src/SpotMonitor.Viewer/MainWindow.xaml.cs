@@ -89,6 +89,7 @@ public partial class MainWindow : Window
         StateChanged += MainWindow_StateChanged;
         IsVisibleChanged += MainWindow_IsVisibleChanged;
         WallGrid.SizeChanged += (_, _) => QueueOverlayLayouts();
+        WallViewport.SizeChanged += (_, _) => SizeWall();
         _cursorTimer.Tick += (_, _) =>
         {
             CheckCornerGesture();
@@ -187,6 +188,7 @@ public partial class MainWindow : Window
     private void ApplyWallLayout()
     {
         var layout = _settings.Layouts.Single(item => item.Id == _settings.ActiveLayoutId);
+        SizeWall();
         WallGrid.RowDefinitions.Clear();
         WallGrid.ColumnDefinitions.Clear();
         for (var row = 0; row < layout.Rows; row++) WallGrid.RowDefinitions.Add(new RowDefinition());
@@ -207,6 +209,14 @@ public partial class MainWindow : Window
             tile.SetWallVisibility(true);
         }
         QueueOverlayLayouts();
+    }
+
+    private void SizeWall()
+    {
+        var layout = _settings.Layouts.Single(item => item.Id == _settings.ActiveLayoutId);
+        var size = layout.Fit(WallViewport.ActualWidth, WallViewport.ActualHeight);
+        WallGrid.Width = size.Width;
+        WallGrid.Height = size.Height;
     }
 
     private static string? ReadArgument(string name)

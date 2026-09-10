@@ -41,14 +41,10 @@ const wallDesigner = (() => {
     if (!validTile(candidate,index)) { render(); message('That tile overlaps another camera or extends beyond the grid.'); return; }
     current().tiles[index] = candidate; changed();
   }
-  function preset(size) {
-    const layout = current(), ids = config.cameras.map(camera => camera.slot);
-    layout.rows = layout.columns = size === 'featured' ? 3 : Number(size);
-    layout.tiles = size === 'featured'
-      ? [{cameraSlot:ids[0],row:0,column:0,rowSpan:2,columnSpan:2},
-         ...[[0,2],[1,2],[2,0],[2,1],[2,2]].map(([row,column],i) => ({cameraSlot:ids[i+1],row,column,rowSpan:1,columnSpan:1}))]
-      : ids.slice(0,layout.rows*layout.columns).map((cameraSlot,i) => ({cameraSlot,row:Math.floor(i/layout.columns),column:i%layout.columns,rowSpan:1,columnSpan:1}));
-    selectedTile = 0; changed();
+  function preset(id) {
+    const layout=current();
+    Object.assign(layout,wallLayoutPresets.create(id,layout.aspectRatio||'16:9',config.cameras.map(camera=>camera.slot)));
+    selectedTile=0;changed();
   }
   function addCamera(slot, row, column) {
     const tile = {cameraSlot:slot,row,column,rowSpan:1,columnSpan:1};
@@ -82,8 +78,9 @@ const wallDesigner = (() => {
     for(const item of draft.layouts)layouts.add(new Option(item.name,item.id));
     layouts.value=selectedId;layouts.onchange=()=>{selectedId=layouts.value;selectedTile=0;render();};
     field('Saved layout',layouts,picker);
-    const badge=el('span',dirty?'Unsaved changes':selectedId===saved.activeLayoutId?'On wall':'Saved','designer-badge'+(dirty?' draft':''));picker.append(badge);
-    const manage=el('details',undefined,'designer-menu');manage.append(el('summary','Manage'));picker.append(manage);
+    const layoutTools=el('div',undefined,'designer-layout-tools');picker.append(layoutTools);
+    const badge=el('span',dirty?'Unsaved changes':selectedId===saved.activeLayoutId?'On wall':'Saved','designer-badge'+(dirty?' draft':''));layoutTools.append(badge);
+    const manage=el('details',undefined,'designer-menu');manage.append(el('summary','Manage layout'));layoutTools.append(manage);
     const menu=el('div',undefined,'designer-popover');manage.append(menu);
     const name=el('input');name.value=layout.name;name.maxLength=80;
     name.oninput=()=>{layout.name=name.value.trim();dirty=true;badge.textContent='Unsaved changes';badge.classList.add('draft');root.querySelector('.designer-discard').disabled=false;layouts.selectedOptions[0].textContent=layout.name;message('Unsaved changes.');};field('Layout name',name,menu);
@@ -104,8 +101,10 @@ const wallDesigner = (() => {
     const preview=el('section',undefined,'designer-preview');workspace.append(preview);
     const previewHead=el('div',undefined,'designer-preview-head');preview.append(previewHead);
     const title=el('div');title.append(el('h2','Wall preview'),el('span',layout.rows+' × '+layout.columns+' grid · '+layout.tiles.length+' cameras','designer-meta'));previewHead.append(title);
-    const gridOptions=el('details',undefined,'designer-menu');gridOptions.append(el('summary','Grid size'));previewHead.append(gridOptions);
-    const gridFields=el('div',undefined,'designer-popover designer-grid-fields');gridOptions.append(gridFields);
+    const canvasControls=el('div',undefined,'designer-canvas-controls');preview.append(canvasControls);
+    const format=el('select');format.add(new Option('Landscape · 16:9','16:9'));format.add(new Option('Portrait · 9:16','9:16'));format.value=layout.aspectRatio||'16:9';
+    format.onchange=()=>{Object.assign(layout,wallLayoutPresets.transpose(layout));layout.aspectRatio=format.value;changed();};field('Screen format',format,canvasControls);
+    const gridFields=el('div',undefined,'designer-grid-fields');canvasControls.append(gridFields);
     for(const [key,label] of [['rows','Rows'],['columns','Columns']]){
       const input=el('input');input.type='number';input.min=1;input.max=4;input.value=layout[key];
       input.onchange=()=>{
@@ -114,17 +113,21 @@ const wallDesigner = (() => {
         changed();
       };field(label,input,gridFields);
     }
-    const presets=el('div',undefined,'designer-presets');presets.setAttribute('aria-label','Layout presets');preview.append(presets);
-    presets.append(el('span','PRESETS','designer-eyebrow'));
-    for(const [value,label] of [['1','1 × 1'],['2','2 × 2'],['3','3 × 3'],['4','4 × 4'],['featured','Featured']]){
-      const presetButton=button('',()=>preset(value),presets);presetButton.setAttribute('aria-label','Use '+label+' preset');
-      const icon=el('span',undefined,'designer-preset-icon');icon.setAttribute('aria-hidden','true');const n=value==='featured'?3:Number(value);icon.style.setProperty('--size',n);
-      for(let i=0;i<(value==='featured'?6:n*n);i++)icon.append(el('i'));
-      if(value==='featured')icon.classList.add('featured');presetButton.append(icon,el('span',label));
+    const presets=el('details',undefined,'designer-preset-library');preview.append(presets);
+    presets.append(el('summary','Layout presets'));
+    const gallery=el('div',undefined,'designer-presets');gallery.setAttribute('aria-label','Layout presets');presets.append(gallery);
+    gallery.append(el('p','Choose a starting point. This replaces the draft arrangement.','designer-help'));
+    for(const item of wallLayoutPresets.catalog){
+      const template=wallLayoutPresets.get(item.id,layout.aspectRatio||'16:9');
+      const presetButton=button('',()=>preset(item.id),gallery);presetButton.setAttribute('aria-label','Use '+item.name+' preset');
+      const icon=el('span',undefined,'designer-preset-icon');icon.setAttribute('aria-hidden','true');
+      icon.style.gridTemplateRows='repeat('+template.rows+',1fr)';icon.style.gridTemplateColumns='repeat('+template.columns+',1fr)';icon.style.aspectRatio=(layout.aspectRatio||'16:9').replace(':','/');
+      for(const tile of template.tiles){const cell=el('i');cell.style.gridArea=(tile.row+1)+' / '+(tile.column+1)+' / span '+tile.rowSpan+' / span '+tile.columnSpan;icon.append(cell);}
+      presetButton.append(icon,el('span',item.name),el('small',template.tiles.length+(template.tiles.length===1?' camera':' cameras')));
     }
     const stage=el('div',undefined,'designer-stage');preview.append(stage);
     board=el('div',undefined,'designer-board');board.setAttribute('aria-label','Camera wall layout preview');
-    board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
+    board.style.setProperty('--aspect',(layout.aspectRatio||'16:9').replace(':','/'));board.style.setProperty('--ratio',layout.aspectRatio==='9:16'?9/16:16/9);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
     board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,Math.floor((e.clientY-bounds.top)/bounds.height*layout.rows),Math.floor((e.clientX-bounds.left)/bounds.width*layout.columns));};
     layout.tiles.forEach((tile,index)=>{
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:'Camera',slot:tile.cameraSlot};
@@ -153,7 +156,7 @@ const wallDesigner = (() => {
       };board.append(node);
     });
     const previewFoot=el('div',undefined,'designer-preview-foot');preview.append(previewFoot);
-    previewFoot.append(el('span','Drag to move or swap. Use the corner handle to resize.'),el('span','Snapshot preview · 16:9'));
+    previewFoot.append(el('span','Drag to move or swap. Use the corner handle to resize.'),el('span','Snapshot preview · '+(layout.aspectRatio||'16:9')));
     const side=el('aside',undefined,'designer-inspector');workspace.append(side);
     const tile=layout.tiles[selectedTile];
     if(tile){

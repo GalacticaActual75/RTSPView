@@ -57,12 +57,20 @@ try
     var designed = (legacyWall with { Layouts = [new(), sixteen], ActiveLayoutId = sixteen.Id }).Normalize();
     Check(designed.Layouts.Last().Tiles.Last().CameraSlot == 32 && designed.Cameras.SequenceEqual(legacyWall.Cameras), "4x4 layout uses independent camera references without changing streams");
     Check(designed.CameraCount == 16, "existing layouts retain referenced camera entries");
+    var portrait = sixteen with { AspectRatio = "9:16" };
+    Check(new WallLayout().AspectRatio == "16:9", "existing layouts default to landscape");
+    Check(portrait.Fit(1920, 1080) == (607.5, 1080), "portrait fits landscape screen without stretching");
+    Check(portrait.Fit(1080, 1920) == (1080, 1920), "portrait fills portrait screen");
+    Check(sixteen.Fit(1080, 1920) == (1080, 607.5), "landscape fits portrait screen without stretching");
+    designed = designed with { Layouts = [new(), portrait] };
     var layoutStore = new JsonSettingsStore(Path.Combine(root, "layout-roundtrip.json"));
     await layoutStore.SaveAsync(designed);
     var reloadedLayouts = await layoutStore.LoadAsync();
+    Check(reloadedLayouts.Layouts.Last().AspectRatio == "9:16", "portrait format survives save and reload");
     Check(reloadedLayouts.ActiveLayoutId == "sixteen" && reloadedLayouts.Layouts.Last().Tiles.SequenceEqual(sixteen.Tiles), "saved layouts survive settings reload");
     foreach (var invalidLayout in new[] {
         sixteen with { Rows = 5 },
+        sixteen with { AspectRatio = "invalid" },
         sixteen with { Tiles = [new() { CameraSlot = 10 }] },
         sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 2 }] },
         sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 1, Column = 1 }] },
