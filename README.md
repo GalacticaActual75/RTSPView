@@ -159,6 +159,18 @@ The same data-directory setting must reach Controller and Viewer. Camera URLs an
 
 Composite stream compatibility enables TCP, a 3000 ms buffer, and disables low-latency tuning for rebroadcast streams. It works with any configured host. Upgrading users who relied on automatic host-specific behavior should enable this checkbox for their composite streams.
 
+### Correct the old update-channel label without reinstalling
+
+Versions 1.0.32 and 1.0.33 already check public GitHub Releases, but their dashboard description still says "private LAN update channel." This is stale text, not the active update source.
+
+For an existing installation, download [Apply-GitHub-Update-Label-Fix.ps1](https://github.com/GalacticaActual75/RTSPView/releases/download/v1.0.33/Apply-GitHub-Update-Label-Fix.ps1) from the existing 1.0.33 release. On the RTSPView host, open PowerShell **as administrator** and run the downloaded file, substituting its actual path:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\Apply-GitHub-Update-Label-Fix.ps1"
+```
+
+The patch finds the existing installation through its uninstall registration. If it cannot, add `-InstallDirectory "C:\path\to\your\installation"`. It backs up the original page outside the web folder and replaces only the obsolete sentence. Refresh the dashboard with **Ctrl+F5** afterward; no restart is required. The patch does not alter settings, credentials, LAN access or updater behavior, and it does not install automatically through Check for updates. Existing installer assets and hashes are unchanged; no new release/version was created for this wording fix.
+
 ## Backup, upgrade and recovery
 
 Stop both processes before copying the entire data directory to a protected backup. Thumbnails, logs, settings and automatic backups can contain private information. DPAPI cookie keys are tied to the Windows account and are not portable login credentials.
