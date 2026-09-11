@@ -1,71 +1,76 @@
-# SpotMonitor
+# RTSPView
 
-SpotMonitor is a production-oriented Windows RTSP camera wall with up to 16 independently supervised main streams, two optional independent picture-in-picture streams, hardware-accelerated decoding, a full-screen appliance viewer, and an authenticated LAN administration dashboard.
+RTSPView (formerly SpotMonitor) is a Windows RTSP camera wall with up to 16 main cameras, configurable layouts, picture-in-picture overlays, hardware decoding through LibVLC, automatic stream recovery, and a web administration dashboard. Controller supervises the WPF Viewer; both run as the signed-in Windows user.
 
-## Features
+## Install and first setup
 
-- Configurable native video wall with saved layouts, 1×1 through 4×4 presets, a featured-camera preset, and a web-based snap-to-grid designer. Supports AMD, NVIDIA, and Intel hardware-decoding support through LibVLC/D3D11VA.
-- Independent Doorbell and Garage picture-in-picture streams that can each overlay any camera. Both support Rectangle, Square, aggressively rounded Rectangle, Circle, Oval, or uploaded custom SVG viewports with independent size, position, and 20–100% opacity, aspect-preserving cover rendering, 100–300% source zoom, horizontal/vertical source pan, and interactive wall/source previews. Custom SVG masks can rotate independently without rotating the video. Garage defaults disabled over Camera 3.
-- Independent reconnect, stall detection, exponential backoff, and player recreation for every camera.
-- Persistent camera naming, ordering, transport, cache, overlay, monitor, cursor, and always-on-top settings.
-- Automatic connection-state overlays and per-camera feed thumbnails.
-- LAN web administration with PBKDF2 password hashing, CSRF protection, login throttling, audit logs, and Private-network-only firewall configuration.
-- Separate Controller watchdog that restores a failed Viewer.
-- Self-contained Windows x64 deployment; the target computer does not need the .NET runtime installed.
-- Web-triggered, SHA-256-verified updates from the private LAN channel at `UPDATE_CHANNEL_DIRECTORY`.
-- Branded Windows executables, shortcuts, and web interface.
+Use Windows 10/11 x64 with a current graphics driver. Download the installer and checksum from this repository's Releases page, verify the checksum, and run the installer. Installation requires elevation; normal operation should use a standard Windows account.
 
-Settings, logs, password state, and thumbnails live under `%LOCALAPPDATA%\SpotMonitor`. Installing or upgrading the application does not remove them.
+Open [local administration](http://127.0.0.1:5080) on the camera-wall computer. **The initial administrator password is `admin`. Change it immediately.** The account name is `admin`; the dashboard asks only for its password. All administration APIs and controls remain blocked until a different password of 12–1024 characters is saved. Sign in again with the new password. The initial password then stops working and earlier sessions are revoked. No readable administrator password file is created.
 
-Custom viewport uploads are converted to path geometry in the browser; SpotMonitor persists only inert SVG path data and normalized bounds, not the original file or SVG markup. SVGs must use a `viewBox` and path elements with flattened transforms. Convert text and primitive shapes to paths before upload. If a drawing contains a full-canvas background path plus a smaller mask path, the importer automatically ignores the canvas background.
+**Fresh installations have no camera URLs configured**, including every main camera, legacy camera field and overlay. Enter your own URLs after setup. Existing installations retain their streams and password, but legacy security state requires a password change after login. Back up before upgrading.
 
-## Install or upgrade
+The dashboard listens on loopback TCP 5080 by default. Remote access is an explicit deployment choice: configure ASP.NET Core HTTPS with a trusted certificate before binding a LAN interface. `ASPNETCORE_URLS` controls bindings. HTTP LAN bindings transmit credentials and cookies without encryption. Do not expose them to the Internet. Complete initial setup locally. Firewall rules do not provide encryption.
 
-Download `SpotMonitor-Setup-<version>-win-x64.exe` from the repository's **Releases** page and run it as administrator.
+## Configuration and persistent data
 
-The installer uses a stable application identity and installation directory (`C:\Program Files\SpotMonitor`). Running a newer installer:
+No environment variables are required. `.env.example` is a reference; the application does **not** automatically load `.env` files. Set variables in the Windows user environment and restart both processes (sign out/in for scheduled startup).
 
-1. Stops the current Controller and Viewer.
-2. Replaces the installed program files.
-3. Preserves the existing camera layout and administrator configuration.
-4. Refreshes the Private-LAN firewall rules and optional logon watchdog task.
-5. Offers to launch the upgraded camera wall.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain SpotMonitor data) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
+| `RTSPVIEW_GITHUB_REPOSITORY` | `GalacticaActual75/RTSPView` | Public GitHub release repository. No token/key is required or supported. |
+| `ASPNETCORE_URLS` | `http://127.0.0.1:5080` | Controller bindings. HTTPS additionally requires ASP.NET Core certificate configuration. |
+| `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Semicolon-separated permitted request hostnames/IPs. Add the exact LAN name when enabling remote access; wildcard hosts are not accepted. |
+| `ASPNETCORE_ENVIRONMENT` | `Production` | Keep deployments in Production. |
 
-TCP 5080 is allowed only from Windows' `LocalSubnet`, regardless of whether the host NIC is classified Private or Public. The installer is currently unsigned, so Windows SmartScreen may show an unknown-publisher warning until a code-signing certificate is added.
+The same data-directory setting must reach Controller and Viewer. Camera URLs and camera credentials are runtime configuration in `settings.json`, outside source control. Restrict this directory to the application user and administrators and protect backups with disk encryption. Administrator passwords use salted PBKDF2-HMAC-SHA256 with 600,000 iterations; cookie keys use Windows DPAPI for the current user. Camera credentials remain plaintext locally because LibVLC needs them at runtime.
 
-## Build from source
+Composite stream compatibility enables TCP, a 3000 ms buffer, and disables low-latency tuning for rebroadcast streams. It works with any configured host. Upgrading users who relied on automatic host-specific behavior should enable this checkbox for their composite streams.
 
-Prerequisites: Windows 10/11 x64 and the .NET 8 SDK.
+## Backup, upgrade and recovery
 
-```powershell
-dotnet restore SpotMonitor.sln
-dotnet build SpotMonitor.sln -c Release
-dotnet test tests/SpotMonitor.ConfigurationChecks/SpotMonitor.ConfigurationChecks.csproj -c Release
-```
+Stop both processes before copying the entire data directory to a protected backup. Thumbnails, logs, settings and automatic backups can contain private information. DPAPI cookie keys are tied to the Windows account and are not portable login credentials.
 
-The projects are:
+Web configuration export removes URL user information, query strings and fragments, but retains camera names, hosts and paths. Keep exports private and re-enter camera credentials after import. A full private data-directory backup preserves credentials. Import saves a backup before replacing settings.
 
-- `src/SpotMonitor.Viewer` — WPF/LibVLC camera wall.
-- `src/SpotMonitor.Controller` — ASP.NET Core LAN dashboard and watchdog.
-- `src/SpotMonitor.Core` — shared configuration and telemetry contracts.
-- `src/SpotMonitor.Infrastructure` — atomic JSON persistence and rotating logs.
-- `installer/SpotMonitor.iss` — upgrade-safe Inno Setup installer definition.
-- `.github/workflows/release.yml` — GitHub Release build pipeline.
+Install a newer release over the existing installation; settings are preserved. Back up before switching channels or downgrading, because older versions may not understand newer schemas. Restore a compatible pre-upgrade backup when rolling back.
 
-## Publish a release
+Updates now come from the public [RTSPView GitHub Releases](https://github.com/GalacticaActual75/RTSPView/releases). Stable uses GitHub's latest stable release; Beta selects the highest published beta version and excludes drafts/stable releases. Release metadata is cached for two minutes to reduce unauthenticated API traffic. The installer is downloaded over HTTPS, with restricted redirects, size limits and SHA-256 verification against the release manifest and GitHub asset digest when available. No GitHub token is needed, stored or sent. The elevated helper verifies the checksum again. A compromised release-publisher account is still trusted; protect GitHub maintainers with strong authentication and consider publisher signing.
 
-Push a semantic version tag:
+The final SMB bridge releases are 1.0.32 (Stable) and 1.0.32-beta.1 (Beta). Install either from the old channel once; all later update checks use GitHub. Existing AppId, executable names, IPC and scheduled-task identifiers remain compatible with the old updater, so upgrades happen in place. New installations use RTSPView branding and its default data directory; existing settings and update-channel selection remain in the legacy directory. The old data-directory environment variable remains a compatibility alias. Complete any required administrator password change on the camera-wall host; administration now defaults to localhost.
+
+For forgotten administrator passwords, stop both processes and, as the owning Windows user, move `web-security.json` and the `data-protection` directory into a private backup outside the active data directory. Restart locally and complete setup with `admin`. Camera settings remain intact. Do not perform recovery while the dashboard is reachable by untrusted users. Normal login throttling clears after five minutes; five attempts are allowed across the administrator account per window.
+
+## Build and tests
+
+Prerequisites: Windows x64, .NET 8 SDK with current servicing patches, Node.js, and Inno Setup 6 for installers. Releases are self-contained, so runtime security updates require rebuilding and installing a new release.
 
 ```powershell
-.\tools\publish-release.ps1 -Version 1.0.0
+dotnet restore SpotMonitor.sln -r win-x64
+dotnet build SpotMonitor.sln -c Release --no-restore
+dotnet run --project tests/SpotMonitor.ConfigurationChecks -c Release
+$env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
+node tests/admin-security.checks.cjs
+node tests/shape-editor.checks.cjs
+node tests/wall-layout-presets.checks.cjs
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
+dotnet run --project tests/SpotMonitor.LayoutVisibilityChecks -c Release
+dotnet run --project tests/SpotMonitor.OpacityChecks -c Release -- --auto
 ```
 
-GitHub Actions publishes both the installer and its SHA-256 checksum to a GitHub Release. The workflow can also be started manually from the repository's **Actions** page.
+Rendering checks require an interactive Windows desktop and video support. The HTTP test uses an isolated directory and disables the watchdog. These are console checks; `dotnet test` does not execute them.
 
-For LAN deployment, copy the generated installer and `update.json` from the release into `UPDATE_CHANNEL_DIRECTORY`. Installed hosts can then check and start the verified update from the web dashboard. Windows displays one elevation prompt on the camera-wall host before installation.
+After committing and reviewing a release, use `tools/publish-release.ps1 -Version <version>`. GitHub Actions builds the applications and installer and uploads checksum/manifest assets. Rebuild from reviewed source; do not publish existing local build directories.
 
-## Administration
+Docker is not supported: WPF requires an interactive Windows desktop and graphics stack. There are no Dockerfiles or container mounts to configure.
 
-The dashboard listens on TCP 5080. On first start, SpotMonitor creates a random administrator password and writes the one-time readable value to `%LOCALAPPDATA%\SpotMonitor\initial-admin-password.txt`. After the password is changed, the readable file is removed.
+## Troubleshooting and security
 
-RTSP URLs are stored locally in plain JSON for this LAN-only deployment. Credentials are redacted from logs and sanitized configuration exports.
+- Dashboard unavailable: open it on the same host, verify Controller is running, and check bindings and port conflicts. Configure HTTPS and firewall access deliberately for remote use.
+- Blank cameras: fresh installations intentionally have empty URLs. Check credentials, RTSP reachability, transport, codecs, and layout assignments.
+- Update unavailable: check Internet connectivity, GitHub rate limits, repository visibility, manifest and checksum. Manual installer upgrades remain available.
+- Configuration recovery: preserve the data directory before inspecting `settings.json.bak` or pre-import backups. Do not share raw settings, screenshots or logs in bug reports.
+- Run both processes as the same user; named pipes restrict connections to that user. Local administrators and same-user processes remain trusted.
+
+See the [release audit](docs/release-readiness.md) and [history cleanup procedure](docs/history-cleanup.md) before making the repository public. External releases, issue attachments, forks and hosting caches need separate review.

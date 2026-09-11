@@ -88,7 +88,7 @@ public partial class ConfigurationWindow : Window
 
     private async void ImportButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = "SpotMonitor configuration (*.json)|*.json|All files (*.*)|*.*" };
+        var dialog = new OpenFileDialog { Filter = "RTSPView configuration (*.json)|*.json|All files (*.*)|*.*" };
         if (dialog.ShowDialog(this) != true) return;
         try { _settings = await _store.ImportAsync(dialog.FileName); SlotBox.SelectedIndex = 0; LoadSlot(0); }
         catch (Exception exception) { MessageBox.Show(this, exception.Message, "Import failed", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -97,7 +97,7 @@ public partial class ConfigurationWindow : Window
     private async void ExportButton_Click(object sender, RoutedEventArgs e)
     {
         CommitSlot(_currentSlot);
-        var dialog = new SaveFileDialog { Filter = "SpotMonitor configuration (*.json)|*.json", FileName = "spotmonitor-config.json" };
+        var dialog = new SaveFileDialog { Filter = "RTSPView configuration (*.json)|*.json", FileName = "RTSPView-config.json" };
         if (dialog.ShowDialog(this) != true) return;
         try { await _store.ExportWithoutCredentialsAsync(_settings, dialog.FileName); }
         catch (Exception exception) { MessageBox.Show(this, exception.Message, "Export failed", MessageBoxButton.OK, MessageBoxImage.Error); }

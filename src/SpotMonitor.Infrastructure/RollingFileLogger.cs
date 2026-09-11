@@ -29,6 +29,13 @@ public sealed class RollingFileLogger
         }
     }
 
-    private static string RedactCredentials(string value) =>
-        System.Text.RegularExpressions.Regex.Replace(value, @"(?i)(rtsp://)[^/@\s]+@", "$1***:***@");
+    public static string RedactCredentials(string value)
+    {
+        // Omit complete URLs: paths and query parameters can carry credentials too.
+        var safe = System.Text.RegularExpressions.Regex.Replace(value, @"(?i)\b(?:rtsp|https?|ftp)://[^\s""<>]+", "[URL redacted]");
+        safe = System.Text.RegularExpressions.Regex.Replace(safe, @"(?i)\b(?:authorization|cookie|set-cookie|password|token|secret|api[_-]?key)\s*[:=].*", "[sensitive field redacted]");
+        safe = System.Text.RegularExpressions.Regex.Replace(safe, @"(?i)(?:[A-Z]:\\|\\\\)[^\r\n""<>]+|/(?:home|Users)/[^\s]+", "[path redacted]");
+        safe = System.Text.RegularExpressions.Regex.Replace(safe, @"\b[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}\b", "[email redacted]");
+        return safe.Replace('\r', ' ').Replace('\n', ' ');
+    }
 }

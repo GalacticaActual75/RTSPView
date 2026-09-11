@@ -19,14 +19,16 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = AppContext.BaseDirectory,
     WebRootPath = "wwwroot"
 });
-builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://0.0.0.0:5080");
-var dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor");
+builder.Logging.ClearProviders(); // Use the sanitized application logger; never log raw request URLs or bodies.
+builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5080");
+var dataDirectory = AppPaths.DataDirectory;
 Directory.CreateDirectory(dataDirectory);
 var dataProtectionDirectory = Path.Combine(dataDirectory, "data-protection");
 Directory.CreateDirectory(dataProtectionDirectory);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionDirectory))
-    .SetApplicationName("SpotMonitor.Controller");
+    .SetApplicationName("SpotMonitor.Controller")
+    .ProtectKeysWithDpapi();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
     options.Cookie.Name = "SpotMonitor.Admin";
@@ -45,9 +47,11 @@ builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
 builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>()));
-builder.Services.AddHostedService<ViewerSupervisor>();
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<ViewerSupervisor>();
 
 var app = builder.Build();
+var allowedHosts = (builder.Configuration["AllowedHosts"] ?? "localhost;127.0.0.1;[::1]")
+    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 var startedAt = DateTimeOffset.UtcNow;
 var settingsStore = new JsonSettingsStore(Path.Combine(dataDirectory, "settings.json"));
 var security = await WebSecurity.LoadOrCreateAsync(Path.Combine(dataDirectory, "web-security.json"), Path.Combine(dataDirectory, "initial-admin-password.txt"));
@@ -59,6 +63,26 @@ var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
 var updates = app.Services.GetRequiredService<UpdateService>();
 var loginLimiter = new LoginAttemptLimiter();
 
+app.Use(async (context, next) =>
+{
+    if (!allowedHosts.Contains(context.Request.Host.Host, StringComparer.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = 400;
+        return;
+    }
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    try { await next(); }
+    catch (Exception exception)
+    {
+        auditLog.Write("ERROR", "Request failed: " + exception.GetType().Name);
+        if (context.Response.HasStarted) throw;
+        context.Response.Clear();
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsJsonAsync(new { error = "Request failed. Check the server logs." });
+    }
+});
 app.UseDefaultFiles();
 app.Use(async (context, next) =>
 {
@@ -88,6 +112,26 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        if (context.User.FindFirstValue("session_version") != security.SessionVersion)
+        {
+            await context.SignOutAsync();
+            context.User = new ClaimsPrincipal(new ClaimsIdentity());
+        }
+        else if (security.PasswordChangeRequired && context.Request.Path.StartsWithSegments("/api") &&
+                 context.Request.Path != "/api/session" && context.Request.Path != "/api/auth/password" &&
+                 context.Request.Path != "/api/auth/logout")
+        {
+            context.Response.StatusCode = 403;
+            await context.Response.WriteAsJsonAsync(new { error = "Change your administrator password before continuing.", passwordChangeRequired = true });
+            return;
+        }
+    }
+    await next();
+});
 app.UseAuthorization();
 
 app.MapGet("/api/session", (HttpContext context, ClaimsPrincipal user) =>
@@ -98,23 +142,23 @@ app.MapGet("/api/session", (HttpContext context, ClaimsPrincipal user) =>
         token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         context.Response.Cookies.Append("SpotMonitor.Csrf", token, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = context.Request.IsHttps, MaxAge = TimeSpan.FromHours(8) });
     }
-    return Results.Ok(new { authenticated = user.Identity?.IsAuthenticated == true, csrfToken = token });
+    return Results.Ok(new { authenticated = user.Identity?.IsAuthenticated == true, csrfToken = token, passwordChangeRequired = user.Identity?.IsAuthenticated == true && security.PasswordChangeRequired });
 }).AllowAnonymous();
 app.MapPost("/api/auth/login", async (HttpContext context, LoginRequest request) =>
 {
-    var address = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var address = "admin"; // Single account limiter also prevents IP rotation from bypassing lockout.
     if (!loginLimiter.CanAttempt(address, out var retryAfterSeconds)) return Results.Json(new { error = $"Too many failed sign-in attempts. Try again in {retryAfterSeconds} seconds." }, statusCode: StatusCodes.Status429TooManyRequests);
+    var sessionVersion = security.SessionVersion;
     if (!security.Verify(request.Password ?? string.Empty))
     {
-        loginLimiter.RecordFailure(address);
         auditLog.Write("AUDIT", $"Failed web admin sign-in from {address}");
         return Results.Unauthorized();
     }
     loginLimiter.RecordSuccess(address);
-    var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "admin")], CookieAuthenticationDefaults.AuthenticationScheme);
+    var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "admin"), new Claim("session_version", sessionVersion)], CookieAuthenticationDefaults.AuthenticationScheme);
     await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
     auditLog.Write("AUDIT", $"Web admin sign-in from {address}");
-    return Results.Ok(new { authenticated = true });
+    return Results.Ok(new { authenticated = true, passwordChangeRequired = security.PasswordChangeRequired });
 }).AllowAnonymous();
 app.MapPost("/api/auth/logout", async (HttpContext context) =>
 {
@@ -161,8 +205,8 @@ app.MapPost("/api/update/install", async (UpdateInstallRequest request, Cancella
     }
     catch (Exception exception)
     {
-        auditLog.Write("ERROR", $"Unable to start SpotMonitor update: {exception.Message}");
-        return Results.Problem($"Unable to start update: {exception.Message}", statusCode: 500);
+        auditLog.Write("ERROR", $"Unable to start RTSPView update: {exception.Message}");
+        return Results.Problem("Unable to start update. Check server logs.", statusCode: 500);
     }
 }).RequireAuthorization();
 
@@ -170,9 +214,9 @@ app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync()
 app.MapGet("/api/config/export", async (HttpContext context) =>
 {
     context.Response.Headers.CacheControl = "no-store";
-    var settings = await settingsStore.LoadAsync();
+    var settings = JsonSettingsStore.WithoutCredentials(await settingsStore.LoadAsync());
     return Results.File(JsonSerializer.SerializeToUtf8Bytes(settings, new JsonSerializerOptions { WriteIndented = true }),
-        "application/json", "SpotMonitor-config.json");
+        "application/json", "RTSPView-config.json");
 }).RequireAuthorization();
 app.MapPost("/api/config/import", async (HttpContext context) =>
 {
@@ -195,7 +239,7 @@ app.MapPost("/api/config/import", async (HttpContext context) =>
     }
     catch (Exception exception) when (exception is InvalidDataException or JsonException)
     {
-        return Results.BadRequest(new { error = "Invalid configuration: " + exception.Message });
+        return Results.BadRequest(new { error = "Invalid configuration file." });
     }
     finally { configGate.Release(); }
 }).RequireAuthorization();
@@ -379,7 +423,7 @@ app.MapPost("/api/control/system/{action}", (string action, ConfirmedAction requ
     if (!request.Confirmed) return Results.BadRequest(new { error = "Explicit confirmation is required." });
     var arguments = action.ToLowerInvariant() switch
     {
-        "reboot" => "/r /t 5 /d p:0:0 /c \"SpotMonitor remote administrator request\"",
+        "reboot" => "/r /t 5 /d p:0:0 /c \"RTSPView remote administrator request\"",
         _ => null
     };
     if (arguments is null) return Results.NotFound(new { error = "Unknown system action." });
@@ -389,24 +433,31 @@ app.MapPost("/api/control/system/{action}", (string action, ConfirmedAction requ
         auditLog.Write("AUDIT", $"Remote Windows {action} requested from web admin");
         return Results.Ok(new { success = true, message = $"Windows {action} scheduled in 5 seconds." });
     }
-    catch (Exception exception) { return Results.Problem($"Unable to schedule Windows {action}: {exception.Message}", statusCode: 500); }
+    catch (Exception exception) { auditLog.Write("ERROR", "System action failed: " + exception.GetType().Name); return Results.Problem("Unable to schedule the system action.", statusCode: 500); }
 }).RequireAuthorization();
 
 app.MapGet("/api/logs", (int? lines) =>
 {
     var requested = Math.Clamp(lines ?? 400, 50, 2000);
-    return Results.Ok(new { lines = ReadRecentLogLines(Path.Combine(dataDirectory, "logs"), requested) });
+    return Results.Ok(new { lines = ReadRecentLogLines(Path.Combine(dataDirectory, "logs"), requested).Select(RollingFileLogger.RedactCredentials) });
 }).RequireAuthorization();
 app.MapGet("/api/logs/download", () =>
 {
     var path = Directory.EnumerateFiles(Path.Combine(dataDirectory, "logs"), "spotmonitor-*.log").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
-    return path is null ? Results.NotFound(new { error = "No log file is available." }) : Results.File(path, "text/plain", Path.GetFileName(path), enableRangeProcessing: true);
+    return path is null ? Results.NotFound(new { error = "No log file is available." }) : Results.File(
+        System.Text.Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, File.ReadLines(path).Select(RollingFileLogger.RedactCredentials))),
+        "text/plain", "RTSPView.log");
 }).RequireAuthorization();
 app.MapPost("/api/auth/password", async (HttpContext context, PasswordChangeRequest request) =>
 {
-    if (!security.Verify(request.CurrentPassword ?? string.Empty)) return Results.BadRequest(new { error = "Current password is incorrect." });
-    if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 10) return Results.BadRequest(new { error = "New password must contain at least 10 characters." });
-    await security.ChangeAsync(request.NewPassword);
+    if (!loginLimiter.CanAttempt("admin", out _)) return Results.StatusCode(429);
+    try
+    {
+        if (!await security.ChangeAsync(request.CurrentPassword ?? string.Empty, request.NewPassword ?? string.Empty))
+            return Results.BadRequest(new { error = "Current password is incorrect." });
+    }
+    catch (InvalidDataException) { return Results.BadRequest(new { error = "Choose a different password containing 12 to 1024 characters." }); }
+    loginLimiter.RecordSuccess("admin");
     auditLog.Write("AUDIT", $"Web administrator password changed from {context.Connection.RemoteIpAddress}");
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok(new { message = "Password changed. Sign in with the new password." });
@@ -476,49 +527,6 @@ sealed class FlexibleRtspTransportConverter : JsonConverter<RtspTransport>
     public override void Write(Utf8JsonWriter writer, RtspTransport value, JsonSerializerOptions options) => writer.WriteNumberValue((int)value);
 }
 
-sealed class WebSecurity
-{
-    private const int Iterations = 210_000;
-    private readonly string _settingsPath;
-    private readonly string _passwordPath;
-    private byte[] _salt;
-    private byte[] _hash;
-    private readonly object _gate = new();
-
-    private WebSecurity(string settingsPath, string passwordPath, byte[] salt, byte[] hash) { _settingsPath = settingsPath; _passwordPath = passwordPath; _salt = salt; _hash = hash; }
-    public bool Verify(string password)
-    {
-        lock (_gate) return CryptographicOperations.FixedTimeEquals(_hash, Rfc2898DeriveBytes.Pbkdf2(password, _salt, Iterations, HashAlgorithmName.SHA256, _hash.Length));
-    }
-
-    public async Task ChangeAsync(string password)
-    {
-        var salt = RandomNumberGenerator.GetBytes(16);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, 32);
-        var temporary = _settingsPath + ".tmp";
-        await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(new SecurityFile(Convert.ToBase64String(salt), Convert.ToBase64String(hash)), new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(temporary, _settingsPath, true);
-        lock (_gate) { _salt = salt; _hash = hash; }
-        if (File.Exists(_passwordPath)) File.Delete(_passwordPath);
-    }
-
-    public static async Task<WebSecurity> LoadOrCreateAsync(string settingsPath, string passwordPath)
-    {
-        if (File.Exists(settingsPath))
-        {
-            var saved = JsonSerializer.Deserialize<SecurityFile>(await File.ReadAllTextAsync(settingsPath)) ?? throw new InvalidDataException("Invalid web security settings.");
-            return new WebSecurity(settingsPath, passwordPath, Convert.FromBase64String(saved.Salt), Convert.FromBase64String(saved.Hash));
-        }
-        var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(10)).ToLowerInvariant();
-        var salt = RandomNumberGenerator.GetBytes(16);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, 32);
-        await File.WriteAllTextAsync(settingsPath, JsonSerializer.Serialize(new SecurityFile(Convert.ToBase64String(salt), Convert.ToBase64String(hash)), new JsonSerializerOptions { WriteIndented = true }));
-        await File.WriteAllTextAsync(passwordPath, $"SpotMonitor initial admin password:{Environment.NewLine}{password}{Environment.NewLine}");
-        return new WebSecurity(settingsPath, passwordPath, salt, hash);
-    }
-    private sealed record SecurityFile(string Salt, string Hash);
-}
-
 sealed class LoginAttemptLimiter
 {
     private readonly Dictionary<string, Queue<DateTimeOffset>> _failures = new();
@@ -531,7 +539,7 @@ sealed class LoginAttemptLimiter
         lock (_gate)
         {
             var queue = GetActive(key);
-            if (queue.Count < Limit) { retryAfterSeconds = 0; return true; }
+            if (queue.Count < Limit) { queue.Enqueue(DateTimeOffset.UtcNow); retryAfterSeconds = 0; return true; }
             retryAfterSeconds = Math.Max(1, (int)Math.Ceiling((queue.Peek() + Window - DateTimeOffset.UtcNow).TotalSeconds));
             return false;
         }

@@ -20,7 +20,7 @@ public sealed class ViewerTelemetryClient : BackgroundService
         {
             try
             {
-                await using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.In, PipeOptions.Asynchronous);
+                await using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.In, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.ConnectAsync(2000, stoppingToken);
                 using var reader = new StreamReader(pipe);
                 while (!stoppingToken.IsCancellationRequested && pipe.IsConnected)

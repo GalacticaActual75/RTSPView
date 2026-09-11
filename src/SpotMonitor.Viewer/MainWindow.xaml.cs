@@ -20,7 +20,7 @@ namespace SpotMonitor.Viewer;
 
 public partial class MainWindow : Window
 {
-    private readonly string _dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor");
+    private readonly string _dataDirectory = AppPaths.DataDirectory;
     private readonly string _settingsPath;
     private readonly DispatcherTimer _diagnosticsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly LibVLC _libVlc;
@@ -59,7 +59,7 @@ public partial class MainWindow : Window
                 entry = (tile, window, camera);
             }
             else if (entry.Camera != camera) entry.Tile.Apply(camera);
-            entry.Window.Title = $"SpotMonitor {camera.Name} Overlay";
+            entry.Window.Title = $"RTSPView {camera.Name} Overlay";
             _additionalOverlays[camera.Slot] = (entry.Tile, entry.Window, camera);
         }
         _allTiles = [.. _tiles, DoorbellTile, GarageTile, .. _additionalOverlays.OrderBy(item => item.Key).Select(item => item.Value.Tile)];
@@ -364,7 +364,7 @@ public partial class MainWindow : Window
         var window = new Window
         {
             Owner = this,
-            Title = $"SpotMonitor {name} Overlay",
+            Title = $"RTSPView {name} Overlay",
             AllowsTransparency = true,
             WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize,
@@ -798,7 +798,7 @@ public partial class MainWindow : Window
         _logger.Write("INFO", $"Appliance escape corner click {++_cornerClickCount}/5");
         if (_cornerClickCount < 5) return;
         _cornerClickCount = 0;
-        if (System.Windows.MessageBox.Show(this, "Leave SpotMonitor full-screen appliance mode?", "SpotMonitor", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        if (System.Windows.MessageBox.Show(this, "Leave RTSPView full-screen appliance mode?", "RTSPView", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             SetFullScreen(false);
     }
 

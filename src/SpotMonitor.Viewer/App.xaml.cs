@@ -37,7 +37,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception exception)
         {
-            splash.ShowFailure($"SpotMonitor could not start.\n\n{exception.Message}");
+            splash.ShowFailure($"RTSPView could not start.\n\n{exception.Message}");
         }
     }
 

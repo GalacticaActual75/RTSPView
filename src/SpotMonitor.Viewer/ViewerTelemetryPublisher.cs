@@ -23,7 +23,7 @@ public sealed class ViewerTelemetryPublisher : IDisposable
         {
             try
             {
-                await using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(_cancellation.Token);
                 await using var writer = new StreamWriter(pipe, Encoding.UTF8, 1024, true) { AutoFlush = true };
                 while (pipe.IsConnected && await _updates.Reader.WaitToReadAsync(_cancellation.Token))

@@ -1,17 +1,14 @@
 using System.Diagnostics;
 using System.Reflection;
 using SpotMonitor.Core;
-using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using SpotMonitor.Infrastructure;
 
 namespace SpotMonitor.Controller;
 
-public sealed class UpdateService
+public sealed class UpdateService : IDisposable
 {
-    private static string ChannelPath(string channel) => UpdateRelease.ValidateChannel(channel) == "beta"
-        ? @"UPDATE_CHANNEL_DIRECTORY" : @"UPDATE_CHANNEL_DIRECTORY";
+    private readonly GitHubUpdateSource _source = new();
     private readonly string _dataDirectory;
     private readonly RollingFileLogger _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -30,27 +27,20 @@ public sealed class UpdateService
     {
         var installed = InstalledRelease();
         var channel = _channels.Read(installed.Channel);
-        var channelPath = ChannelPath(channel);
+        var channelPath = _source.ChannelLocation(channel);
         try
         {
-            var manifestPath = Path.Combine(channelPath, "update.json");
-            if (!File.Exists(manifestPath))
-                return new(installed.Label, null, false, false, "No update has been published to this channel yet.", channelPath, installed.Channel, channel);
-
-            await using var stream = new FileStream(manifestPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var manifest = await JsonSerializer.DeserializeAsync<UpdateManifest>(stream, cancellationToken: cancellationToken)
-                ?? throw new InvalidDataException("The update manifest is empty.");
-            Validate(manifest, channel);
-            var installerPath = ResolveInstaller(manifest.Installer, channel);
-            if (!File.Exists(installerPath)) throw new FileNotFoundException("The published installer is missing.", installerPath);
+            var release = await _source.FindAsync(channel, cancellationToken: cancellationToken);
+            if (release is null) return new(installed.Label, null, false, false, "No GitHub release has been published to this channel yet.", channelPath, installed.Channel, channel);
+            var manifest = release.Manifest;
             var latest = UpdateRelease.Parse(manifest.Version);
             var updateAvailable = UpdateRelease.CanInstall(installed, latest, channel);
             return new(installed.Label, latest.Label, true, updateAvailable,
-                updateAvailable ? $"SpotMonitor {manifest.Version} is ready to install." : "SpotMonitor is up to date on this channel.", channelPath, installed.Channel, channel);
+                updateAvailable ? $"RTSPView {manifest.Version} is ready to install." : "SpotMonitor is up to date on this channel.", channelPath, installed.Channel, channel);
         }
-        catch (Exception exception)
+        catch (Exception)
         {
-            return new(installed.Label, null, false, false, $"Update channel unavailable: {exception.Message}", channelPath, installed.Channel, channel);
+            return new(installed.Label, null, false, false, "GitHub updates unavailable. Check the Internet connection and public repository access.", channelPath, installed.Channel, channel);
         }
     }
 
@@ -96,11 +86,9 @@ public sealed class UpdateService
             foreach (var argument in new[] { "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", progressScript, "-StatusPath", progressPath })
                 progressStart.ArgumentList.Add(argument);
             _ = Process.Start(progressStart) ?? throw new InvalidOperationException("Windows did not start the update progress window.");
-            var manifestPath = Path.Combine(ChannelPath(channel), "update.json");
-            await using var manifestStream = new FileStream(manifestPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var manifest = await JsonSerializer.DeserializeAsync<UpdateManifest>(manifestStream, cancellationToken: cancellationToken)
-                ?? throw new InvalidDataException("The update manifest is empty.");
-            Validate(manifest, channel);
+            var release = await _source.FindAsync(channel, refresh: true, cancellationToken: cancellationToken)
+                ?? throw new InvalidDataException("No GitHub release is available for this channel.");
+            var manifest = release.Manifest;
             if (manifest.Version != expectedVersion) throw new InvalidOperationException("The available release changed. Check for updates and confirm the new version.");
             var latest = UpdateRelease.Parse(manifest.Version);
             if (!UpdateRelease.CanInstall(installed, latest, channel))
@@ -109,19 +97,9 @@ public sealed class UpdateService
                 return new(false, "SpotMonitor is already up to date.");
             }
 
-            var source = ResolveInstaller(manifest.Installer, channel);
-            var staged = Path.Combine(updateDirectory, Path.GetFileName(source));
-            WriteProgress(progressPath, "working", $"Copying SpotMonitor {manifest.Version} from the LAN channel...");
-            await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true))
-            await using (var output = new FileStream(staged, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true))
-                await input.CopyToAsync(output, cancellationToken);
-            WriteProgress(progressPath, "working", "Verifying the downloaded installer...");
-            var actualHash = await ComputeSha256Async(staged, cancellationToken);
-            if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(actualHash), Convert.FromHexString(manifest.Sha256)))
-            {
-                File.Delete(staged);
-                throw new InvalidDataException("The installer checksum does not match the update manifest.");
-            }
+            var staged = Path.Combine(updateDirectory, manifest.Installer);
+            WriteProgress(progressPath, "working", $"Downloading and verifying RTSPView {manifest.Version} from GitHub...");
+            await _source.DownloadAsync(release, staged, cancellationToken);
 
             var updater = Path.Combine(AppContext.BaseDirectory, "Apply-Update.ps1");
             if (!File.Exists(updater)) throw new FileNotFoundException("The update helper is missing.", updater);
@@ -138,13 +116,13 @@ public sealed class UpdateService
             _ = Process.Start(startInfo) ?? throw new InvalidOperationException("Windows did not start the update helper.");
             _launched = true;
             _activeProgressPath = progressPath;
-            _logger.Write("AUDIT", $"SpotMonitor {manifest.Version} update staged and elevation requested from web admin");
-            return new(true, $"SpotMonitor {manifest.Version} is staged. Follow the update progress window on the Windows host. The page will disconnect during installation.");
+            _logger.Write("AUDIT", $"RTSPView {manifest.Version} update staged and elevation requested from web admin");
+            return new(true, $"RTSPView {manifest.Version} is staged. Follow the update progress window on the Windows host. The page will disconnect during installation.");
         }
-        catch (Exception exception)
+        catch (Exception)
         {
             if (progressPath is not null)
-                try { WriteProgress(progressPath, "failed", $"Update did not start: {exception.Message}"); } catch { /* Preserve the original error. */ }
+                try { WriteProgress(progressPath, "failed", "Update did not start. Check server logs."); } catch { /* Preserve the original error. */ }
             throw;
         }
         finally { _gate.Release(); }
@@ -163,29 +141,8 @@ public sealed class UpdateService
         var label = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0];
         return UpdateRelease.Parse(label ?? "0.0.0");
     }
-    private static void Validate(UpdateManifest manifest, string channel)
-    {
-        if (UpdateRelease.Parse(manifest.Version).Channel != channel) throw new InvalidDataException("The manifest does not match the selected channel.");
-        if (string.IsNullOrWhiteSpace(manifest.Installer) || Path.GetFileName(manifest.Installer) != manifest.Installer || !manifest.Installer.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("The installer filename is invalid.");
-        if (!Regex.IsMatch(manifest.Sha256 ?? string.Empty, "^[A-Fa-f0-9]{64}$")) throw new InvalidDataException("The installer checksum is invalid.");
-    }
-
-    private static string ResolveInstaller(string filename, string channel)
-    {
-        var root = Path.GetFullPath(ChannelPath(channel)).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var resolved = Path.GetFullPath(Path.Combine(root, filename));
-        if (!resolved.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The installer path escapes the update channel.");
-        return resolved;
-    }
-
-    private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
-    {
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken));
-    }
+    public void Dispose() { _source.Dispose(); _gate.Dispose(); }
 }
 
-public sealed record UpdateManifest(string Version, string Installer, string Sha256, DateTimeOffset PublishedAt);
 public sealed record UpdateStatus(string InstalledVersion, string? LatestVersion, bool ChannelAvailable, bool UpdateAvailable, string Message, string ChannelPath, string InstalledChannel, string SelectedChannel);
 public sealed record UpdateLaunchResult(bool Started, string Message);

@@ -54,7 +54,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private uint _lastSizingSourceWidth;
     private uint _lastSizingSourceHeight;
     private bool _nativeVideoLayoutConfirmed;
-    private readonly string _snapshotDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotMonitor", "snapshots");
+    private readonly string _snapshotDirectory = Path.Combine(AppPaths.DataDirectory, "snapshots");
 
     public int Slot => _settings.Slot;
     public bool IsPlaying => _player?.IsPlaying == true;
@@ -655,7 +655,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             ReconnectCount = _status.ReconnectCount + 1,
             LastReconnectAt = now,
             NextReconnectAt = now.AddSeconds(backoffSeconds).AddMilliseconds(jitterMilliseconds),
-            LastError = error
+            LastError = RollingFileLogger.RedactCredentials(error)
         };
         SetOverlay("Camera Offline", true);
         _logger?.Write("WARNING", $"Camera {_settings.Slot}: {error}; retry {failures} scheduled in {backoffSeconds:0}s");

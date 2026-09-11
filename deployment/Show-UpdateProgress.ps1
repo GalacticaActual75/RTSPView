@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 $window = New-Object System.Windows.Forms.Form
-$window.Text = 'SpotMonitor update'
+$window.Text = 'RTSPView update'
 $window.ClientSize = New-Object System.Drawing.Size(560, 260)
 $window.StartPosition = 'CenterScreen'
 $window.FormBorderStyle = 'FixedDialog'

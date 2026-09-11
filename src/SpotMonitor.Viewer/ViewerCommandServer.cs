@@ -19,7 +19,7 @@ public sealed class ViewerCommandServer : IDisposable
         {
             try
             {
-                await using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(_cancellation.Token);
                 using var reader = new StreamReader(pipe);
                 await using var writer = new StreamWriter(pipe) { AutoFlush = true };
@@ -34,7 +34,7 @@ public sealed class ViewerCommandServer : IDisposable
                             ?? throw new InvalidDataException("Empty command.");
                         result = await commandHandler(command);
                     }
-                    catch (Exception exception) { result = new ViewerCommandResult(Guid.Empty, false, exception.Message); }
+                    catch (Exception) { result = new ViewerCommandResult(Guid.Empty, false, "Viewer command failed."); }
                     await writer.WriteLineAsync(JsonSerializer.Serialize(result));
                 }
             }

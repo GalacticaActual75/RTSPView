@@ -13,7 +13,7 @@ public sealed class ViewerCommandClient
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await using var pipe = new NamedPipeClientStream(".", ViewerCommandServerPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            await using var pipe = new NamedPipeClientStream(".", ViewerCommandServerPipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(8));
             await pipe.ConnectAsync(timeout.Token);
@@ -30,7 +30,7 @@ public sealed class ViewerCommandClient
         {
             return new ViewerCommandResult(Guid.Empty, false, "Viewer command timed out.");
         }
-        catch (Exception exception) { return new ViewerCommandResult(Guid.Empty, false, $"Viewer unavailable: {exception.Message}"); }
+        catch (Exception) { return new ViewerCommandResult(Guid.Empty, false, "Viewer unavailable."); }
         finally { _gate.Release(); }
     }
 

@@ -1,10 +1,12 @@
+> Historical roadmap with current process model corrected. README.md is authoritative for release configuration and security behavior.
+
 # Production architecture and roadmap
 
 ## Process model
 
-The final appliance uses two processes. `SpotMonitor.Controller` is an ASP.NET Core Windows service responsible for authenticated LAN administration, health data, configuration, logs, and viewer supervision. `SpotMonitor.Viewer` runs only in the signed-in interactive session and owns nine native LibVLC video surfaces. IPC uses a local named pipe restricted to the service identity and interactive user.
+The application uses two processes running as the same signed-in Windows user. `SpotMonitor.Controller` provides authenticated web administration, health data, configuration, logs, and viewer supervision. `SpotMonitor.Viewer` owns up to 16 main video surfaces and optional overlays. Named pipes restrict connections to the current user. The installer can configure a logon task; Controller is not a Windows service.
 
-Running the renderer as a service is intentionally avoided: Windows services run in Session 0 and cannot reliably present an interactive full-screen wall. Task Scheduler (“at log on”, delayed, restart on failure) is the appropriate launch mechanism for the viewer; the service provides the stronger watchdog.
+Running the renderer as a service is intentionally avoided: Windows services run in Session 0 and cannot reliably present an interactive full-screen wall. Task Scheduler (“at log on”, delayed, restart on failure) is the appropriate launch mechanism for the viewer; Controller provides the watchdog.
 
 ## Video lifecycle
 

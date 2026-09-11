@@ -1,4 +1,4 @@
-#define MyAppName "SpotMonitor"
+#define MyAppName "RTSPView"
 #define MyAppPublisher "RTSPView"
 #define MyAppVersion GetEnv("SPOTMONITOR_VERSION")
 #if MyAppVersion == ""
@@ -16,14 +16,15 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\SpotMonitor
-DefaultGroupName=SpotMonitor
+DefaultDirName={autopf}\RTSPView
+UsePreviousAppDir=yes
+DefaultGroupName=RTSPView
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=SpotMonitor-Setup-{#MyAppVersion}-win-x64
+OutputBaseFilename=RTSPView-Setup-{#MyAppVersion}-win-x64
 SetupIconFile=..\src\SpotMonitor.Viewer\Assets\SpotMonitor.ico
 UninstallDisplayIcon={app}\Viewer\SpotMonitor.Viewer.exe
 Compression=lzma2/max
@@ -37,7 +38,7 @@ VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyNumericVersion}
 
 [Tasks]
-Name: "autostart"; Description: "Start and supervise SpotMonitor when this user signs in"; GroupDescription: "Startup:"; Flags: checkedonce
+Name: "autostart"; Description: "Start and supervise RTSPView when this user signs in"; GroupDescription: "Startup:"; Flags: checkedonce
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Files]
@@ -52,11 +53,11 @@ Source: "..\deployment\Apply-Update.ps1"; DestDir: "{app}\Controller"; Flags: ig
 Source: "..\deployment\Show-UpdateProgress.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\SpotMonitor"; Filename: "{app}\Start-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"
+Name: "{group}\RTSPView"; Filename: "{app}\Start-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"
 Name: "{group}\Web configuration"; Filename: "{app}\Open-Web-Admin.cmd"; IconFilename: "{app}\Controller\SpotMonitor.Controller.exe"
-Name: "{group}\Stop SpotMonitor"; Filename: "{app}\Stop-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"
-Name: "{group}\Uninstall SpotMonitor"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\SpotMonitor"; Filename: "{app}\Start-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"; Tasks: desktopicon
+Name: "{group}\Stop RTSPView"; Filename: "{app}\Stop-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"
+Name: "{group}\Uninstall RTSPView"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\RTSPView"; Filename: "{app}\Start-SpotMonitor.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""SpotMonitor Web Admin - Private LAN"""; Flags: runhidden waituntilterminated
@@ -64,7 +65,7 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""SpotMonitor Web Admin - LAN Only"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""SpotMonitor Web Admin - LAN Only"" dir=in action=allow protocol=TCP localport=5080 remoteip=LocalSubnet profile=any enable=yes"; Flags: runhidden waituntilterminated
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""$runner=Join-Path '{app}' 'Run-Appliance.ps1'; $arguments='-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '+[char]34+$runner+[char]34; $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments; $trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME; $trigger.Delay='PT20S'; $settings=New-ScheduledTaskSettingsSet -RestartCount 20 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Days 3650) -StartWhenAvailable; Register-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -Action $action -Trigger $trigger -Settings $settings -Description 'Starts and supervises the SpotMonitor camera wall.' -Force | Out-Null"""; Flags: runhidden waituntilterminated; Tasks: autostart
-Filename: "{app}\Start-SpotMonitor.cmd"; Description: "Launch SpotMonitor"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\Start-SpotMonitor.cmd"; Description: "Launch RTSPView"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Stop-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -Confirm:$false -ErrorAction SilentlyContinue; Get-Process -Name 'SpotMonitor.Controller','SpotMonitor.Viewer' -ErrorAction SilentlyContinue | Stop-Process -Force"""; Flags: runhidden waituntilterminated

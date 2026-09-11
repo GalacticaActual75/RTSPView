@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$logDirectory = Join-Path $env:LOCALAPPDATA 'SpotMonitor\logs'
+$logDirectory = if ($env:RTSPVIEW_DATA_DIR) { Join-Path $env:RTSPVIEW_DATA_DIR 'logs' } elseif ($env:SPOTMONITOR_DATA_DIR) { Join-Path $env:SPOTMONITOR_DATA_DIR 'logs' } elseif (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'SpotMonitor\settings.json')) { Join-Path $env:LOCALAPPDATA 'SpotMonitor\logs' } else { Join-Path $env:LOCALAPPDATA 'RTSPView\logs' }
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 $logPath = Join-Path $logDirectory 'update.log'
 $wallStopped = $false
@@ -17,11 +17,10 @@ function Report-Update([string]$State, [string]$Message) {
         @{ state = $State; message = $Message; windowSession = 'install'; updatedAt = [DateTimeOffset]::UtcNow.ToString('o'); logPath = $logPath } |
             ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding UTF8
         Move-Item -LiteralPath $temporary -Destination $StatusPath -Force
-    } catch { Write-Warning "Unable to publish update status: $_" }
+    } catch { Write-Warning "Unable to publish update status." }
 }
 
 try {
-    Start-Transcript -Path $logPath -Append | Out-Null
     Report-Update 'working' 'Administrator approval received. Verifying the installer again...'
     # Launch from the elevated helper, which survives stopping the scheduled wall task.
     # The staging window closes when it sees the install session in the status file.
@@ -42,7 +41,7 @@ try {
     Get-Process -Name 'SpotMonitor.Controller','SpotMonitor.Viewer' -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Seconds 2
     $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS'
-    Report-Update 'working' 'Installing SpotMonitor. The camera wall will restart when installation finishes.'
+    Report-Update 'working' 'Installing RTSPView. The camera wall will restart when installation finishes.'
     $process = Start-Process -FilePath $resolvedInstaller -ArgumentList $arguments -WindowStyle Hidden -PassThru
     $null = $process.Handle
     $installStarted = [DateTimeOffset]::UtcNow
@@ -59,7 +58,7 @@ try {
         $installedVersion = (Get-Item -LiteralPath $controllerPath).VersionInfo.ProductVersion.Split('+')[0]
         if ($installedVersion -ne $ExpectedVersion) { throw "Expected $ExpectedVersion but found $installedVersion after installation." }
     }
-    Report-Update 'working' 'Installation finished. Starting SpotMonitor and waiting for the viewer...'
+    Report-Update 'working' 'Installation finished. Starting RTSPView and waiting for the viewer...'
     Start-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -ErrorAction Stop
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(60)
     do {
@@ -68,15 +67,14 @@ try {
         $viewerRunning = Get-Process -Name 'SpotMonitor.Viewer' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $viewerPath }
     } until (($controllerRunning -and $viewerRunning) -or [DateTimeOffset]::UtcNow -ge $deadline)
     if (!$controllerRunning -or !$viewerRunning) { throw 'Installation finished, but the controller and viewer did not both start within 60 seconds. See the update log.' }
-    Report-Update 'complete' "SpotMonitor $ExpectedVersion is installed and the viewer has started. Camera streams may still be reconnecting."
+    Report-Update 'complete' "RTSPView $ExpectedVersion is installed and the viewer has started. Camera streams may still be reconnecting."
     Remove-Item -LiteralPath $resolvedInstaller -Force -ErrorAction SilentlyContinue
 }
 catch {
-    $failure = $_.Exception.Message
-    $_ | Out-String | Add-Content -LiteralPath $logPath
+    $failure = $_.Exception.Message -replace '(?i)(?:rtsp|https?)://[^\s]+', '[URL redacted]' -replace '(?i)(?:[A-Z]:\\|\\\\)[^\r\n]+', '[path redacted]'
+    $failure | Add-Content -LiteralPath $logPath
     if ($wallStopped) { Start-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -ErrorAction SilentlyContinue }
     Report-Update 'failed' "Update needs attention: $failure"
 }
 finally {
-    Stop-Transcript -ErrorAction SilentlyContinue
 }

@@ -48,6 +48,11 @@ public sealed class JsonSettingsStore
 
     public async Task ExportWithoutCredentialsAsync(AppSettings settings, string destination, CancellationToken cancellationToken = default)
     {
+        await WriteAsync(destination, WithoutCredentials(settings), cancellationToken);
+    }
+
+    public static AppSettings WithoutCredentials(AppSettings settings)
+    {
         var normalized = settings.Normalize();
         var sanitized = normalized with
         {
@@ -72,7 +77,7 @@ public sealed class JsonSettingsStore
                 }
             }
         };
-        await WriteAsync(destination, Validate(sanitized), cancellationToken);
+        return Validate(sanitized);
     }
 
     public Task<AppSettings> ImportAsync(string source, CancellationToken cancellationToken = default) => ReadAndValidateAsync(source, cancellationToken);
@@ -81,7 +86,7 @@ public sealed class JsonSettingsStore
     {
         using var document = JsonDocument.Parse(json);
         if (document.RootElement.ValueKind != JsonValueKind.Object)
-            throw new InvalidDataException("Select a SpotMonitor configuration JSON file.");
+            throw new InvalidDataException("Select a RTSPView configuration JSON file.");
         var properties = document.RootElement.EnumerateObject().ToArray();
         if (!properties.Any(p => p.Name.Equals("SchemaVersion", StringComparison.OrdinalIgnoreCase)) ||
             !properties.Any(p => p.Name.Equals("Cameras", StringComparison.OrdinalIgnoreCase) || p.Name.Equals("Camera", StringComparison.OrdinalIgnoreCase)))

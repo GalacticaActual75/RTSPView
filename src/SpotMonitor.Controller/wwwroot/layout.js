@@ -61,10 +61,10 @@ const adminLayout = (() => {
     const viewer = document.querySelector('.viewer-display-panel'), display = document.querySelector('#displayForm'), updates = document.querySelector('#updatePanel');
     display.className = 'panel control-panel'; updates.className = 'panel control-panel';
     const channelSettings = document.createElement('div'); channelSettings.className = 'update-channel-settings';
-    channelSettings.innerHTML = '<label>Update channel<select id="updateChannel"><option value="stable">Stable (main)</option><option value="beta">Beta</option></select></label><dl class="update-versions"><div><dt>Installed</dt><dd id="installedRelease">Checking…</dd></div><div><dt>Available on selected channel</dt><dd id="availableRelease">Checking…</dd></div></dl><p>Changing channels does not install anything. Install the selected release to switch this host.</p><a href="/api/config/export" download="SpotMonitor-config.json">Export configuration before installing</a>';
+    channelSettings.innerHTML = '<label>Update channel<select id="updateChannel"><option value="stable">Stable (main)</option><option value="beta">Beta</option></select></label><dl class="update-versions"><div><dt>Installed</dt><dd id="installedRelease">Checking…</dd></div><div><dt>Available on selected channel</dt><dd id="availableRelease">Checking…</dd></div></dl><p>Changing channels does not install anything. Install the selected release to switch this host.</p><a href="/api/config/export" download="RTSPView-config.json">Export configuration before installing</a>';
     updates.insertBefore(channelSettings, document.querySelector('#updateState'));
     const installDialog = document.createElement('dialog'); installDialog.id = 'updateConfirm';
-    installDialog.innerHTML = '<form method="dialog"><h2>Install selected release?</h2><p id="updateConfirmText"></p><p>The camera wall will restart. Follow progress on the Windows host.</p><a href="/api/config/export" download="SpotMonitor-config.json">Export configuration for rollback</a><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="install">Install now</button></div></form>';
+    installDialog.innerHTML = '<form method="dialog"><h2>Install selected release?</h2><p id="updateConfirmText"></p><p>The camera wall will restart. Follow progress on the Windows host.</p><a href="/api/config/export" download="RTSPView-config.json">Export configuration for rollback</a><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="install">Install now</button></div></form>';
     document.body.append(installDialog);
     viewer.querySelector('h2').textContent = 'Maintenance';
     viewer.querySelector('p').textContent = 'These commands take effect immediately on the Windows host.';
@@ -187,7 +187,7 @@ const adminLayout = (() => {
     const badge = document.querySelector('header .tag');
     badge.textContent = beta ? 'BETA' : 'STABLE'; badge.title = 'Installed release: ' + version;
     badge.classList.toggle('stable', !beta);
-    document.title = beta ? 'SpotMonitor Beta Admin' : 'SpotMonitor Admin';
+    document.title = beta ? 'RTSPView Beta Admin' : 'RTSPView Admin';
   }
   function selectOverlay(id) {
     for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))grid.hidden=grid.id!==id;

@@ -6,6 +6,12 @@ var root = Path.Combine(Path.GetTempPath(), "SpotMonitor-ConfigurationChecks", G
 Directory.CreateDirectory(root);
 try
 {
+    await GitHubUpdateChecks.RunAsync(root);
+    var migrationRoot = Path.Combine(root, "migration-user");
+    Check(AppPaths.DefaultDataDirectory(migrationRoot) == Path.Combine(migrationRoot, "RTSPView"), "new installation uses RTSPView data directory");
+    Directory.CreateDirectory(Path.Combine(migrationRoot, "SpotMonitor"));
+    await File.WriteAllTextAsync(Path.Combine(migrationRoot, "SpotMonitor", "settings.json"), "{}");
+    Check(AppPaths.DefaultDataDirectory(migrationRoot) == Path.Combine(migrationRoot, "SpotMonitor"), "rebrand preserves existing settings directory");
     var multiStore = new JsonSettingsStore(Path.Combine(root, "multiple-overlays.json"));
     var multi = new AppSettings
     {
@@ -365,7 +371,35 @@ try
           (int)ViewerCommandType.CaptureCameraSnapshot == 5,
         "viewer command protocol keeps existing numeric values stable");
 
-    var grid = new CameraSettings { RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };
+    var blank = await new JsonSettingsStore(Path.Combine(root, "fresh-settings.json")).LoadAsync();
+    Check(new[] { blank.Camera }.Concat(blank.Cameras).Concat(blank.AllOverlays().Select(o => o.Camera)).All(c => c.RtspUrl == string.Empty), "fresh installation contains no camera URLs");
+    Check(blank.Normalize().AllOverlays().All(o => o.Camera.RtspUrl == string.Empty), "normalized overlays contain no camera URLs");
+    var securityPath = Path.Combine(root, "web-security.json");
+    var readablePath = Path.Combine(root, "initial-admin-password.txt");
+    var security = await WebSecurity.LoadOrCreateAsync(securityPath, readablePath);
+    Check(security.Verify("admin") && security.PasswordChangeRequired, "initial admin requires change");
+    Check(!File.Exists(readablePath), "no readable password file");
+    var oldVersion = security.SessionVersion;
+    Check(await security.ChangeAsync("admin", "test-only-new-password"), "password changes");
+    var reloaded = await WebSecurity.LoadOrCreateAsync(securityPath, readablePath);
+    Check(!reloaded.Verify("admin") && reloaded.Verify("test-only-new-password") && !reloaded.PasswordChangeRequired, "password state survives restart");
+    Check(reloaded.SessionVersion != oldVersion, "password change invalidates sessions");
+    Check(!(await File.ReadAllTextAsync(securityPath)).Contains("test-only-new-password"), "only hash persisted");
+    var legacySalt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+    var legacyHash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2("legacy-test-password", legacySalt, 210_000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+    await File.WriteAllTextAsync(securityPath, System.Text.Json.JsonSerializer.Serialize(new { Salt = Convert.ToBase64String(legacySalt), Hash = Convert.ToBase64String(legacyHash) }));
+    await File.WriteAllTextAsync(readablePath, "legacy-test-password");
+    var migrated = await WebSecurity.LoadOrCreateAsync(securityPath, readablePath);
+    Check(migrated.Verify("legacy-test-password") && !migrated.Verify("admin") && migrated.PasswordChangeRequired, "legacy password preserved with forced change");
+    Check(!File.Exists(readablePath), "legacy readable password removed");
+    Check(await migrated.ChangeAsync("legacy-test-password", "replacement-test-password"), "legacy hash upgrades on password change");
+    var migratedFile = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(securityPath));
+    Check(migratedFile.RootElement.GetProperty("Iterations").GetInt32() == 600_000, "upgraded work factor persisted");
+    var priorDataPath = Environment.GetEnvironmentVariable("SPOTMONITOR_DATA_DIR");
+    try { Environment.SetEnvironmentVariable("SPOTMONITOR_DATA_DIR", root); Check(AppPaths.DataDirectory == Path.GetFullPath(root), "configurable portable data directory"); }
+    finally { Environment.SetEnvironmentVariable("SPOTMONITOR_DATA_DIR", priorDataPath); }
+    Check(!RollingFileLogger.RedactCredentials("rtsp://test:private@camera.example/live?token=private").Contains("private"), "whole URL sanitized");
+    var grid = new CameraSettings { CompositeStream = true, RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };
     var gridOptions = grid.ToMediaOptions();
     Check(grid.EffectiveTransport == RtspTransport.Tcp, "StreamGrid forces TCP");
     Check(grid.EffectiveNetworkCacheMilliseconds == 3000, "StreamGrid forces 3000 ms cache");

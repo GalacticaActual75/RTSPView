@@ -16,15 +16,8 @@ public sealed record CameraSettings
     public int WatchdogTimeoutSeconds { get; init; } = 12;
     public int MaximumReconnectBackoffSeconds { get; init; } = 30;
 
-    public bool UsesStreamGridCompositePolicy()
-    {
-        if (!Uri.TryCreate(RtspUrl, UriKind.Absolute, out var uri)) return false;
-        return uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase) &&
-               uri.Host.Equals("camera.example", StringComparison.OrdinalIgnoreCase) &&
-               uri.Port == 8554 &&
-               (uri.AbsolutePath.Equals("/grid1", StringComparison.OrdinalIgnoreCase) ||
-                uri.AbsolutePath.Equals("/grid2", StringComparison.OrdinalIgnoreCase));
-    }
+    public bool CompositeStream { get; init; }
+    public bool UsesStreamGridCompositePolicy() => CompositeStream;
 
     public RtspTransport EffectiveTransport => UsesStreamGridCompositePolicy() ? RtspTransport.Tcp : Transport;
     public int EffectiveNetworkCacheMilliseconds => UsesStreamGridCompositePolicy() ? 3000 : Math.Clamp(NetworkCacheMilliseconds, 100, 10_000);
