@@ -10,6 +10,10 @@ header{height:60px;background:#101721;backdrop-filter:none;gap:24px;padding:0 cl
 #updateConfirm::backdrop{background:#0009}#updateConfirm p{line-height:1.6;color:var(--muted)}#updateConfirm a{color:#8ec2ff}
 .main-nav{display:flex;gap:6px;margin-right:auto}
 .mobile-nav{display:none}
+.donate-button{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;background:#ffdd00;color:#171717;border-radius:6px;padding:9px 14px;font-weight:650;text-decoration:none;white-space:nowrap}
+.donate-button:hover{background:#ffe64d}.donate-button:focus-visible,.repository-link:focus-visible{outline:2px solid #8ec2ff;outline-offset:3px}
+.repository-link{color:#8ec2ff}
+@media(min-width:761px) and (max-width:1100px){.main-nav{display:none}.mobile-nav{display:block;width:auto;min-width:0;flex:1;margin:0}}
 .main-nav button{background:transparent;color:var(--muted);padding:10px 18px}
 .main-nav button[aria-current=page]{background:#21354f;color:#8ec2ff}
 .beta-notice{color:var(--muted);text-align:center;padding:9px 16px;font-size:12px}
@@ -81,4 +85,5 @@ button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #8e
 @media(max-width:760px){header{gap:10px;padding:0 12px}.main-nav{display:none}.mobile-nav{display:block;width:auto;min-width:0;flex:1;margin:0;padding:8px}.brand{font-size:11px;letter-spacing:.05em}.tag{margin-left:6px;font-size:10px}header button{padding:8px}.hero #clock{font-size:12px}}
 @media(max-width:700px){.stats{grid-template-columns:1fr 1fr}.stat{padding:12px}.security-grid,.display-toggle-grid{grid-template-columns:1fr}.panel-head{flex-wrap:wrap}.doorbell-preview-actions{flex-direction:row}.overlay-placement fieldset{grid-template-columns:1fr}.doorbell-preview-panel{padding:12px}.doorbell-preview-stage{width:100%}.camera-card .actions{gap:6px}.checks{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.toggle-track,.toggle-track:after{transition:none}}
+@media(max-width:760px){header{height:auto;min-height:60px;display:grid;grid-template-columns:minmax(0,1fr) auto;padding:10px 12px;gap:10px}header>div{grid-column:1;grid-row:1}#logout{grid-column:2;grid-row:1;justify-self:end}.mobile-nav{grid-column:1;grid-row:2;width:100%}.donate-button{grid-column:2;grid-row:2;padding:8px 10px}}
 @media(max-width:700px){#page-overview .section-title{align-items:flex-start;flex-direction:column}.overview-density{align-self:flex-end}}

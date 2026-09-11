@@ -1,5 +1,7 @@
 # RTSPView
 
+[Buy me a coffee](https://buymeacoffee.com/galacticaactual75) to support RTSPView development.
+
 RTSPView is a Windows viewer for RTSP streams: security cameras, encoder feeds, rebroadcasts, composite feeds, and other compatible RTSP sources. Arrange up to 16 main streams into configurable layouts, add picture-in-picture overlays, and manage playback through a web dashboard. It supports hardware decoding through LibVLC and automatic stream recovery. Controller supervises the WPF Viewer; both run as the signed-in Windows user.
 
 ## Install and first setup

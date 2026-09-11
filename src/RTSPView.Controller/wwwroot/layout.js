@@ -69,6 +69,9 @@ const adminLayout = (() => {
     viewer.querySelector('h2').textContent = 'Maintenance';
     viewer.querySelector('p').textContent = 'These commands take effect immediately on the Windows host.';
     pages.system.append(display, updates, document.querySelector('#configPanel'), viewer, document.querySelector('#passwordForm'), document.querySelector('#logView').closest('section'));
+    const project = document.createElement('section'); project.className = 'panel control-panel';
+    project.innerHTML = '<h2>RTSPView project</h2><p>Source code, documentation, releases and issue reporting.</p><a class="repository-link" href="https://github.com/GalacticaActual75/RTSPView" target="_blank" rel="noopener noreferrer">Open RTSPView on GitHub</a>';
+    pages.system.append(project);
     for (const page of Object.values(pages)) main.append(page);
     document.querySelector('#controlState').setAttribute('role','status');
     // Commands from camera cards must remain visible outside the System page.
