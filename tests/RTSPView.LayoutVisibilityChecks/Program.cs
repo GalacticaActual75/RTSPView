@@ -30,6 +30,7 @@ internal static class Program
                 await SetLayout(9);
                 Check(9, "returning to 3x3 restores assigned status windows");
                 NativeBackgroundChecks.Run(tiles[0]);
+                await NativeStartupChecks.Run();
                 result = 0;
             }
             catch (Exception error) { Console.Error.WriteLine(error); }

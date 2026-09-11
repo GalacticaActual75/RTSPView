@@ -47,6 +47,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private int _playGeneration;
     private nint _nativeVideoHandle;
     private HwndSource? _backgroundSource;
+    private bool _pendingNativeStart;
+    private bool _pendingNativeRecreate;
     private int _videoZoomPercent = 100;
     private int _videoDisplayWidth;
     private int _videoDisplayHeight;
@@ -90,9 +92,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public CameraTile()
     {
         InitializeComponent();
-        VideoView.Loaded += (_, _) => { EnsureNativeVideoBackground(); ApplyVideoSizing(_player); };
+        VideoView.Loaded += (_, _) => { EnsureNativeVideoBackground(); ResumeNativeStart(); ApplyVideoSizing(_player); };
         VideoView.SizeChanged += (_, _) => ApplyVideoSizing(_player);
-        IsVisibleChanged += (_, _) => SynchronizeStatusWindowVisibility();
+        IsVisibleChanged += (_, _) => { SynchronizeStatusWindowVisibility(); ResumeNativeStart(); };
         Loaded += (_, _) => SynchronizeStatusWindowVisibility();
         // VideoView moves OverlayRoot into a separate top-level window. Parent
         // visibility does not inherit across that boundary, including on first load.
@@ -309,6 +311,13 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private nint ColorNativeVideoBackground(nint handle, int message, nint wParam, nint lParam, ref bool handled) =>
         NativeVideoBackgroundGuard.ColorHostBackground(_nativeVideoHandle, message, wParam, lParam, ref handled);
 
+    private void ResumeNativeStart()
+    {
+        if (!_pendingNativeStart || _disposed || !IsVisible || !VideoView.IsLoaded) return;
+        var recreate = _pendingNativeRecreate;
+        StartPlayer(recreate);
+    }
+
     public IntPtr GetNativeVideoHandle()
     {
         if (_useCompositedOutput) return IntPtr.Zero;
@@ -326,6 +335,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void Tick(string hardwareDecoder)
     {
+        if (_pendingNativeStart) { ResumeNativeStart(); return; }
         if (_disposed || !_settings.Enabled) return;
         if (_videoDisplayWidth > 0 && _videoDisplayHeight > 0)
         {
@@ -511,13 +521,26 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void StartPlayer(bool recreatePlayer)
     {
-        if (_libVlc is null) return;
+        if (_disposed || _libVlc is null) return;
         if (!Uri.TryCreate(_settings.RtspUrl, UriKind.Absolute, out var uri) || !uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
         {
             ScheduleRecovery("Invalid RTSP URL");
             return;
         }
 
+        // Initial tiles may be collapsed when Initialize is called. LibVLCSharp
+        // can then leave MediaPlayer.Hwnd at zero even after the host loads.
+        // Never start native playback until a real destination exists.
+        var playbackHandle = _useCompositedOutput ? IntPtr.Zero : GetNativeVideoHandle();
+        if (!_useCompositedOutput && (!IsVisible || !VideoView.IsLoaded || playbackHandle == IntPtr.Zero))
+        {
+            _pendingNativeStart = true;
+            _pendingNativeRecreate |= recreatePlayer;
+            SetState(CameraConnectionState.Connecting, "Waiting for video display…");
+            return;
+        }
+        recreatePlayer |= _pendingNativeRecreate;
+        _pendingNativeStart = _pendingNativeRecreate = false;
         var oldPlayer = _player;
         var oldMedia = _media;
         var oldPresenter = recreatePlayer ? _compositedPresenter : null;
@@ -555,6 +578,11 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
                 if (!recoveringFromFailure) oldPlayer?.Stop();
                 oldMedia?.Dispose();
                 if (recreatePlayer) _ = Task.Run(() => { oldPlayer?.Dispose(); oldPresenter?.Dispose(); });
+                if (newPlayer is not null && !_useCompositedOutput)
+                {
+                    newPlayer.Hwnd = playbackHandle;
+                    _logger?.Write("INFO", $"Camera {_settings.Slot}: native playback attached to HWND 0x{playbackHandle.ToInt64():X}");
+                }
                 if (newPlayer is not null && !newPlayer.Play(newMedia))
                     Dispatcher.BeginInvoke(() => ScheduleRecovery("LibVLC rejected the stream startup request"));
             }
@@ -564,18 +592,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             }
         });
 
-        // Assigning a replacement MediaPlayer causes LibVLCSharp.WPF to attach
-        // the tile's native HWND asynchronously. Starting sooner can make VLC
-        // fall back to a separate "VLC Direct Output" window. Let WPF finish
-        // loaded/render work before the native Play call is queued.
-        if (recreatePlayer)
-            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, async () =>
-            {
-                await Task.Delay(250);
-                QueuePlayback();
-            });
-        else
-            QueuePlayback();
+        QueuePlayback();
     }
 
     public Task<bool> RefreshSnapshotAsync()
@@ -675,6 +692,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void Stop(CameraConnectionState state)
     {
+        _pendingNativeStart = _pendingNativeRecreate = false;
         var player = _player;
         var media = _media;
         _media = null;
