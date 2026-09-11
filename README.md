@@ -1,6 +1,6 @@
 # RTSPView
 
-RTSPView (formerly SpotMonitor) is a Windows RTSP camera wall with up to 16 main cameras, configurable layouts, picture-in-picture overlays, hardware decoding through LibVLC, automatic stream recovery, and a web administration dashboard. Controller supervises the WPF Viewer; both run as the signed-in Windows user.
+RTSPView (formerly SpotMonitor) is a Windows viewer for RTSP streams: security cameras, encoder feeds, rebroadcasts, composite feeds, and other compatible RTSP sources. Arrange up to 16 main streams into configurable layouts, add picture-in-picture overlays, and manage playback through a web dashboard. It supports hardware decoding through LibVLC and automatic stream recovery. Controller supervises the WPF Viewer; both run as the signed-in Windows user.
 
 ## Install and first setup
 
@@ -11,6 +11,73 @@ Open [local administration](http://127.0.0.1:5080) on the camera-wall computer. 
 **Fresh installations have no camera URLs configured**, including every main camera, legacy camera field and overlay. Enter your own URLs after setup. Existing installations retain their streams and password, but legacy security state requires a password change after login. Back up before upgrading.
 
 The dashboard listens on loopback TCP 5080 by default. Remote access is an explicit deployment choice: configure ASP.NET Core HTTPS with a trusted certificate before binding a LAN interface. `ASPNETCORE_URLS` controls bindings. HTTP LAN bindings transmit credentials and cookies without encryption. Do not expose them to the Internet. Complete initial setup locally. Firewall rules do not provide encryption.
+
+## What RTSPView does
+
+RTSPView turns a Windows display into a wall of live RTSP video. The desktop Viewer plays the video; the browser dashboard configures the wall and shows status and snapshot previews. A source does not need to be a physical camera: any compatible RTSP video stream can fill a main slot or an overlay. Playback depends on the source codec and LibVLC support. RTSPView is intended for live viewing, not recording or NVR playback.
+
+The dashboard currently calls stream slots **Cameras** and the display a **Camera wall**. These are interface labels, not restrictions on the source: substitute your encoder, rebroadcast or other RTSP feed wherever the guide says camera.
+
+| Feature | What you can do |
+| --- | --- |
+| Main streams | Configure up to 16 RTSP streams with individual names, enable switches, transport, buffering and recovery settings. |
+| Layout designer | Build landscape or portrait walls, choose presets, resize/rearrange tiles and keep up to 32 saved layouts. |
+| Picture-in-picture | Show Doorbell, Garage and up to 14 additional overlay streams over selected camera tiles. These labels are defaults; use your own names and streams. |
+| Overlay styling | Adjust shape, size, placement, opacity, zoom and pan; draw a custom mask or import supported SVG paths. |
+| Dedicated display | Choose a monitor, launch full screen, keep the viewer on top and hide the idle mouse cursor. |
+| Stream resilience | Request hardware decoding, reconnect failed or stalled streams, and restart individual streams or the whole viewer. Actual capacity depends on resolution, frame rate, codecs and hardware. |
+| Administration | Check stream health, view logs, manage updates, change the admin password and export/import configuration. |
+
+## Set up streams and layouts
+
+1. Open **Cameras** after completing the initial password change. Enter a descriptive stream name and its RTSP URL, enable the slot, and choose **Save camera**. Use the URL supplied by your camera, encoder or RTSP server; no network discovery or preconfigured camera addresses are provided.
+2. Use **Add camera** when you need more than the initial nine entries, up to 16. An enabled camera also needs an assignment in the active layout to appear on the wall.
+3. Open **Layouts**, choose **Landscape · 16:9** or **Portrait · 9:16**, and pick a starting preset. Presets include Single, Split, Quad, Six, Nine, Sixteen, Featured, Sidebar, Cinema, Dual focus, Center stage and Strip.
+4. Assign cameras, drag tiles to move or swap them, and use a tile's corner handle to resize it. The grid supports one to four rows and columns. Layout previews use snapshots; watch the desktop Viewer for live video.
+5. Choose **Apply to wall** to save and display the draft. Edits stay in draft until applied. Under **Manage layout**, duplicate and name a layout to keep an alternative; **Save layout** saves an inactive layout without switching the wall. **Discard changes** abandons the draft. The active layout cannot be deleted.
+
+Camera settings save per slot and apply live. Changing layout geometry or overlay placement does not require reinstalling the application.
+
+## Always-on-top and full-screen behavior
+
+**Keep viewer always on top is enabled by default.** In **System → Wall behavior**, clear **Keep viewer always on top** and choose **Save display settings** when you want to use other applications normally on the same monitor. While enabled, RTSPView periodically reasserts its topmost position, so a browser or another ordinary window can appear behind the camera wall even after you switch to it. This is intentional for a dedicated camera display.
+
+Always-on-top and full-screen mode are separate settings. **Exit full screen** restores the window border and local controls, but does **not** turn off always-on-top. To work comfortably on the same computer, disable always-on-top and exit full screen. **Launch full screen** controls the saved behavior; later configuration reloads can restore that saved mode, so clear it as well if you want the viewer to stay windowed.
+
+The System page provides immediate **Enter full screen** and **Exit full screen** commands. For a local escape from full screen, click the upper-right corner of the selected display **five times within three seconds**, then confirm. The click area is the upper-right 64 × 64 pixels. This gesture exits full screen; it does not stop the viewer or disable always-on-top. This is a display convenience, not a secure Windows kiosk lock.
+
+**Preferred monitor** uses a zero-based display index: `0` selects the first display in Windows' enumerated list, `1` the next. Check the chosen screen after rearranging or reconnecting monitors. **Hide mouse cursor** hides the pointer after the configured idle time while in full screen; moving the pointer makes it available again.
+
+Picture-in-picture overlays belong to the viewer and track their host tiles. They are hidden when the viewer is minimized, hidden or cloaked by Windows, and when their host tile is absent from the active layout. They are not independent desktop widgets.
+
+## Picture-in-picture overlays
+
+Open **Overlays**, select Doorbell or Garage, or use **+** to add another overlay. Each overlay has its own RTSP stream and enabled switch. Choose the main camera tile that will host it, configure the stream, adjust the preview and save. Overlay streams stay visible while enabled and their host tile is displayed; the Doorbell label does not imply an automatic doorbell-press trigger.
+
+| Control | Effect |
+| --- | --- |
+| Host camera | Attaches the overlay to that camera's tile. Moving or resizing the host tile moves/scales the overlay with it. |
+| Viewport width/height | Sets the visible overlay area as a percentage of the host tile. |
+| Viewport horizontal/vertical position | Moves that area within the host tile; 0 is left/top and 100 is right/bottom within the available space. |
+| Shape | Chooses Native, Square, Rounded square, Circle, Oval or a custom mask. |
+| Opacity | Controls transparency from 20% to 100%; lower values let more of the underlying camera show through. |
+| Zoom | Enlarges the video inside the viewport from 100% to 300%, preserving its aspect ratio. |
+| Image horizontal/vertical position | Pans the video inside the viewport without moving the viewport itself. |
+
+Place and size the viewport first, then zoom and pan the image to frame the area you want. For example, place a small circular doorbell view in the corner of a driveway tile, or place an encoder feed over a larger rebroadcast stream, then zoom and pan to frame the subject. Changing the mask or viewport position is different from moving the image inside it. Preview edits are applied to the camera wall when saved.
+
+The custom shape editor lets you draw a mask. SVG imports must be 256 KB or smaller and define a valid `viewBox` and path geometry. Convert text/basic shapes to paths and flatten transforms in your SVG editor before importing. Imported paths define the video mask; this is not an arbitrary SVG artwork renderer. Custom-mask rotation is also available.
+
+## Stream tuning and everyday controls
+
+Start with the default streaming settings. For an unreliable connection, try TCP and increase **Cache (ms)** to trade latency for smoother playback. **Startup timeout**, **Stall timeout** and **Maximum backoff** control connection/recovery timing; **Low latency** changes playback tuning. **Composite stream compatibility** forces TCP with a 3000 ms buffer and disables low-latency tuning for rebroadcast/composite streams. More streams and larger resolutions increase network, decoder and graphics load.
+
+Use **Restart stream** on a camera for a single-feed problem, **Restart all cameras** for all feeds, or **Restart viewer** for the display process. **Reboot Windows** restarts the entire host. The dashboard also shows health information and recent logs. Browser thumbnails and layout/overlay previews are snapshots, not full-motion browser video.
+
+**Show camera names** and **Show stream stats** control the information drawn over camera tiles. If hidden, diagnostic information appears during connection trouble and remains visible for 15 seconds after recovery. These text/status overlays are separate from picture-in-picture video overlays.
+
+If startup supervision was enabled during installation, RTSPView starts at sign-in and the Controller relaunches a missing Viewer. Closing only the viewer can therefore cause it to return. To stop the installed wall deliberately, run the **Stop RTSPView** shortcut with administrator rights; it stops supervision and the camera processes until a manual start or the next sign-in.
+
 
 ## Configuration and persistent data
 
@@ -73,4 +140,4 @@ Docker is not supported: WPF requires an interactive Windows desktop and graphic
 - Configuration recovery: preserve the data directory before inspecting `settings.json.bak` or pre-import backups. Do not share raw settings, screenshots or logs in bug reports.
 - Run both processes as the same user; named pipes restrict connections to that user. Local administrators and same-user processes remain trusted.
 
-See the [release audit](docs/release-readiness.md) and [history cleanup procedure](docs/history-cleanup.md) before making the repository public. External releases, issue attachments, forks and hosting caches need separate review.
+See the [bridge release report](docs/bridge-release.md) for publication status and remaining validation limits. The [initial release audit](docs/release-readiness.md) and [history cleanup procedure](docs/history-cleanup.md) retain the detailed audit record.
