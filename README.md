@@ -6,7 +6,7 @@ RTSPView (formerly SpotMonitor) is a Windows viewer for RTSP streams: security c
 
 Use Windows 10/11 x64 with a current graphics driver. Download the installer and checksum from this repository's Releases page, verify the checksum, and run the installer. Installation requires elevation; normal operation should use a standard Windows account.
 
-Open [local administration](http://127.0.0.1:5080) on the camera-wall computer. **The initial administrator password is `admin`. Change it immediately.** The account name is `admin`; the dashboard asks only for its password. All administration APIs and controls remain blocked until a different password of 12–1024 characters is saved. Sign in again with the new password. The initial password then stops working and earlier sessions are revoked. No readable administrator password file is created.
+Open [local administration](http://127.0.0.1:5080) on the camera-wall computer. **The initial administrator password is `admin`. Change it immediately.** The account name is `admin`; the dashboard asks only for its password. All administration APIs and controls remain blocked until a nonblank password of up to 1024 characters, different from the current password and from `admin`, is saved. Sign in again with the new password. The initial password then stops working and earlier sessions are revoked. No readable administrator password file is created.
 
 **Fresh installations have no camera URLs configured**, including every main camera, legacy camera field and overlay. Enter your own URLs after setup. Existing installations retain their streams and password, but legacy security state requires a password change after login. Back up before upgrading.
 

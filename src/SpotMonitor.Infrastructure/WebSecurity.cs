@@ -24,8 +24,14 @@ public sealed class WebSecurity
     }
     public async Task<bool> ChangeAsync(string currentPassword, string password)
     {
-        if (string.IsNullOrWhiteSpace(password) || password.Length is < 12 or > 1024 || password == currentPassword)
-            throw new InvalidDataException("Choose a different password containing 12 to 1024 characters.");
+        if (string.IsNullOrWhiteSpace(password))
+            throw new PasswordValidationException("Enter a new password; it cannot be blank.");
+        if (password.Length > 1024)
+            throw new PasswordValidationException("The new password must be 1024 characters or fewer.");
+        if (password == "admin")
+            throw new PasswordValidationException("The new password cannot be the initial password admin.");
+        if (password == currentPassword)
+            throw new PasswordValidationException("The new password must differ from your current password.");
         await _gate.WaitAsync();
         try
         {
@@ -78,3 +84,5 @@ public sealed class WebSecurity
     private sealed record SecurityFile(string Salt, string Hash, int Iterations = 210_000,
         bool PasswordChangeRequired = true, string SessionVersion = "");
 }
+
+public sealed class PasswordValidationException(string message) : Exception(message);

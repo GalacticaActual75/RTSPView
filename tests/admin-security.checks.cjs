@@ -19,12 +19,17 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await session(a)).passwordChangeRequired,true);
   for(const[method,url]of routes.filter(([,p])=>!['/api/auth/password','/api/auth/logout'].includes(p)))assert.equal((await request(a,url,method,method==='GET'?undefined:{})).status,403,'setup gate: '+url);
   await session(b);assert.equal((await request(b,'/api/auth/login','POST',{password:'admin'})).status,200);
-  assert.equal((await request(a,'/api/auth/password','POST',{currentPassword:'admin',newPassword:'short'})).status,400);
-  const password='Test-only-'+crypto.randomUUID();assert.equal((await request(a,'/api/auth/password','POST',{currentPassword:'admin',newPassword:password})).status,200);
+  for(const [newPassword,message] of [['   ','Enter a new password; it cannot be blank.'],['x'.repeat(1025),'The new password must be 1024 characters or fewer.'],['admin','The new password cannot be the initial password admin.']]) {
+   const rejected=await request(a,'/api/auth/password','POST',{currentPassword:'admin',newPassword});assert.equal(rejected.status,400);assert.equal(rejected.json.error,message);
+  }
+  const password='t-'+crypto.randomUUID().slice(0,4); // A short password must complete setup successfully.
+  assert.equal((await request(a,'/api/auth/password','POST',{currentPassword:'admin',newPassword:password})).status,200);
   assert.equal((await request(b,'/api/config')).status,401,'other session invalidated');
   assert.equal((await request(a,'/api/auth/login','POST',{password:'admin'})).status,401,'default revoked');
   assert.equal((await request(a,'/api/auth/login','POST',{password})).status,200);
   assert.equal((await session(a)).passwordChangeRequired,false);
+  const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
+  const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
   for(const camera of [config.camera,...config.cameras,config.doorbellOverlay.camera,config.garageOverlay.camera,...config.additionalOverlays.map(o=>o.camera)])assert.equal(camera.rtspUrl,'','fresh camera URL empty');
   const state=fs.readFileSync(path.join(data,'web-security.json'),'utf8');assert(!state.includes(password));assert(!state.includes('admin'));assert.equal(JSON.parse(state).PasswordChangeRequired,false);assert(!fs.existsSync(path.join(data,'initial-admin-password.txt')));

@@ -456,7 +456,7 @@ app.MapPost("/api/auth/password", async (HttpContext context, PasswordChangeRequ
         if (!await security.ChangeAsync(request.CurrentPassword ?? string.Empty, request.NewPassword ?? string.Empty))
             return Results.BadRequest(new { error = "Current password is incorrect." });
     }
-    catch (InvalidDataException) { return Results.BadRequest(new { error = "Choose a different password containing 12 to 1024 characters." }); }
+    catch (PasswordValidationException error) { return Results.BadRequest(new { error = error.Message }); }
     loginLimiter.RecordSuccess("admin");
     auditLog.Write("AUDIT", $"Web administrator password changed from {context.Connection.RemoteIpAddress}");
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
