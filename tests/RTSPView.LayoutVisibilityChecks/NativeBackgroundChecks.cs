@@ -11,9 +11,9 @@ internal static class NativeBackgroundChecks
     {
         var view = (Control)tile.FindName("VideoView");
         var host = (HwndHost)view.Template.FindName("PART_PlayerHost", view);
-        var method = typeof(CameraTile).Assembly.GetType("RTSPView.Viewer.NativeVideoBackgroundGuard")!
-            .GetMethod("PaintHostBackground", BindingFlags.Static | BindingFlags.Public)!;
-        var hook = method.CreateDelegate<HwndSourceHook>();
+        var method = typeof(CameraTile)
+            .GetMethod("ColorNativeVideoBackground", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var hook = method.CreateDelegate<HwndSourceHook>(tile);
         var parent = HwndSource.FromHwnd(GetParent(host.Handle));
         nint WhiteParent(nint h, int m, nint w, nint l, ref bool handled)
         {
@@ -25,11 +25,21 @@ internal static class NativeBackgroundChecks
         try
         {
             // Negative control: the previous class-brush-only fix still paints white.
-            host.MessageHook -= hook;
+            parent.RemoveHook(hook);
             try { CheckPixel(host.Handle, 0x0318, 0xFFFFFF, "old host paint reproduces white background"); }
-            finally { host.MessageHook += hook; }
+            finally { parent.AddHook(hook); }
             CheckPixel(host.Handle, 0x0318, 0, "native host paints black despite white parent");
-            CheckPixel(host.Handle, 0x0014, 0, "native host erases to black");
+            CheckPixel(host.Handle, 0x0014, 0xFFFFFF, "native erase leaves existing surface untouched");
+            foreach (var message in new[] { 0x000F, 0x0014, 0x0318 })
+            {
+                var handled = false;
+                if (hook(host.Handle, message, 0, host.Handle, ref handled) != 0 || handled)
+                    throw new Exception("Background correction intercepted a renderer paint message");
+            }
+            var otherHandled = false;
+            hook(parent.Handle, 0x0138, 0, parent.Handle, ref otherHandled);
+            if (otherHandled) throw new Exception("Background correction affected another control");
+            Console.WriteLine("PASS renderer paint messages and unrelated controls remain untouched");
         }
         finally { parent.RemoveHook(WhiteParent); }
     }

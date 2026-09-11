@@ -46,7 +46,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private Task _playerOperation = Task.CompletedTask;
     private int _playGeneration;
     private nint _nativeVideoHandle;
-    private HwndHost? _backgroundHost;
+    private HwndSource? _backgroundSource;
     private int _videoZoomPercent = 100;
     private int _videoDisplayWidth;
     private int _videoDisplayHeight;
@@ -293,16 +293,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             return;
 
         var handle = (nint)videoHost.Handle;
-        if (_backgroundHost != videoHost)
+        var parent = HwndSource.FromHwnd(NativeVideoBackgroundGuard.GetHostParent(handle));
+        var parentChanged = _backgroundSource != parent;
+        if (parentChanged)
         {
-            if (_backgroundHost is not null) _backgroundHost.MessageHook -= NativeVideoBackgroundGuard.PaintHostBackground;
-            _backgroundHost = videoHost;
-            _backgroundHost.MessageHook += NativeVideoBackgroundGuard.PaintHostBackground;
+            _backgroundSource?.RemoveHook(ColorNativeVideoBackground);
+            _backgroundSource = parent;
+            _backgroundSource?.AddHook(ColorNativeVideoBackground);
         }
         var handleChanged = handle != _nativeVideoHandle;
         _nativeVideoHandle = handle;
-        NativeVideoBackgroundGuard.Apply(handle, forceRedraw || handleChanged);
+        NativeVideoBackgroundGuard.Apply(handle, forceRedraw || handleChanged || parentChanged);
     }
+
+    private nint ColorNativeVideoBackground(nint handle, int message, nint wParam, nint lParam, ref bool handled) =>
+        NativeVideoBackgroundGuard.ColorHostBackground(_nativeVideoHandle, message, wParam, lParam, ref handled);
 
     public IntPtr GetNativeVideoHandle()
     {
@@ -711,8 +716,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         if (_disposed) return;
         _disposed = true;
-        if (_backgroundHost is not null) _backgroundHost.MessageHook -= NativeVideoBackgroundGuard.PaintHostBackground;
-        _backgroundHost = null;
+        _backgroundSource?.RemoveHook(ColorNativeVideoBackground);
+        _backgroundSource = null;
         var presenter = _compositedPresenter;
         presenter?.Deactivate();
         var player = _player;
