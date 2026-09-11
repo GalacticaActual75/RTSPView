@@ -47,7 +47,7 @@ try {
     $installStarted = [DateTimeOffset]::UtcNow
     while (!$process.WaitForExit(1000)) {
         $elapsed = [int]([DateTimeOffset]::UtcNow - $installStarted).TotalSeconds
-        if ($elapsed % 10 -eq 0) { Report-Update 'working' "Installing SpotMonitor ($elapsed seconds elapsed). Please keep this host on." }
+        if ($elapsed % 10 -eq 0) { Report-Update 'working' "Installing RTSPView ($elapsed seconds elapsed). Please keep this host on." }
     }
     if ($process.ExitCode -ne 0) { throw "The installer exited with code $($process.ExitCode)." }
 

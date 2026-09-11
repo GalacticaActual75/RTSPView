@@ -1,0 +1,91 @@
+{
+  "reason": "Only installed-updater identities, legacy data lookup, old-file cleanup and explicit compatibility tests are allowed. Never use these in UI text.",
+  "historicalDocuments": [
+    "docs/release-readiness.md",
+    "docs/history-cleanup.md",
+    "docs/bridge-release.md",
+    "docs/branding-audit.md"
+  ],
+  "files": {
+    "README.md": [
+      "%LOCALAPPDATA%\\SpotMonitor\\settings.json",
+      "SPOTMONITOR_DATA_DIR"
+    ],
+    "deployment/Apply-Update.ps1": [
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer",
+      "SpotMonitor Camera Wall",
+      "SPOTMONITOR_DATA_DIR",
+      "SpotMonitor\\settings.json",
+      "SpotMonitor\\logs"
+    ],
+    "deployment/Enable-LanAccess.ps1": [
+      "SpotMonitor Web Admin - Private LAN",
+      "SpotMonitor Web Admin - Block Public",
+      "SpotMonitor Web Admin - LAN Only"
+    ],
+    "deployment/Run-Appliance.ps1": [
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer"
+    ],
+    "deployment/Start-RTSPView.cmd": [
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer"
+    ],
+    "deployment/Stop-RTSPView.cmd": [
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer",
+      "SpotMonitor Camera Wall"
+    ],
+    "docs/layout-designer.md": [
+      "%LOCALAPPDATA%\\SpotMonitor\\settings.json"
+    ],
+    "installer/RTSPView.iss": [
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer",
+      "SpotMonitor Camera Wall",
+      "SpotMonitor Web Admin - Private LAN",
+      "SpotMonitor Web Admin - Block Public",
+      "SpotMonitor Web Admin - LAN Only",
+      "Start-SpotMonitor.cmd",
+      "Stop-SpotMonitor.cmd",
+      "Stop SpotMonitor.lnk",
+      "Uninstall SpotMonitor.lnk",
+      "SpotMonitor.lnk",
+      "\\SpotMonitor\\",
+      "\\SpotMonitor\"",
+      "SpotMonitor.Core.dll",
+      "SpotMonitor.Infrastructure.dll"
+    ],
+    "src/RTSPView.Controller/Program.cs": [
+      "\"SpotMonitor.Controller\""
+    ],
+    "src/RTSPView.Controller/RTSPView.Controller.csproj": [
+      "<AssemblyName>SpotMonitor.Controller</AssemblyName>"
+    ],
+    "src/RTSPView.Controller/ViewerSupervisor.cs": [
+      "SpotMonitor.Viewer"
+    ],
+    "src/RTSPView.Core/AppPaths.cs": [
+      "SPOTMONITOR_DATA_DIR",
+      "\"SpotMonitor\""
+    ],
+    "src/RTSPView.Viewer/RTSPView.Viewer.csproj": [
+      "<AssemblyName>SpotMonitor.Viewer</AssemblyName>"
+    ],
+    "tests/RTSPView.ConfigurationChecks/Program.cs": [
+      "SPOTMONITOR_DATA_DIR",
+      "\"SpotMonitor\""
+    ],
+    "tests/UpdateHelper.Checks.ps1": [
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer",
+      "SPOTMONITOR_DATA_DIR",
+      "SpotMonitor\\settings.json",
+      "SpotMonitor\\logs"
+    ],
+    "tests/admin-security.checks.cjs": [
+      "SpotMonitor.Controller.dll"
+    ]
+  }
+}

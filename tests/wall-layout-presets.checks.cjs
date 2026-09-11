@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const presets=require('../src/SpotMonitor.Controller/wwwroot/wall-layout-presets.js');
+const presets=require('../src/RTSPView.Controller/wwwroot/wall-layout-presets.js');
 const slots=[1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
 for(const preset of presets.catalog)for(const aspect of ['16:9','9:16'])for(const count of [1,9,10,16]){
   const layout=presets.create(preset.id,aspect,slots.slice(0,count));

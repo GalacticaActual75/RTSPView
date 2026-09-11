@@ -4,7 +4,7 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
  const root=path.resolve(__dirname,'..'),data=path.join(root,'artifacts','security','http-'+crypto.randomUUID());fs.mkdirSync(data,{recursive:true});
  const port=await new Promise(resolve=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>resolve(p))})});
  const dotnet=process.env.DOTNET_HOST_PATH||path.join(root,'.toolchain','dotnet','dotnet.exe');
- const child=cp.spawn(dotnet,[path.join(root,'src/SpotMonitor.Controller/bin/Release/net8.0-windows/win-x64/SpotMonitor.Controller.dll')],{cwd:root,windowsHide:true,env:{...process.env,DOTNET_ROOT:path.dirname(dotnet),ASPNETCORE_ENVIRONMENT:'Testing',ASPNETCORE_URLS:'http://127.0.0.1:'+port,RTSPVIEW_DATA_DIR:data},stdio:'ignore'});
+ const child=cp.spawn(dotnet,[path.join(root,'src/RTSPView.Controller/bin/Release/net8.0-windows/win-x64/SpotMonitor.Controller.dll')],{cwd:root,windowsHide:true,env:{...process.env,DOTNET_ROOT:path.dirname(dotnet),ASPNETCORE_ENVIRONMENT:'Testing',ASPNETCORE_URLS:'http://127.0.0.1:'+port,RTSPVIEW_DATA_DIR:data},stdio:'ignore'});
  const client=()=>({cookies:new Map(),csrf:''});const a=client(),b=client();
  async function request(c,url,method='GET',body){const r=await fetch('http://127.0.0.1:'+port+url,{method,headers:{Cookie:[...c.cookies].map(([k,v])=>k+'='+v).join('; '),'Content-Type':'application/json','X-CSRF-Token':c.csrf},body:body===undefined?undefined:JSON.stringify(body)});for(const cookie of r.headers.getSetCookie()){const pair=cookie.split(';')[0],i=pair.indexOf('=');c.cookies.set(pair.slice(0,i),pair.slice(i+1));}const text=await r.text();let json;try{json=JSON.parse(text)}catch{}return{status:r.status,json,text};}
  const session=async c=>{const r=await request(c,'/api/session');c.csrf=r.json.csrfToken;return r.json};
@@ -12,7 +12,7 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   let ready=false;for(let i=0;i<100;i++){try{await session(a);ready=true;break}catch{await new Promise(r=>setTimeout(r,100))}}assert(ready,'Controller starts');
   const hostileHostStatus=await new Promise((resolve,reject)=>{require('node:http').get({hostname:'127.0.0.1',port,path:'/api/session',headers:{Host:'untrusted.example'}},r=>{r.resume();resolve(r.statusCode)}).on('error',reject)});
   assert.equal(hostileHostStatus,400,'untrusted host rejected');
-  const program=fs.readFileSync(path.join(root,'src/SpotMonitor.Controller/Program.cs'),'utf8');
+  const program=fs.readFileSync(path.join(root,'src/RTSPView.Controller/Program.cs'),'utf8');
   const routes=[...program.matchAll(/app\.Map(Get|Post|Put|Delete)\("([^"\n]+)"/g)].map(m=>[m[1].toUpperCase(),m[2].replace(/\{slot:int\}/g,'1')]).filter(([,p])=>!['/api/session','/api/auth/login'].includes(p));
   for(const[method,url]of routes)assert.equal((await request(a,url,method,method==='GET'?undefined:{})).status,401,'anonymous blocked: '+url);
   assert.equal((await request(a,'/api/auth/login','POST',{password:'admin'})).json.passwordChangeRequired,true);

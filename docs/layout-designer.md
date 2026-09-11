@@ -22,7 +22,7 @@ Schema 15 adds `Layouts` and `ActiveLayoutId`. Existing settings migrate to a De
 
 The authenticated, CSRF-protected `PUT /api/layouts` endpoint validates all layouts before using the existing serialized configuration save path. Invalid references, duplicate camera assignments, overlapping/out-of-bounds tiles, duplicate layout IDs, and missing active layouts are rejected. The former camera-credential swap control is replaced by layout editing.
 
-Export a configuration before installing this version on a host if downgrade testing is planned: older applications reject schema 15 files. Before the first schema-15 save, the application preserves the old file as `%LOCALAPPDATA%\SpotMonitor\settings.json.before-layouts.json`. To roll back, stop SpotMonitor, retain a separate copy of the current settings, restore that pre-layout file as settings.json, and install the older release. The old release cannot import a schema-15 configuration.
+Export a configuration before installing this version on a host if downgrade testing is planned: older applications reject schema 15 files. Before the first schema-15 save, the application preserves the old file as `%LOCALAPPDATA%\SpotMonitor\settings.json.before-layouts.json`. To roll back, stop RTSPView, retain a separate copy of the current settings, restore that pre-layout file as settings.json, and install the older release. The old release cannot import a schema-15 configuration.
 
 ## Verification
 
@@ -32,6 +32,6 @@ Export a configuration before installing this version on a host if downgrade tes
 - Isolated browser fixture: `node tests/layout-designer-fixture.cjs`, then open `http://127.0.0.1:5097`. It serves synthetic snapshots and in-memory API responses; it never starts the Controller or reads installed settings.
 - Browser checks: preset/duplicate/save/apply/revert/reload, numeric collision rejection, pointer movement, equal-sized tile swapping, and resizing, and mobile width without horizontal overflow.
 
-- `dotnet run --project tests/SpotMonitor.LayoutVisibilityChecks -c Release` exercises real WPF/LibVLC status-window visibility across 9, 16, 1, and 9 tile layouts without starting streams or reading installed settings.
+- `dotnet run --project tests/RTSPView.LayoutVisibilityChecks -c Release` exercises real WPF/LibVLC status-window visibility across 9, 16, 1, and 9 tile layouts without starting streams or reading installed settings.
 
 Native stream playback and 16-stream GPU/CPU load still require validation on the camera-wall host. Hidden main tiles now explicitly hide their detached status windows to prevent cascading Disabled labels.

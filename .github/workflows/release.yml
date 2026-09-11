@@ -39,16 +39,17 @@ jobs:
 
       - name: Restore and test
         run: |
-          dotnet restore SpotMonitor.sln -r win-x64
-          dotnet run --project tests/SpotMonitor.ConfigurationChecks/SpotMonitor.ConfigurationChecks.csproj -c Release
+          dotnet restore RTSPView.sln -r win-x64
+          dotnet run --project tests/RTSPView.ConfigurationChecks/RTSPView.ConfigurationChecks.csproj -c Release
 
       - name: Build and check administrator security
         run: |
-          dotnet build SpotMonitor.sln -c Release --no-restore
+          dotnet build RTSPView.sln -c Release --no-restore
           $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
           node tests/admin-security.checks.cjs
-          dotnet run --project tests/SpotMonitor.LanAccessChecks -c Release
+          dotnet run --project tests/RTSPView.LanAccessChecks -c Release
           node tests/lan-firewall.checks.cjs
+          node tests/branding.checks.cjs
 
       - name: Check update helper failure reporting
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
@@ -62,8 +63,8 @@ jobs:
       - name: Publish self-contained applications
         shell: pwsh
         run: |
-          dotnet publish src/SpotMonitor.Viewer/SpotMonitor.Viewer.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Viewer /p:Version=${{ steps.version.outputs.value }}
-          dotnet publish src/SpotMonitor.Controller/SpotMonitor.Controller.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Controller /p:Version=${{ steps.version.outputs.value }}
+          dotnet publish src/RTSPView.Viewer/RTSPView.Viewer.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Viewer /p:Version=${{ steps.version.outputs.value }}
+          dotnet publish src/RTSPView.Controller/RTSPView.Controller.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Controller /p:Version=${{ steps.version.outputs.value }}
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
@@ -71,9 +72,9 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $env:SPOTMONITOR_VERSION='${{ steps.version.outputs.value }}'
-          $env:SPOTMONITOR_NUMERIC_VERSION='${{ steps.version.outputs.numeric }}'
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/SpotMonitor.iss
+          $env:RTSPVIEW_VERSION='${{ steps.version.outputs.value }}'
+          $env:RTSPVIEW_NUMERIC_VERSION='${{ steps.version.outputs.numeric }}'
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/RTSPView.iss
           if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
           $installer = Get-ChildItem dist/RTSPView-Setup-*-win-x64.exe | Select-Object -First 1
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash

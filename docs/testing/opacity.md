@@ -3,7 +3,7 @@
 Run on an interactive Windows desktop with the bundled LibVLC version:
 
 ```powershell
-dotnet run --project tests/SpotMonitor.OpacityChecks/SpotMonitor.OpacityChecks.csproj -c Release -- --auto
+dotnet run --project tests/RTSPView.OpacityChecks/RTSPView.OpacityChecks.csproj -c Release -- --auto
 ```
 
 The test generates moving red and blue Y4M videos; no camera access or credentials are needed. It compares Direct3D11, GDI, and the actual CameraTile and its CompositedVideoPresenter. Pixel samples come only from known test viewport locations. The native renderers intentionally fail fractional alpha; only compositor and lifecycle failures fail the test process. A missing/occluded desktop must not count as success. Results are written beside the test executable.

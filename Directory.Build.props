@@ -6,6 +6,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <Product>RTSPView</Product>
+    <Title>RTSPView</Title>
+    <AssemblyTitle>RTSPView</AssemblyTitle>
     <Company>RTSPView</Company>
     <Description>RTSPView camera wall</Description>
     <PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>

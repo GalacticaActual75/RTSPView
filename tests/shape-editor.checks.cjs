@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const context=vm.createContext({});
-vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/SpotMonitor.Controller/wwwroot/shape-editor.js'),'utf8')+'\nthis.outline=viewportShapeEditor.outline;',context);
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/RTSPView.Controller/wwwroot/shape-editor.js'),'utf8')+'\nthis.outline=viewportShapeEditor.outline;',context);
 const stroke=Array.from({length:300},(_,i)=>{const angle=i/300*Math.PI*2,r=300+(i%2?12:-12);return{x:500+r*Math.cos(angle),y:500+r*Math.sin(angle)}});
 for(const amount of [0,40,100]){
  const result=context.outline(stroke,amount);

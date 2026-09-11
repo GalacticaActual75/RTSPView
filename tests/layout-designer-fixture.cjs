@@ -2,7 +2,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const root = path.resolve(__dirname, '../src/SpotMonitor.Controller/wwwroot');
+const root = path.resolve(__dirname, '../src/RTSPView.Controller/wwwroot');
 const slots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
 const camera = (slot,name) => ({slot,name,enabled:true,rtspUrl:'',transport:1,networkCacheMilliseconds:1000,startupTimeoutSeconds:20,watchdogTimeoutSeconds:20,maximumReconnectBackoffSeconds:30,lowLatency:false,decodeAudio:false});
 const overlay = (slot,name,hostCameraSlot) => ({hostCameraSlot,camera:camera(slot,name),viewportShape:0,viewportWidthPercent:50,viewportHeightPercent:50,viewportHorizontalPositionPercent:0,viewportVerticalPositionPercent:100,viewportOpacityPercent:100,zoomPercent:100,imageHorizontalPositionPercent:50,imageVerticalPositionPercent:50,customViewportPathData:'',customViewportSourceName:'',customViewportViewBoxX:0,customViewportViewBoxY:0,customViewportViewBoxWidth:1,customViewportViewBoxHeight:1,customViewportRotationDegrees:0});

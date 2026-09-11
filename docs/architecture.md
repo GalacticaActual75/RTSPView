@@ -4,7 +4,7 @@
 
 ## Process model
 
-The application uses two processes running as the same signed-in Windows user. `SpotMonitor.Controller` provides authenticated web administration, health data, configuration, logs, and viewer supervision. `SpotMonitor.Viewer` owns up to 16 main video surfaces and optional overlays. Named pipes restrict connections to the current user. The installer can configure a logon task; Controller is not a Windows service.
+The application uses two processes running as the same signed-in Windows user. `RTSPView.Controller` provides authenticated web administration, health data, configuration, logs, and viewer supervision. `RTSPView.Viewer` owns up to 16 main video surfaces and optional overlays. Named pipes restrict connections to the current user. The installer can configure a logon task; Controller is not a Windows service.
 
 Running the renderer as a service is intentionally avoided: Windows services run in Session 0 and cannot reliably present an interactive full-screen wall. Task Scheduler (“at log on”, delayed, restart on failure) is the appropriate launch mechanism for the viewer; Controller provides the watchdog.
 

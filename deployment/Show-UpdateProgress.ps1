@@ -14,7 +14,7 @@ $window.TopMost = $true
 $window.Font = New-Object System.Drawing.Font('Segoe UI', 11)
 $title = New-Object System.Windows.Forms.Label
 $title.SetBounds(24, 20, 512, 30)
-$title.Text = 'Updating SpotMonitor'
+$title.Text = 'Updating RTSPView'
 $title.Font = New-Object System.Drawing.Font('Segoe UI', 16, ([System.Drawing.FontStyle]::Bold))
 $message = New-Object System.Windows.Forms.Label
 $message.SetBounds(24, 64, 512, 68)

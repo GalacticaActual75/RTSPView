@@ -1,6 +1,6 @@
 # RTSPView
 
-RTSPView (formerly SpotMonitor) is a Windows viewer for RTSP streams: security cameras, encoder feeds, rebroadcasts, composite feeds, and other compatible RTSP sources. Arrange up to 16 main streams into configurable layouts, add picture-in-picture overlays, and manage playback through a web dashboard. It supports hardware decoding through LibVLC and automatic stream recovery. Controller supervises the WPF Viewer; both run as the signed-in Windows user.
+RTSPView is a Windows viewer for RTSP streams: security cameras, encoder feeds, rebroadcasts, composite feeds, and other compatible RTSP sources. Arrange up to 16 main streams into configurable layouts, add picture-in-picture overlays, and manage playback through a web dashboard. It supports hardware decoding through LibVLC and automatic stream recovery. Controller supervises the WPF Viewer; both run as the signed-in Windows user.
 
 ## Install and first setup
 
@@ -109,7 +109,7 @@ If startup supervision was enabled during installation, RTSPView starts at sign-
 
 The main configuration file is `settings.json`:
 
-- **Existing SpotMonitor installations:** `%LOCALAPPDATA%\SpotMonitor\settings.json`
+- **Existing installations using the legacy data directory:** `%LOCALAPPDATA%\SpotMonitor\settings.json`
 - **Fresh RTSPView installations:** `%LOCALAPPDATA%\RTSPView\settings.json`
 
 Paste the applicable path into File Explorer's address bar on the computer running RTSPView, signed in as the Windows user that runs the application. `%LOCALAPPDATA%` belongs to that user, so another Windows account has a different folder.
@@ -120,7 +120,7 @@ No environment variables are required. `.env.example` is a reference; the applic
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain SpotMonitor data) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
+| `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain RTSPView data) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
 | `RTSPVIEW_GITHUB_REPOSITORY` | `GalacticaActual75/RTSPView` | Public GitHub release repository. No token/key is required or supported. |
 | `ASPNETCORE_URLS` | `http://127.0.0.1:5080` | Advanced binding override; disables the built-in LAN switch. HTTPS also requires certificate configuration. |
 | `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Host allowlist for externally configured bindings. The built-in LAN switch manages its own local hostname/IP allowlist. |
@@ -161,18 +161,19 @@ For forgotten administrator passwords, stop both processes and, as the owning Wi
 Prerequisites: Windows x64, .NET 8 SDK with current servicing patches, Node.js, and Inno Setup 6 for installers. Releases are self-contained, so runtime security updates require rebuilding and installing a new release.
 
 ```powershell
-dotnet restore SpotMonitor.sln -r win-x64
-dotnet build SpotMonitor.sln -c Release --no-restore
-dotnet run --project tests/SpotMonitor.ConfigurationChecks -c Release
+dotnet restore RTSPView.sln -r win-x64
+dotnet build RTSPView.sln -c Release --no-restore
+dotnet run --project tests/RTSPView.ConfigurationChecks -c Release
 $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
 node tests/admin-security.checks.cjs
-dotnet run --project tests/SpotMonitor.LanAccessChecks -c Release
+dotnet run --project tests/RTSPView.LanAccessChecks -c Release
 node tests/lan-firewall.checks.cjs
+node tests/branding.checks.cjs
 node tests/shape-editor.checks.cjs
 node tests/wall-layout-presets.checks.cjs
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
-dotnet run --project tests/SpotMonitor.LayoutVisibilityChecks -c Release
-dotnet run --project tests/SpotMonitor.OpacityChecks -c Release -- --auto
+dotnet run --project tests/RTSPView.LayoutVisibilityChecks -c Release
+dotnet run --project tests/RTSPView.OpacityChecks -c Release -- --auto
 ```
 
 Rendering checks require an interactive Windows desktop and video support. The HTTP test uses an isolated directory and disables the watchdog. These are console checks; `dotnet test` does not execute them.
@@ -190,3 +191,5 @@ Docker is not supported: WPF requires an interactive Windows desktop and graphic
 - Run both processes as the same user; named pipes restrict connections to that user. Local administrators and same-user processes remain trusted.
 
 See the [bridge release report](docs/bridge-release.md) for publication status and remaining validation limits. The [initial release audit](docs/release-readiness.md) and [history cleanup procedure](docs/history-cleanup.md) retain the detailed audit record.
+
+See the [branding audit](docs/branding-audit.md) for the cleanup and the compatibility identifiers retained for existing installations.

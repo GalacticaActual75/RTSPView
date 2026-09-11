@@ -1,0 +1,426 @@
+using RTSPView.Core;
+using RTSPView.Infrastructure;
+
+const string sampleCustomViewportPath = "m344.6614 99.874016l90.734924 14.3622055l142.30185 35.249344l75.72174 30.679794l71.15228 39.165344l56.136475 40.469833l1.9580078 291.13385l-744.1522 -1.3044434l-3.2624664 -159.2756l23.498688 -122.71918z";
+var root = Path.Combine(Path.GetTempPath(), "RTSPView-ConfigurationChecks", Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(root);
+try
+{
+    await GitHubUpdateChecks.RunAsync(root);
+    var migrationRoot = Path.Combine(root, "migration-user");
+    Check(AppPaths.DefaultDataDirectory(migrationRoot) == Path.Combine(migrationRoot, "RTSPView"), "new installation uses RTSPView data directory");
+    Directory.CreateDirectory(Path.Combine(migrationRoot, "SpotMonitor"));
+    await File.WriteAllTextAsync(Path.Combine(migrationRoot, "SpotMonitor", "settings.json"), "{}");
+    Check(AppPaths.DefaultDataDirectory(migrationRoot) == Path.Combine(migrationRoot, "SpotMonitor"), "rebrand preserves existing settings directory");
+    var multiStore = new JsonSettingsStore(Path.Combine(root, "multiple-overlays.json"));
+    var multi = new AppSettings
+    {
+        AdditionalOverlays = Enumerable.Range(0, AppSettings.MaximumAdditionalOverlays).Select(index => new DoorbellOverlaySettings
+        {
+            Camera = new CameraSettings { Slot = 999, Name = $"Extra {index}", Enabled = true, RtspUrl = "rtsp://extra:private@example.test/stream" },
+            HostCameraSlot = index % 9 + 1, ViewportShape = DoorbellViewportShape.Custom,
+            CustomViewportPathData = "M0 0 L1000 0 L500 1000 Z", CustomViewportViewBoxWidth = 1000, CustomViewportViewBoxHeight = 1000,
+            ViewportOpacityPercent = 60
+        }).ToArray()
+    };
+    await multiStore.SaveAsync(multi);
+    var multiLoaded = await multiStore.LoadAsync();
+    Check(multiLoaded.AllOverlays().Count() == 16 && multiLoaded.AdditionalOverlays.Last().Camera.Slot == 25, "added overlay slots are unique and persistent");
+    Check(multiLoaded.DoorbellOverlay.Camera.Slot == 10 && multiLoaded.GarageOverlay.Camera.Slot == 11, "existing overlays retain identities");
+    var multiImported = JsonSettingsStore.ParseImport(System.Text.Json.JsonSerializer.Serialize(multiLoaded));
+    Check(multiImported.AdditionalOverlays[0].ViewportShape == DoorbellViewportShape.Custom && multiImported.AdditionalOverlays[0].ViewportOpacityPercent == 60, "added masks and opacity survive import");
+    var sanitizedMultiPath = Path.Combine(root, "multiple-sanitized.json");
+    await multiStore.ExportWithoutCredentialsAsync(multiLoaded, sanitizedMultiPath);
+    Check(!(await File.ReadAllTextAsync(sanitizedMultiPath)).Contains("extra:private"), "added overlay credentials removed from sanitized export");
+    Check(JsonSettingsStore.ParseImport("{\"SchemaVersion\":14,\"Cameras\":[]}").AdditionalOverlays.Count == 0, "legacy configuration remains compatible");
+    foreach (var invalidMulti in new[] { multi with { AdditionalOverlays = multi.AdditionalOverlays.Append(new DoorbellOverlaySettings()).ToArray() }, multi with { AdditionalOverlays = [new DoorbellOverlaySettings { Camera = new CameraSettings { RtspUrl = "https://invalid.test" } }] } })
+    {
+        var rejected = false;
+        try { await multiStore.SaveAsync(invalidMulti); } catch (InvalidDataException) { rejected = true; }
+        Check(rejected && (await multiStore.LoadAsync()).AdditionalOverlays.Count == 14, "invalid added overlays cannot overwrite stored configuration");
+    }
+    var legacyWall = new AppSettings { SchemaVersion = 14, Cameras = Enumerable.Range(1, 9)
+        .Select(i => new CameraSettings { Slot = i, Name = $"Existing {i}", RtspUrl = $"rtsp://example.test/{i}" }).ToArray() }.Normalize();
+    Check(legacyWall.Cameras.Count == 16 && legacyWall.Layouts.Single().Tiles.Count == 9 && legacyWall.ActiveLayoutId == "default", "legacy wall migrates to Default 3x3 with room for 16 cameras");
+    Check(legacyWall.Cameras.Take(9).All(c => c.Name == $"Existing {c.Slot}" && c.RtspUrl == $"rtsp://example.test/{c.Slot}"), "layout migration preserves existing camera identities and URLs");
+    Check(legacyWall.Cameras.Skip(9).All(c => !c.Enabled && c.Slot > 11), "new main cameras are disabled and do not collide with overlays");
+    Check(legacyWall.CameraCount == 9, "unused player capacity does not appear as camera entries");
+    Check((legacyWall with { CameraCount = 10 }).Normalize().CameraCount == 10, "added empty camera remains registered");
+    var configuredExtra = legacyWall.Cameras.ToArray();
+    configuredExtra[11] = configuredExtra[11] with { RtspUrl = "rtsp://example.test/extra" };
+    Check((legacyWall with { Cameras = configuredExtra }).Normalize().CameraCount == 12, "existing extra camera configuration remains visible");
+    Check(!legacyWall.Cameras.Select(c => c.Slot).Intersect(multiLoaded.AllOverlays().Select(o => o.Camera.Slot)).Any(), "all sixteen overlay IDs stay separate from main cameras");
+    var migrationFile = Path.Combine(root, "legacy-wall.json");
+    const string originalWall = "{\"SchemaVersion\":14,\"Cameras\":[{\"Slot\":1,\"Name\":\"Original wall\"}]}";
+    await File.WriteAllTextAsync(migrationFile, originalWall);
+    var migrationStore = new JsonSettingsStore(migrationFile);
+    var migratedWall = await migrationStore.LoadAsync();
+    await migrationStore.SaveAsync(migratedWall);
+    await migrationStore.SaveAsync(migratedWall with { ShowCameraStats = false });
+    Check(await File.ReadAllTextAsync(migrationFile + ".before-layouts.json") == originalWall, "pre-layout backup survives subsequent saves for rollback");
+    var sixteen = new WallLayout { Id = "sixteen", Name = "All cameras", Rows = 4, Columns = 4,
+        Tiles = AppSettings.MainCameraSlots.Select((slot,i) => new WallTile { CameraSlot = slot, Row = i / 4, Column = i % 4 }).ToArray() };
+    var designed = (legacyWall with { Layouts = [new(), sixteen], ActiveLayoutId = sixteen.Id }).Normalize();
+    Check(designed.Layouts.Last().Tiles.Last().CameraSlot == 32 && designed.Cameras.SequenceEqual(legacyWall.Cameras), "4x4 layout uses independent camera references without changing streams");
+    Check(designed.CameraCount == 16, "existing layouts retain referenced camera entries");
+    var portrait = sixteen with { AspectRatio = "9:16" };
+    Check(new WallLayout().AspectRatio == "16:9", "existing layouts default to landscape");
+    Check(portrait.Fit(1920, 1080) == (607.5, 1080), "portrait fits landscape screen without stretching");
+    Check(portrait.Fit(1080, 1920) == (1080, 1920), "portrait fills portrait screen");
+    Check(sixteen.Fit(1080, 1920) == (1080, 607.5), "landscape fits portrait screen without stretching");
+    designed = designed with { Layouts = [new(), portrait] };
+    var layoutStore = new JsonSettingsStore(Path.Combine(root, "layout-roundtrip.json"));
+    await layoutStore.SaveAsync(designed);
+    var reloadedLayouts = await layoutStore.LoadAsync();
+    Check(reloadedLayouts.Layouts.Last().AspectRatio == "9:16", "portrait format survives save and reload");
+    Check(reloadedLayouts.ActiveLayoutId == "sixteen" && reloadedLayouts.Layouts.Last().Tiles.SequenceEqual(sixteen.Tiles), "saved layouts survive settings reload");
+    foreach (var invalidLayout in new[] {
+        sixteen with { Rows = 5 },
+        sixteen with { AspectRatio = "invalid" },
+        sixteen with { Tiles = [new() { CameraSlot = 10 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 2 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 1, Column = 1 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1, Row = int.MaxValue }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1, ColumnSpan = 5 }] },
+        sixteen with { Tiles = [] }, sixteen with { Tiles = null! } })
+    {
+        var rejectedLayout = false;
+        try { WallLayout.Validate([invalidLayout], invalidLayout.Id); } catch (InvalidDataException) { rejectedLayout = true; }
+        Check(rejectedLayout, "invalid layout rejected before persistence");
+    }
+    foreach (var invalidSet in new[] { new WallLayoutsRequest { Layouts = [sixteen], ActiveLayoutId = "missing" }, new WallLayoutsRequest { Layouts = [sixteen, sixteen], ActiveLayoutId = "sixteen" } })
+    {
+        var rejectedLayout = false;
+        try { WallLayout.Validate(invalidSet.Layouts, invalidSet.ActiveLayoutId); } catch (InvalidDataException) { rejectedLayout = true; }
+        Check(rejectedLayout, "missing active or duplicate layout IDs rejected");
+    }
+    var betaInstalled = UpdateRelease.Parse("1.0.29-beta.8");
+    var stableCurrent = UpdateRelease.Parse("1.0.29");
+    Check(UpdateRelease.CanInstall(betaInstalled, stableCurrent, "stable"), "beta to same-base stable is offered");
+    Check(UpdateRelease.CanInstall(betaInstalled, UpdateRelease.Parse("1.0.28"), "stable"), "explicit switch to older stable is offered");
+    Check(UpdateRelease.CanInstall(stableCurrent, betaInstalled, "beta"), "stable to same-base beta is offered");
+    Check(!UpdateRelease.CanInstall(betaInstalled, UpdateRelease.Parse("1.0.29-beta.7"), "beta"), "same-channel beta downgrade is blocked");
+    Check(!UpdateRelease.CanInstall(stableCurrent, stableCurrent, "stable"), "same stable release is not reinstalled");
+    Check(UpdateRelease.CanInstall(betaInstalled, UpdateRelease.Parse("1.0.29-beta.9"), "beta"), "next beta revision is offered");
+    foreach (var invalid in new[] { "main", "..", "\\\\elsewhere\\share", "" })
+    {
+        var rejected = false;
+        try { UpdateRelease.ValidateChannel(invalid); } catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "unknown channel rejected");
+    }
+    var mismatchRejected = false;
+    try { UpdateRelease.CanInstall(betaInstalled, stableCurrent, "beta"); } catch (InvalidDataException) { mismatchRejected = true; }
+    Check(mismatchRejected, "wrong-channel manifest rejected");
+    var channels = new UpdateChannelStore(root);
+    Check(channels.Read("beta") == "beta", "first-run beta default");
+    channels.Save("stable");
+    Check(new UpdateChannelStore(root).Read("beta") == "stable", "stable selection survives beta reinstall/restart");
+    channels.Save("beta");
+    Check(new UpdateChannelStore(root).Read("stable") == "beta", "beta selection survives stable reinstall/restart");
+    Check(BetaReleaseVersion.Parse("1.0.29-beta.3") > BetaReleaseVersion.Parse("1.0.29-beta.2"), "beta revisions update within one base version");
+    Check(BetaReleaseVersion.Parse("1.0.30-beta.1") > BetaReleaseVersion.Parse("1.0.29-beta.99"), "beta base version takes precedence");
+    var stableRejected = false;
+    try { BetaReleaseVersion.Parse("1.0.28"); } catch (InvalidDataException) { stableRejected = true; }
+    Check(stableRejected, "beta updater rejects a stable manifest");
+    var transferStore = new JsonSettingsStore(Path.Combine(root, "transfer.json"));
+    await transferStore.SaveAsync(new AppSettings { PreferredMonitor = 3 });
+    var transferred = new AppSettings { PreferredMonitor = 2, Cameras = AppSettings.CreateCameraSlots().Select(c => c with { RtspUrl = "rtsp://user:secret@example.test/live" }).ToArray() };
+    var backupName = await transferStore.ImportAndSaveAsync(System.Text.Json.JsonSerializer.Serialize(transferred, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+    Check((await transferStore.LoadAsync()).PreferredMonitor == 2, "camelCase import applies settings");
+    Check((await transferStore.ImportAsync(Path.Combine(root, backupName))).PreferredMonitor == 3, "import preserves previous configuration backup");
+    Check((await transferStore.LoadAsync()).Cameras[0].RtspUrl.Contains("user:secret"), "full import retains camera credentials");
+    foreach (var invalid in new[] { "{}", "null", "{\"SchemaVersion\":999,\"Cameras\":[]}", "{\"SchemaVersion\":14,\"Cameras\":null}", "{\"SchemaVersion\":14,\"Cameras\":[{\"RtspUrl\":\"https://example.test\"}]}" })
+    {
+        var rejected = false;
+        try { await transferStore.ImportAndSaveAsync(invalid); }
+        catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException) { rejected = true; }
+        Check(rejected && (await transferStore.LoadAsync()).PreferredMonitor == 2, "invalid import leaves configuration intact");
+    }    var path = Path.Combine(root, "settings.json");
+    var store = new JsonSettingsStore(path);
+    var first = new AppSettings
+    {
+        Cameras = AppSettings.CreateCameraSlots().Select((camera, index) => index == 0 ? camera with { Name = "First", RtspUrl = "rtsp://user:secret@example.test/live" } : camera).ToArray(),
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            HostCameraSlot = 2,
+            Position = PictureInPicturePosition.BottomLeft,
+            SizePercent = 50,
+            ViewportWidthPercent = 80,
+            ViewportHeightPercent = 40,
+            ViewportHorizontalPositionPercent = 35,
+            ViewportVerticalPositionPercent = 75,
+            ViewportShape = DoorbellViewportShape.RoundedSquare,
+            ZoomPercent = 160,
+            ImageHorizontalPositionPercent = 25,
+            ImageVerticalPositionPercent = 80,
+            Camera = AppSettings.CreateDoorbellCamera() with { Enabled = true, RtspUrl = "rtsp://door:door-secret@example.test/doorbell" }
+        },
+        GarageOverlay = AppSettings.CreateGarageOverlay() with
+        {
+            HostCameraSlot = 3,
+            ViewportWidthPercent = 65,
+            ViewportHeightPercent = 45,
+            ViewportHorizontalPositionPercent = 80,
+            ViewportVerticalPositionPercent = 20,
+            ViewportOpacityPercent = 63,
+            ViewportShape = DoorbellViewportShape.Custom,
+            CustomViewportSourceName = @"C:\fakepath\Untitled drawing (1).svg",
+            CustomViewportPathData = sampleCustomViewportPath,
+            CustomViewportViewBoxX = 35.251968,
+            CustomViewportViewBoxY = 99.874016,
+            CustomViewportViewBoxWidth = 747.4147,
+            CustomViewportViewBoxHeight = 451.06082,
+            CustomViewportRotationDegrees = 137,
+            ZoomPercent = 175,
+            ImageHorizontalPositionPercent = 70,
+            ImageVerticalPositionPercent = 30,
+            Camera = AppSettings.CreateGarageCamera() with { Enabled = true, RtspUrl = "rtsp://garage:garage-secret@example.test/garage" }
+        }
+    };
+    await store.SaveAsync(first);
+    var second = first with { Cameras = first.Cameras.Select((camera, index) => index == 0 ? camera with { Name = "Second" } : camera).ToArray() };
+    await store.SaveAsync(second);
+    File.WriteAllText(path, "{broken-json");
+    var recovered = await store.LoadAsync();
+    Check(recovered.Cameras[0].Name == "First", "backup recovery");
+
+    var export = Path.Combine(root, "export.json");
+    await store.ExportWithoutCredentialsAsync(first, export);
+    var exportText = await File.ReadAllTextAsync(export);
+    Check(!exportText.Contains("secret", StringComparison.Ordinal), "credential-free export");
+    Check(exportText.Contains("example.test", StringComparison.Ordinal), "export retains endpoint");
+    Check(recovered.DoorbellOverlay.Camera.Slot == 10, "doorbell overlay backup recovery");
+    Check(recovered.DoorbellOverlay.VideoSizing == DoorbellVideoSizing.Fit, "doorbell aspect-preserving sizing persistence");
+    Check(recovered.DoorbellOverlay.ViewportShape == DoorbellViewportShape.RoundedSquare, "doorbell viewport shape persistence");
+    Check(recovered.DoorbellOverlay.ViewportHorizontalPositionPercent == 35 &&
+          recovered.DoorbellOverlay.ViewportVerticalPositionPercent == 75, "doorbell viewport position persistence");
+    Check(recovered.DoorbellOverlay.ZoomPercent == 160, "doorbell zoom persistence");
+    Check(recovered.DoorbellOverlay.ViewportWidthPercent == 80 &&
+          recovered.DoorbellOverlay.ViewportHeightPercent == 40, "doorbell viewport dimensions persistence");
+    Check(recovered.DoorbellOverlay.ImageHorizontalPositionPercent == 25 &&
+          recovered.DoorbellOverlay.ImageVerticalPositionPercent == 80, "doorbell image position persistence");
+    Check(recovered.GarageOverlay.Camera.Slot == 11, "garage overlay backup recovery");
+    Check(recovered.GarageOverlay.HostCameraSlot == 3, "garage host camera persistence");
+    Check(recovered.GarageOverlay.ViewportShape == DoorbellViewportShape.Custom,
+        "garage viewport shape persistence");
+    Check(recovered.GarageOverlay.CustomViewportSourceName == "Untitled drawing (1).svg" &&
+          recovered.GarageOverlay.CustomViewportPathData == sampleCustomViewportPath,
+        "custom SVG path and sanitized filename persistence");
+    Check(recovered.GarageOverlay.CustomViewportViewBoxWidth == 747.4147 &&
+          recovered.GarageOverlay.CustomViewportViewBoxHeight == 451.06082,
+        "custom SVG normalized bounds persistence");
+    Check(recovered.GarageOverlay.CustomViewportRotationDegrees == 137,
+        "custom SVG mask rotation persistence");
+    Check(recovered.GarageOverlay.ViewportWidthPercent == 65 &&
+          recovered.GarageOverlay.ViewportHeightPercent == 45, "garage viewport dimensions persistence");
+    Check(recovered.GarageOverlay.ViewportHorizontalPositionPercent == 80 &&
+          recovered.GarageOverlay.ViewportVerticalPositionPercent == 20, "garage viewport position persistence");
+    Check(recovered.GarageOverlay.ViewportOpacityPercent == 63, "garage viewport opacity persistence");
+    Check(recovered.GarageOverlay.ZoomPercent == 175 &&
+          recovered.GarageOverlay.ImageHorizontalPositionPercent == 70 &&
+          recovered.GarageOverlay.ImageVerticalPositionPercent == 30, "garage framing persistence");
+
+    var migratedGarage = (new AppSettings
+    {
+        SchemaVersion = 11,
+        GarageOverlay = null!
+    }).Normalize().GarageOverlay;
+    Check(migratedGarage.HostCameraSlot == 3 &&
+          migratedGarage.Camera.Slot == 11 &&
+          migratedGarage.Camera.Name == "Garage" &&
+          !migratedGarage.Camera.Enabled, "schema 11 creates disabled Garage overlay on Camera 3");
+    Check((new AppSettings { SchemaVersion = 12 }).Normalize().DoorbellOverlay.ViewportOpacityPercent == 100 &&
+          (new AppSettings { SchemaVersion = 12 }).Normalize().GarageOverlay.ViewportOpacityPercent == 100,
+        "schema 12 overlays migrate to fully opaque viewports");
+    Check((new AppSettings { SchemaVersion = 13 }).Normalize().DoorbellOverlay.CustomViewportRotationDegrees == 0 &&
+          (new AppSettings { SchemaVersion = 13 }).Normalize().GarageOverlay.CustomViewportRotationDegrees == 0,
+        "schema 13 overlays migrate to unrotated custom masks");
+
+    Check(CustomViewportPathValidator.IsValid(
+            sampleCustomViewportPath, 35.251968, 99.874016, 747.4147, 451.06082),
+        "uploaded sample SVG path validation");
+    Check(!CustomViewportPathValidator.IsValid("M0 0L10 10<script>", 0, 0, 10, 10),
+        "custom SVG executable markup rejection");
+    Check(!CustomViewportPathValidator.IsValid("M0 0L10 10", 0, 0, 0, 10),
+        "custom SVG invalid bounds rejection");
+    var invalidCustomViewport = (new AppSettings
+    {
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            ViewportShape = DoorbellViewportShape.Custom,
+            CustomViewportPathData = "not-svg-path"
+        }
+    }).Normalize().DoorbellOverlay;
+    Check(invalidCustomViewport.ViewportShape == DoorbellViewportShape.Native &&
+          invalidCustomViewport.CustomViewportPathData.Length == 0,
+        "invalid custom SVG falls back to rectangle safely");
+
+    var migratedOverlay = (new AppSettings
+    {
+        SchemaVersion = 8,
+        DoorbellOverlay = new DoorbellOverlaySettings { SizePercent = 73 }
+    }).Normalize().DoorbellOverlay;
+    Check(migratedOverlay.ViewportWidthPercent == 73 &&
+          migratedOverlay.ViewportHeightPercent == 73, "schema 8 doorbell size migration");
+    Check(migratedOverlay.ViewportHorizontalPositionPercent == 0 &&
+          migratedOverlay.ViewportVerticalPositionPercent == 100, "schema 8 doorbell position migration");
+
+    var migratedLegacyFraming = (new AppSettings
+    {
+        SchemaVersion = 10,
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            Position = PictureInPicturePosition.BottomRight,
+            ViewportWidthPercent = 73,
+            ViewportHeightPercent = 77,
+            HorizontalOffsetPercent = -2,
+            VerticalOffsetPercent = -2,
+            VideoSizing = DoorbellVideoSizing.Stretch,
+            CropTopPercent = 54
+        }
+    }).Normalize().DoorbellOverlay;
+    Check(migratedLegacyFraming.ViewportHorizontalPositionPercent == 93 &&
+          migratedLegacyFraming.ViewportVerticalPositionPercent == 91, "schema 10 viewport anchor migration");
+    Check(migratedLegacyFraming.VideoSizing == DoorbellVideoSizing.Fit &&
+          migratedLegacyFraming.HorizontalOffsetPercent == 0 &&
+          migratedLegacyFraming.CropTopPercent == 0, "schema 10 framing model migration");
+
+    var normalizedOverlay = (new AppSettings
+    {
+        DoorbellOverlay = new DoorbellOverlaySettings
+        {
+            HostCameraSlot = 99,
+            Position = (PictureInPicturePosition)999,
+            SizePercent = 5,
+            ViewportWidthPercent = 999,
+            ViewportHeightPercent = -999,
+            ViewportHorizontalPositionPercent = -999,
+            ViewportVerticalPositionPercent = 999,
+            ViewportOpacityPercent = -999,
+            CustomViewportRotationDegrees = 999,
+            VideoSizing = (DoorbellVideoSizing)999,
+            ViewportShape = (DoorbellViewportShape)999,
+            HorizontalOffsetPercent = 999,
+            VerticalOffsetPercent = -999,
+            ZoomPercent = 999,
+            CropLeftPercent = 80,
+            CropRightPercent = 80,
+            CropTopPercent = 80,
+            CropBottomPercent = 80,
+            ImageHorizontalPositionPercent = -999,
+            ImageVerticalPositionPercent = 999,
+            Camera = AppSettings.CreateDoorbellCamera() with { Name = "  " }
+        }
+    }).Normalize().DoorbellOverlay;
+    Check(normalizedOverlay.HostCameraSlot == 9, "doorbell host camera normalization");
+    Check(normalizedOverlay.Position == PictureInPicturePosition.BottomLeft, "doorbell corner normalization");
+    Check(normalizedOverlay.SizePercent == 25, "doorbell size normalization");
+    Check(normalizedOverlay.ViewportWidthPercent == 95 &&
+          normalizedOverlay.ViewportHeightPercent == 10, "doorbell viewport dimension normalization");
+    Check(normalizedOverlay.VideoSizing == DoorbellVideoSizing.Fit, "doorbell video sizing normalization");
+    Check(normalizedOverlay.ViewportShape == DoorbellViewportShape.Native, "doorbell viewport shape normalization");
+    Check(normalizedOverlay.ViewportHorizontalPositionPercent == 0 &&
+          normalizedOverlay.ViewportVerticalPositionPercent == 100, "doorbell viewport position normalization");
+    Check(normalizedOverlay.ViewportOpacityPercent == 20, "doorbell viewport opacity normalization");
+    Check(normalizedOverlay.CustomViewportRotationDegrees == 180,
+        "custom SVG mask rotation normalization");
+    Check(normalizedOverlay.HorizontalOffsetPercent == 0 &&
+          normalizedOverlay.VerticalOffsetPercent == 0, "legacy doorbell offsets are cleared");
+    Check(normalizedOverlay.ZoomPercent == 300, "doorbell zoom normalization");
+    Check(normalizedOverlay.CropLeftPercent == 0 &&
+          normalizedOverlay.CropRightPercent == 0 &&
+          normalizedOverlay.CropTopPercent == 0 &&
+          normalizedOverlay.CropBottomPercent == 0, "legacy doorbell crops are cleared");
+    Check(normalizedOverlay.ImageHorizontalPositionPercent == 0 &&
+          normalizedOverlay.ImageVerticalPositionPercent == 100, "doorbell image position normalization");
+    Check(normalizedOverlay.Camera.Slot == 10 && normalizedOverlay.Camera.Name == "Doorbell", "doorbell camera normalization");
+
+    var alignedCrop = DoorbellVideoTransform.CalculateCropWindow(
+        2048, 1536, 500, 300, 100, 50, 50);
+    Check(alignedCrop == new DoorbellCropWindow(0, 154, 2048, 1228),
+        "doorbell cover crop aligns 4:2:0 source coordinates");
+    Check(alignedCrop.ToVlcGeometry() == "2048x1228+0+154", "doorbell VLC crop geometry");
+
+    var centeredOval = DoorbellVideoTransform.CalculateCropWindow(
+        2048, 1536, 730, 385, 100, 50, 50);
+    Check(centeredOval.X == 0 && centeredOval.Width == 2048 && centeredOval.Y > 0 &&
+          centeredOval.Y + centeredOval.Height < 1536, "doorbell cover crop removes letterbox region");
+    Check(Math.Abs(centeredOval.Width / (double)centeredOval.Height - 730d / 385d) < 0.002,
+        "doorbell crop matches viewport aspect ratio");
+
+    var bottomRightZoom = DoorbellVideoTransform.CalculateCropWindow(
+        2048, 1536, 730, 385, 200, 100, 100);
+    Check(bottomRightZoom.X + bottomRightZoom.Width == 2048 &&
+          bottomRightZoom.Y + bottomRightZoom.Height == 1536, "doorbell zoom can focus bottom-right");
+
+    var liveLayout = DoorbellVideoTransform.CalculateLayout(
+        2048, 1536, 730, 385, 175, 36, 88);
+    Check(Math.Abs(liveLayout.RenderWidth / liveLayout.RenderHeight - 2048d / 1536d) < 0.000001,
+        "doorbell native surface preserves source aspect ratio");
+    Check(Math.Abs(liveLayout.SourceX - (-liveLayout.OffsetX / (liveLayout.RenderWidth / 2048d))) < 0.000001 &&
+          Math.Abs(liveLayout.SourceY - (-liveLayout.OffsetY / (liveLayout.RenderHeight / 1536d))) < 0.000001,
+        "doorbell preview crop and live surface use the same pan calculation");
+    Check(Math.Abs(liveLayout.SourceWidth / liveLayout.SourceHeight - 730d / 385d) < 0.000001,
+        "doorbell visible source matches viewport aspect ratio without bars");
+
+    Check((int)ViewerCommandType.RestartCamera == 0 &&
+          (int)ViewerCommandType.RestartAllCameras == 1 &&
+          (int)ViewerCommandType.RestartViewer == 2 &&
+          (int)ViewerCommandType.EnterFullScreen == 3 &&
+          (int)ViewerCommandType.ExitFullScreen == 4 &&
+          (int)ViewerCommandType.CaptureCameraSnapshot == 5,
+        "viewer command protocol keeps existing numeric values stable");
+
+    var blank = await new JsonSettingsStore(Path.Combine(root, "fresh-settings.json")).LoadAsync();
+    Check(new[] { blank.Camera }.Concat(blank.Cameras).Concat(blank.AllOverlays().Select(o => o.Camera)).All(c => c.RtspUrl == string.Empty), "fresh installation contains no camera URLs");
+    Check(blank.Normalize().AllOverlays().All(o => o.Camera.RtspUrl == string.Empty), "normalized overlays contain no camera URLs");
+    var securityPath = Path.Combine(root, "web-security.json");
+    var readablePath = Path.Combine(root, "initial-admin-password.txt");
+    var security = await WebSecurity.LoadOrCreateAsync(securityPath, readablePath);
+    Check(security.Verify("admin") && security.PasswordChangeRequired, "initial admin requires change");
+    Check(!File.Exists(readablePath), "no readable password file");
+    var oldVersion = security.SessionVersion;
+    Check(await security.ChangeAsync("admin", "test-only-new-password"), "password changes");
+    var reloaded = await WebSecurity.LoadOrCreateAsync(securityPath, readablePath);
+    Check(!reloaded.Verify("admin") && reloaded.Verify("test-only-new-password") && !reloaded.PasswordChangeRequired, "password state survives restart");
+    Check(reloaded.SessionVersion != oldVersion, "password change invalidates sessions");
+    Check(!(await File.ReadAllTextAsync(securityPath)).Contains("test-only-new-password"), "only hash persisted");
+    var legacySalt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+    var legacyHash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2("legacy-test-password", legacySalt, 210_000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+    await File.WriteAllTextAsync(securityPath, System.Text.Json.JsonSerializer.Serialize(new { Salt = Convert.ToBase64String(legacySalt), Hash = Convert.ToBase64String(legacyHash) }));
+    await File.WriteAllTextAsync(readablePath, "legacy-test-password");
+    var migrated = await WebSecurity.LoadOrCreateAsync(securityPath, readablePath);
+    Check(migrated.Verify("legacy-test-password") && !migrated.Verify("admin") && migrated.PasswordChangeRequired, "legacy password preserved with forced change");
+    Check(!File.Exists(readablePath), "legacy readable password removed");
+    Check(await migrated.ChangeAsync("legacy-test-password", "replacement-test-password"), "legacy hash upgrades on password change");
+    var migratedFile = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(securityPath));
+    Check(migratedFile.RootElement.GetProperty("Iterations").GetInt32() == 600_000, "upgraded work factor persisted");
+    var priorDataPath = Environment.GetEnvironmentVariable("SPOTMONITOR_DATA_DIR");
+    try { Environment.SetEnvironmentVariable("SPOTMONITOR_DATA_DIR", root); Check(AppPaths.DataDirectory == Path.GetFullPath(root), "configurable portable data directory"); }
+    finally { Environment.SetEnvironmentVariable("SPOTMONITOR_DATA_DIR", priorDataPath); }
+    Check(!RollingFileLogger.RedactCredentials("rtsp://test:private@camera.example/live?token=private").Contains("private"), "whole URL sanitized");
+    var grid = new CameraSettings { CompositeStream = true, RtspUrl = "rtsp://camera.example:8554/grid1", Transport = RtspTransport.Udp, NetworkCacheMilliseconds = 100, LowLatency = true };
+    var gridOptions = grid.ToMediaOptions();
+    Check(grid.EffectiveTransport == RtspTransport.Tcp, "StreamGrid forces TCP");
+    Check(grid.EffectiveNetworkCacheMilliseconds == 3000, "StreamGrid forces 3000 ms cache");
+    Check(!grid.EffectiveLowLatency, "StreamGrid disables low latency");
+    Check(gridOptions.Contains(":rtsp-tcp") && gridOptions.Contains(":network-caching=3000"), "StreamGrid per-media options");
+    Check(!gridOptions.Contains(":rtsp-udp") && !gridOptions.Contains(":clock-jitter=0") && !gridOptions.Contains(":drop-late-frames"), "StreamGrid excludes conflicting options");
+
+    var future = Path.Combine(root, "future.json");
+    await File.WriteAllTextAsync(future, "{\"SchemaVersion\":999}");
+    try { await store.ImportAsync(future); throw new InvalidOperationException("future schema was accepted"); }
+    catch (InvalidDataException) { }
+
+    Console.WriteLine("Configuration checks passed: recovery, sanitized export, dual-overlay normalization, schema rejection.");
+}
+finally
+{
+    if (root.StartsWith(Path.Combine(Path.GetTempPath(), "RTSPView-ConfigurationChecks"), StringComparison.OrdinalIgnoreCase))
+        Directory.Delete(root, true);
+}
+
+static void Check(bool condition, string check)
+{
+    if (!condition) throw new InvalidOperationException($"Failed: {check}");
+}

@@ -10,7 +10,7 @@ if (-not $InstallDirectory) {
     $locations = @($keys | ForEach-Object {
         if (Test-Path -LiteralPath $_) { (Get-ItemProperty -LiteralPath $_).InstallLocation }
     } | Where-Object { $_ } | Select-Object -Unique)
-    if ($locations.Count -ne 1) { throw 'Specify -InstallDirectory with the installed RTSPView or SpotMonitor folder.' }
+    if ($locations.Count -ne 1) { throw 'Specify -InstallDirectory with the installed RTSPView or RTSPView folder.' }
     $InstallDirectory = $locations[0]
 }
 $directory = (Resolve-Path -LiteralPath $InstallDirectory).ProviderPath
