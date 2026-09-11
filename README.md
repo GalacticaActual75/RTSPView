@@ -6,13 +6,24 @@ RTSPView (formerly SpotMonitor) is a Windows viewer for RTSP streams: security c
 
 Use Windows 10/11 x64 with a current graphics driver. Download the installer and checksum from this repository's Releases page, verify the checksum, and run the installer. Installation requires elevation; normal operation should use a standard Windows account.
 
-Open [local administration](http://127.0.0.1:5080) on the camera-wall computer. **The initial administrator password is `admin`. Change it immediately.** The account name is `admin`; the dashboard asks only for its password. All administration APIs and controls remain blocked until a nonblank password of up to 1024 characters, different from the current password and from `admin`, is saved. Sign in again with the new password. The initial password then stops working and earlier sessions are revoked. No readable administrator password file is created.
+### First time on a new host
+
+1. Install and launch RTSPView on the Windows computer that will display the streams. Complete setup **on that computer first**, not through its LAN IP address.
+2. Open **http://127.0.0.1:5080** in a browser on that computer, or use the **Web configuration** shortcut. If the viewer covers the browser, minimize it or exit full screen using five clicks in the upper-right corner within three seconds; exiting full screen alone does not disable always-on-top.
+3. Sign in with the initial password **`admin`**. The account name is also `admin`, but the login form asks only for the password.
+4. On the required password-change screen, enter **`admin` in Current password**, and enter your chosen replacement in **New password**. In version **1.0.33 and later**, there is no minimum length: the replacement must be nonblank, at most 1024 characters, different from the current password and not `admin`. Choose a password that is difficult to guess, especially before enabling LAN access.
+5. Submit the change, then **sign in again with your new password**. The initial password stops working and earlier sessions are revoked. No readable administrator password file is created. All administration remains blocked until the password change succeeds.
+6. Add your RTSP sources under **Cameras**, configure a layout and apply it. For administration from another computer or phone, follow [Enable LAN access](#access-the-admin-panel-from-the-lan) below; installation alone leaves administration local-only.
+
+**Upgrading an existing host:** use your existing administrator password, not `admin`. If a password change is required, enter that existing password in Current password. If version 1.0.32 rejects your desired password or leaves you stuck in setup, manually install [the latest stable release](https://github.com/GalacticaActual75/RTSPView/releases/latest) over it before retrying. The password-policy fix is in 1.0.33; your existing streams/settings are retained.
 
 **Fresh installations have no camera URLs configured**, including every main camera, legacy camera field and overlay. Enter your own URLs after setup. Existing installations retain their streams and password, but legacy security state requires a password change after login. Back up before upgrading.
 
 The dashboard listens on loopback TCP 5080 by default. Remote access is an explicit deployment choice: configure ASP.NET Core HTTPS with a trusted certificate before binding a LAN interface. `ASPNETCORE_URLS` controls bindings. HTTP LAN bindings transmit credentials and cookies without encryption. Do not expose them to the Internet. Complete initial setup locally. Firewall rules do not provide encryption.
 
 ## Access the admin panel from the LAN
+
+**First-run order: local setup → change password → configure HTTPS and allowed hosts → allow the HTTPS firewall port → sign out/in → connect from the LAN.**
 
 LAN access is optional. By default, the admin panel is available only at `http://127.0.0.1:5080` on the RTSPView computer. On another computer or phone, `localhost` and `127.0.0.1` refer to that device, not the RTSPView host. Opening a firewall port alone does not enable remote access.
 
