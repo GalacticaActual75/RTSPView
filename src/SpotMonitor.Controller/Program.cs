@@ -24,7 +24,11 @@ var dataDirectory = AppPaths.DataDirectory;
 var network = new LanAccessService(dataDirectory,
     string.IsNullOrWhiteSpace(builder.Configuration["urls"]) && !builder.Configuration.GetSection("Kestrel:Endpoints").GetChildren().Any(),
     LanAccessService.ConfigureFirewallAsync);
-if (network.Managed) builder.WebHost.ConfigureKestrel(options => options.Configure(network.ListenerConfiguration, reloadOnChange: true));
+if (network.Managed)
+{
+    LanAccessService.ConfigureHostFiltering(builder.Services);
+    builder.WebHost.ConfigureKestrel(options => options.Configure(network.ListenerConfiguration, reloadOnChange: true));
+}
 else builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5080");
 Directory.CreateDirectory(dataDirectory);
 var dataProtectionDirectory = Path.Combine(dataDirectory, "data-protection");

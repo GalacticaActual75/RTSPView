@@ -22,7 +22,8 @@ try
     Check(LanAccessService.SameSubnet(IPAddress.Parse("203.0.113.20"), IPAddress.Parse("203.0.113.10"), IPAddress.Parse("255.255.255.0")), "Same subnet allowed");
     Check(!LanAccessService.SameSubnet(IPAddress.Parse("198.51.100.20"), IPAddress.Parse("203.0.113.10"), IPAddress.Parse("255.255.255.0")), "Other subnet blocked");
     Check(!LanAccessService.SameSubnet(IPAddress.Parse("203.0.113.20"), IPAddress.Parse("203.0.113.10"), IPAddress.Any), "Zero mask rejected");
-    var builder = WebApplication.CreateBuilder(); builder.Logging.ClearProviders();
+    var builder = WebApplication.CreateBuilder(); builder.Logging.ClearProviders(); builder.Configuration["AllowedHosts"] = "old-host.example";
+    LanAccessService.ConfigureHostFiltering(builder.Services);
     builder.WebHost.ConfigureKestrel(options => options.Configure(network.ListenerConfiguration, reloadOnChange: true));
     await using var app = builder.Build();
     app.Use(async (context, next) => { if (!network.RemoteAllowed(context.Connection.RemoteIpAddress) || !network.HostAllowed(context.Request.Host.Host)) context.Response.StatusCode = 403; else await next(); });

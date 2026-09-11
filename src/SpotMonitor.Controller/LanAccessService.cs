@@ -27,6 +27,8 @@ public sealed class LanAccessService
         { ["Endpoints:Admin:Url"] = ListenerUrl }).Build();
     }
     private string ListenerUrl => $"http://{(Enabled ? "0.0.0.0" : "127.0.0.1")}:{_port}";
+    public static void ConfigureHostFiltering(IServiceCollection services) =>
+        services.PostConfigure<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>(options => options.AllowedHosts = ["*"]); // The managed middleware below enforces exact hostnames/IPs.
     public object Status() => new
     {
         enabled = Enabled, managed = Managed, port = _port,
