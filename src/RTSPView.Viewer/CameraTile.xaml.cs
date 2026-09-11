@@ -46,6 +46,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private Task _playerOperation = Task.CompletedTask;
     private int _playGeneration;
     private nint _nativeVideoHandle;
+    private HwndHost? _backgroundHost;
     private int _videoZoomPercent = 100;
     private int _videoDisplayWidth;
     private int _videoDisplayHeight;
@@ -89,7 +90,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public CameraTile()
     {
         InitializeComponent();
-        VideoView.Loaded += (_, _) => ApplyVideoSizing(_player);
+        VideoView.Loaded += (_, _) => { EnsureNativeVideoBackground(); ApplyVideoSizing(_player); };
         VideoView.SizeChanged += (_, _) => ApplyVideoSizing(_player);
         IsVisibleChanged += (_, _) => SynchronizeStatusWindowVisibility();
         Loaded += (_, _) => SynchronizeStatusWindowVisibility();
@@ -292,6 +293,12 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             return;
 
         var handle = (nint)videoHost.Handle;
+        if (_backgroundHost != videoHost)
+        {
+            if (_backgroundHost is not null) _backgroundHost.MessageHook -= NativeVideoBackgroundGuard.PaintHostBackground;
+            _backgroundHost = videoHost;
+            _backgroundHost.MessageHook += NativeVideoBackgroundGuard.PaintHostBackground;
+        }
         var handleChanged = handle != _nativeVideoHandle;
         _nativeVideoHandle = handle;
         NativeVideoBackgroundGuard.Apply(handle, forceRedraw || handleChanged);
@@ -704,6 +711,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         if (_disposed) return;
         _disposed = true;
+        if (_backgroundHost is not null) _backgroundHost.MessageHook -= NativeVideoBackgroundGuard.PaintHostBackground;
+        _backgroundHost = null;
         var presenter = _compositedPresenter;
         presenter?.Deactivate();
         var player = _player;

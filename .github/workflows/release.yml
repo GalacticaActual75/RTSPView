@@ -51,6 +51,11 @@ jobs:
           node tests/lan-firewall.checks.cjs
           node tests/branding.checks.cjs
 
+      - name: Check native tile backgrounds and layout visibility
+        run: |
+          dotnet run --project tests/RTSPView.LayoutVisibilityChecks -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Native tile background or layout regression." }
+
       - name: Check update helper failure reporting
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
 

@@ -26,7 +26,7 @@ The dashboard starts local-only on TCP 5080. After initial setup, use **System �
 **Version 1.0.34 adds a built-in LAN switch. No certificates, environment variables or manual firewall commands are needed for normal trusted-LAN use.**
 
 1. On the RTSPView host, open **http://127.0.0.1:5080**, sign in, and finish the required first-time password change.
-2. Open **System → LAN access**, select **Enable LAN access**, and click **Save LAN access**.
+2. Open **System → LAN access**, turn on the **Enable LAN access** toggle, and click **Save LAN access**.
 3. Accept the Windows administrator approval prompt **on the RTSPView host**. If asked, set that host's trusted connection to **Private** under Windows Settings → Network & Internet → your connection's properties, then try again. The app does not automatically mark an unfamiliar network as trusted.
 4. Wait a few seconds for the listener to update. The System tab lists clickable **`http://HOST-IP:5080`** addresses. Open one from another computer or phone on the same LAN and sign in with your admin password. Use **HTTP and port 5080** for this mode, not HTTPS or port 5081.
 

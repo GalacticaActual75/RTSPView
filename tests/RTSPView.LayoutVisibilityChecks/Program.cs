@@ -22,12 +22,14 @@ internal static class Program
             {
                 await SetLayout(9);
                 Check(9, "startup 3x3 hides seven unused status windows");
+                NativeBackgroundChecks.Run(tiles[0]);
                 await SetLayout(16);
                 Check(16, "expanded layout restores all status windows");
                 await SetLayout(1);
                 Check(1, "switching to one camera hides fifteen status windows");
                 await SetLayout(9);
                 Check(9, "returning to 3x3 restores assigned status windows");
+                NativeBackgroundChecks.Run(tiles[0]);
                 result = 0;
             }
             catch (Exception error) { Console.Error.WriteLine(error); }

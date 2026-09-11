@@ -1,7 +1,7 @@
 /* LAN access lives in System; all changes use the existing authenticated/CSRF API helper. */
 function createNetworkPanel() {
  const panel=document.createElement('form');panel.id='networkForm';panel.className='panel control-panel';
- panel.innerHTML='<h2>LAN access</h2><p>Allow devices on your trusted private network to open this admin panel. HTTP is unencrypted; no certificate is needed.</p><div class="checks"><label><input name="enabled" type="checkbox"> Enable LAN access</label></div><p>Windows will ask for administrator approval on the RTSPView host when enabling access. Its network connection must be set to Private.</p><div class="actions"><button type="submit">Save LAN access</button></div><p id="networkState" role="status"></p><div id="networkAddresses"></div>';
+ panel.innerHTML='<h2>LAN access</h2><p>Allow devices on your trusted private network to open this admin panel. HTTP is unencrypted; no certificate is needed.</p><div class="checks"><label class="toggle-control"><input name="enabled" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span>Enable LAN access</label></div><p>Windows will ask for administrator approval on the RTSPView host when enabling access. Its network connection must be set to Private.</p><div class="actions"><button type="submit">Save LAN access</button></div><p id="networkState" role="status"></p><div id="networkAddresses"></div>';
  document.querySelector('#page-system').prepend(panel);
  function render(state) {
   panel.elements.enabled.checked=state.enabled;panel.elements.enabled.disabled=!state.managed;
