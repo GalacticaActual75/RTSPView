@@ -81,6 +81,15 @@ If startup supervision was enabled during installation, RTSPView starts at sign-
 
 ## Configuration and persistent data
 
+The main configuration file is `settings.json`:
+
+- **Existing SpotMonitor installations:** `%LOCALAPPDATA%\SpotMonitor\settings.json`
+- **Fresh RTSPView installations:** `%LOCALAPPDATA%\RTSPView\settings.json`
+
+Paste the applicable path into File Explorer's address bar on the computer running RTSPView, signed in as the Windows user that runs the application. `%LOCALAPPDATA%` belongs to that user, so another Windows account has a different folder.
+
+If set, `RTSPVIEW_DATA_DIR` overrides the default folder; the older `SPOTMONITOR_DATA_DIR` variable is also supported as a fallback. The same folder contains password state (`web-security.json`), logs, backups and cookie-protection keys. **Keep the folder private: stream credentials are stored in the settings.** Stop both processes before manually editing or backing up these files.
+
 No environment variables are required. `.env.example` is a reference; the application does **not** automatically load `.env` files. Set variables in the Windows user environment and restart both processes (sign out/in for scheduled startup).
 
 | Variable | Default | Purpose |
