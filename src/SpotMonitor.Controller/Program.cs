@@ -20,8 +20,12 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     WebRootPath = "wwwroot"
 });
 builder.Logging.ClearProviders(); // Use the sanitized application logger; never log raw request URLs or bodies.
-builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5080");
 var dataDirectory = AppPaths.DataDirectory;
+var network = new LanAccessService(dataDirectory,
+    string.IsNullOrWhiteSpace(builder.Configuration["urls"]) && !builder.Configuration.GetSection("Kestrel:Endpoints").GetChildren().Any(),
+    LanAccessService.ConfigureFirewallAsync);
+if (network.Managed) builder.WebHost.ConfigureKestrel(options => options.Configure(network.ListenerConfiguration, reloadOnChange: true));
+else builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5080");
 Directory.CreateDirectory(dataDirectory);
 var dataProtectionDirectory = Path.Combine(dataDirectory, "data-protection");
 Directory.CreateDirectory(dataProtectionDirectory);
@@ -65,7 +69,13 @@ var loginLimiter = new LoginAttemptLimiter();
 
 app.Use(async (context, next) =>
 {
-    if (!allowedHosts.Contains(context.Request.Host.Host, StringComparer.OrdinalIgnoreCase))
+    if (network.Managed && (!network.RemoteAllowed(context.Connection.RemoteIpAddress) ||
+        security.PasswordChangeRequired && context.Connection.RemoteIpAddress is { } remote && !IPAddress.IsLoopback(remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4() : remote)))
+    {
+        context.Response.StatusCode = 403;
+        return;
+    }
+    if (network.Managed ? !network.HostAllowed(context.Request.Host.Host) : !allowedHosts.Contains(context.Request.Host.Host, StringComparer.OrdinalIgnoreCase))
     {
         context.Response.StatusCode = 400;
         return;
@@ -182,6 +192,20 @@ app.MapGet("/api/telemetry", () =>
     var viewer = viewerTelemetry.Latest;
     return Results.Ok(new ApplianceTelemetry { ViewerConnected = viewer is not null, Viewer = viewer, System = systemMetrics.GetSnapshot() });
 }).RequireAuthorization();
+app.MapGet("/api/network", () => Results.Ok(network.Status())).RequireAuthorization();
+app.MapPut("/api/network", async (HttpContext context, LanAccessRequest request) =>
+{
+    try
+    {
+        await network.SetEnabledAsync(request.Enabled);
+        context.Response.OnCompleted(network.ApplyBindingAsync);
+        auditLog.Write("AUDIT", request.Enabled ? "LAN administration enabled." : "LAN administration disabled.");
+        return Results.Ok(network.Status());
+    }
+    catch (InvalidOperationException error) { return Results.Conflict(new { error = error.Message }); }
+    catch (Exception) { return Results.Problem("Unable to save LAN access settings. Check local permissions.", statusCode: 500); }
+}).RequireAuthorization();
+
 app.MapGet("/api/update", async (CancellationToken cancellationToken) => Results.Ok(await updates.CheckAsync(cancellationToken))).RequireAuthorization();
 app.MapPut("/api/update/channel", async (UpdateChannelRequest request, CancellationToken cancellationToken) =>
 {

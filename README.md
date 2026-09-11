@@ -19,53 +19,24 @@ Use Windows 10/11 x64 with a current graphics driver. Download the installer and
 
 **Fresh installations have no camera URLs configured**, including every main camera, legacy camera field and overlay. Enter your own URLs after setup. Existing installations retain their streams and password, but legacy security state requires a password change after login. Back up before upgrading.
 
-The dashboard listens on loopback TCP 5080 by default. Remote access is an explicit deployment choice: configure ASP.NET Core HTTPS with a trusted certificate before binding a LAN interface. `ASPNETCORE_URLS` controls bindings. HTTP LAN bindings transmit credentials and cookies without encryption. Do not expose them to the Internet. Complete initial setup locally. Firewall rules do not provide encryption.
+The dashboard starts local-only on TCP 5080. After initial setup, use **System → LAN access** to enable HTTP access on your trusted private LAN. HTTPS is optional; see the LAN instructions below.
 
 ## Access the admin panel from the LAN
 
-**First-run order: local setup → change password → configure HTTPS and allowed hosts → allow the HTTPS firewall port → sign out/in → connect from the LAN.**
+**Version 1.0.34 adds a built-in LAN switch. No certificates, environment variables or manual firewall commands are needed for normal trusted-LAN use.**
 
-LAN access is optional. By default, the admin panel is available only at `http://127.0.0.1:5080` on the RTSPView computer. On another computer or phone, `localhost` and `127.0.0.1` refer to that device, not the RTSPView host. Opening a firewall port alone does not enable remote access.
+1. On the RTSPView host, open **http://127.0.0.1:5080**, sign in, and finish the required first-time password change.
+2. Open **System → LAN access**, select **Enable LAN access**, and click **Save LAN access**.
+3. Accept the Windows administrator approval prompt **on the RTSPView host**. If asked, set that host's trusted connection to **Private** under Windows Settings → Network & Internet → your connection's properties, then try again. The app does not automatically mark an unfamiliar network as trusted.
+4. Wait a few seconds for the listener to update. The System tab lists clickable **`http://HOST-IP:5080`** addresses. Open one from another computer or phone on the same LAN and sign in with your admin password. Use **HTTP and port 5080** for this mode, not HTTPS or port 5081.
 
-Complete initial setup and change the default password locally first. Then configure a trusted HTTPS endpoint using the steps below. These settings configure the Controller's web server; they do not belong in `settings.json` and are not loaded from a `.env` file.
+The switch saves its setting in `lan-access.json` alongside `settings.json`, allows the host's current LAN IP addresses/hostname, and configures a Windows firewall rule for **Private networks and LocalSubnet only**. The application also rejects off-subnet connections in this mode. Local access stays available, and the Viewer/streams do not restart. A brief browser disconnect while the web listener changes is normal. Approval cancelled or firewall setup failed? LAN access stays off and the panel explains the error.
 
-1. Choose a stable LAN hostname for the RTSPView computer and make sure your other devices can resolve it to that computer's LAN address. A DHCP reservation can help keep the address stable. In the example below, **replace `rtspview.example` with your actual hostname**; it is only a placeholder.
-2. Obtain a server certificate whose Subject Alternative Name includes that hostname, with its private key, from a certificate authority trusted by your client devices. A private CA works if its root is installed and trusted on those devices. Import the server certificate into **Current User → Personal → Certificates** for the Windows account running RTSPView (`certmgr.msc`). The certificate must be valid for server authentication and that account must be able to use its private key. The example assumes its subject contains the chosen hostname. Do not commit certificates/private keys or bypass browser certificate warnings.
-3. Open PowerShell as that same Windows user and set the persistent user environment variables below. This retains local HTTP access on 5080 and adds HTTPS on 5081. `AllowedHosts` contains hostnames only, without schemes or ports. Replace both hostname placeholders before running:
+**HTTP is unencrypted. Use this option only on a trusted private LAN; do not port-forward the admin panel to the Internet.** HTTPS remains available as an [optional advanced setup](docs/https-administration.md). If custom `ASPNETCORE_URLS` or Kestrel endpoints are already configured, the switch is disabled with an explanation; remove those custom bindings and restart the Controller to return to the built-in switch.
 
-```powershell
-[Environment]::SetEnvironmentVariable('ASPNETCORE_URLS', 'http://127.0.0.1:5080;https://0.0.0.0:5081', 'User')
-[Environment]::SetEnvironmentVariable('AllowedHosts', 'localhost;127.0.0.1;[::1];rtspview.example', 'User')
-[Environment]::SetEnvironmentVariable('Kestrel__Certificates__Default__Subject', 'rtspview.example', 'User')
-[Environment]::SetEnvironmentVariable('Kestrel__Certificates__Default__Store', 'My', 'User')
-[Environment]::SetEnvironmentVariable('Kestrel__Certificates__Default__Location', 'CurrentUser', 'User')
-[Environment]::SetEnvironmentVariable('Kestrel__Certificates__Default__AllowInvalid', 'false', 'User')
-```
+To turn LAN access off, clear the switch and save. No administrator prompt is needed for disabling: the listener returns to loopback and remote requests are blocked. A remote browser will lose access; re-enable locally on the host if needed. The scoped firewall rule remains dormant for the next enable and is removed on uninstall.
 
-The certificate-store configuration uses ASP.NET Core's [Kestrel HTTPS configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-8.0). No certificate password is needed in this example because the private key is accessed through the Windows certificate store. HTTPS startup fails if the configured certificate cannot be found or used.
-
-4. On a trusted LAN, confirm the Windows network connection uses the **Private** profile. In an **administrator PowerShell** window, allow the example HTTPS port from the local subnet:
-
-```powershell
-New-NetFirewallRule -DisplayName 'RTSPView Admin HTTPS' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5081 -RemoteAddress LocalSubnet -Profile Private
-```
-
-The installer's existing port-5080 rule does not open port 5081. If you choose another HTTPS port, change both the binding and firewall rule. Routed management networks need a deliberately scoped source-subnet rule; the example only allows the local subnet. Do not add a router port-forward for the admin panel.
-
-5. Sign out and back in so the application and startup task inherit the updated environment. If automatic startup is disabled, launch RTSPView after signing back in. Restarting only the Viewer does not restart the Controller or change its listener.
-6. From another device on the permitted LAN, open **`https://rtspview.example:5081`**, substituting your hostname, and sign in with your changed admin password. Use that HTTPS address for remote administration. The local Web configuration shortcut still opens the loopback address. Update installation and other Windows elevation prompts still require approval on the RTSPView computer.
-
-For access by IP address instead of hostname, the certificate must contain that IP as an IP Subject Alternative Name and the exact address must also appear in `AllowedHosts`. A certificate for a DNS name does not automatically validate an IP-address URL. Never browse to `0.0.0.0`: it is the listener binding, not the host's address.
-
-If access fails:
-
-- **Timeout/refused connection:** check Controller startup, the chosen port, firewall/network profile, DNS, and Wi-Fi client isolation. From another Windows computer, `Test-NetConnection rtspview.example -Port 5081` checks connectivity after substituting your hostname.
-- **HTTP 400:** check the exact requested hostname/IP is listed in `AllowedHosts`, then restart with the updated environment.
-- **Certificate warning:** check the hostname, expiry and issuing CA's trust on the client; correct the certificate/trust configuration rather than clicking through the warning.
-- **Local access works but LAN access does not:** confirm the Controller inherited the HTTPS binding, not just the default loopback URL. HTTP access to the host's LAN address on 5080 remains disabled in this example.
-
-To return to local-only access, set `ASPNETCORE_URLS` back to `http://127.0.0.1:5080` and `AllowedHosts` back to `localhost;127.0.0.1;[::1]` in the user environment, sign out/in, and remove the `RTSPView Admin HTTPS` firewall rule if no longer needed.
-
+If another device cannot connect, check that both devices are on the same LAN, the host's network profile is Private, and Wi-Fi client/guest isolation is not blocking them. Use an address shown in the panel; `localhost` and `127.0.0.1` on your phone/laptop refer to that device, not the RTSPView host. VPNs or multiple adapters may produce several addresses—choose the one reachable from your device. Update installation still requires Windows approval on the host.
 
 ## What RTSPView does
 
@@ -127,7 +98,7 @@ The custom shape editor lets you draw a mask. SVG imports must be 256 KB or smal
 
 Start with the default streaming settings. For an unreliable connection, try TCP and increase **Cache (ms)** to trade latency for smoother playback. **Startup timeout**, **Stall timeout** and **Maximum backoff** control connection/recovery timing; **Low latency** changes playback tuning. **Composite stream compatibility** forces TCP with a 3000 ms buffer and disables low-latency tuning for rebroadcast/composite streams. More streams and larger resolutions increase network, decoder and graphics load.
 
-Use **Restart stream** on a camera for a single-feed problem, **Restart all cameras** for all feeds, or **Restart viewer** for the display process. **Reboot Windows** restarts the entire host. The dashboard also shows health information and recent logs. Browser thumbnails and layout/overlay previews are snapshots, not full-motion browser video.
+Use **Restart stream** on a camera for a single-feed problem, **Restart all cameras** for all feeds, or **Restart viewer** for the display process. **Reboot host** restarts the entire host. The dashboard also shows health information and recent logs. Browser thumbnails and layout/overlay previews are snapshots, not full-motion browser video.
 
 **Show camera names** and **Show stream stats** control the information drawn over camera tiles. If hidden, diagnostic information appears during connection trouble and remains visible for 15 seconds after recovery. These text/status overlays are separate from picture-in-picture video overlays.
 
@@ -143,7 +114,7 @@ The main configuration file is `settings.json`:
 
 Paste the applicable path into File Explorer's address bar on the computer running RTSPView, signed in as the Windows user that runs the application. `%LOCALAPPDATA%` belongs to that user, so another Windows account has a different folder.
 
-If set, `RTSPVIEW_DATA_DIR` overrides the default folder; the older `SPOTMONITOR_DATA_DIR` variable is also supported as a fallback. The same folder contains password state (`web-security.json`), logs, backups and cookie-protection keys. **Keep the folder private: stream credentials are stored in the settings.** Stop both processes before manually editing or backing up these files.
+If set, `RTSPVIEW_DATA_DIR` overrides the default folder; the older `SPOTMONITOR_DATA_DIR` variable is also supported as a fallback. The same folder contains LAN access state (`lan-access.json`), password state (`web-security.json`), logs, backups and cookie-protection keys. **Keep the folder private: stream credentials are stored in the settings.** Stop both processes before manually editing or backing up these files.
 
 No environment variables are required. `.env.example` is a reference; the application does **not** automatically load `.env` files. Set variables in the Windows user environment and restart both processes (sign out/in for scheduled startup).
 
@@ -151,8 +122,8 @@ No environment variables are required. `.env.example` is a reference; the applic
 | --- | --- | --- |
 | `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain SpotMonitor data) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
 | `RTSPVIEW_GITHUB_REPOSITORY` | `GalacticaActual75/RTSPView` | Public GitHub release repository. No token/key is required or supported. |
-| `ASPNETCORE_URLS` | `http://127.0.0.1:5080` | Controller bindings. HTTPS additionally requires ASP.NET Core certificate configuration. |
-| `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Semicolon-separated permitted request hostnames/IPs. Add the exact LAN name when enabling remote access; wildcard hosts are not accepted. |
+| `ASPNETCORE_URLS` | `http://127.0.0.1:5080` | Advanced binding override; disables the built-in LAN switch. HTTPS also requires certificate configuration. |
+| `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Host allowlist for externally configured bindings. The built-in LAN switch manages its own local hostname/IP allowlist. |
 | `ASPNETCORE_ENVIRONMENT` | `Production` | Keep deployments in Production. |
 
 The same data-directory setting must reach Controller and Viewer. Camera URLs and camera credentials are runtime configuration in `settings.json`, outside source control. Restrict this directory to the application user and administrators and protect backups with disk encryption. Administrator passwords use salted PBKDF2-HMAC-SHA256 with 600,000 iterations; cookie keys use Windows DPAPI for the current user. Camera credentials remain plaintext locally because LibVLC needs them at runtime.
@@ -161,7 +132,7 @@ Composite stream compatibility enables TCP, a 3000 ms buffer, and disables low-l
 
 ### Correct the old update-channel label without reinstalling
 
-Versions 1.0.32 and 1.0.33 already check public GitHub Releases, but their dashboard description still says "private LAN update channel." This is stale text, not the active update source.
+Versions 1.0.32 and 1.0.33 already check public GitHub Releases, but their dashboard description still says "private LAN update channel." This is stale text, not the active update source. **Version 1.0.34 includes the wording correction; its users do not need this patch.**
 
 For an existing installation, download [Apply-GitHub-Update-Label-Fix.ps1](https://github.com/GalacticaActual75/RTSPView/releases/download/v1.0.33/Apply-GitHub-Update-Label-Fix.ps1) from the existing 1.0.33 release. On the RTSPView host, open PowerShell **as administrator** and run the downloaded file, substituting its actual path:
 
@@ -195,6 +166,8 @@ dotnet build SpotMonitor.sln -c Release --no-restore
 dotnet run --project tests/SpotMonitor.ConfigurationChecks -c Release
 $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
 node tests/admin-security.checks.cjs
+dotnet run --project tests/SpotMonitor.LanAccessChecks -c Release
+node tests/lan-firewall.checks.cjs
 node tests/shape-editor.checks.cjs
 node tests/wall-layout-presets.checks.cjs
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
@@ -210,7 +183,7 @@ Docker is not supported: WPF requires an interactive Windows desktop and graphic
 
 ## Troubleshooting and security
 
-- Dashboard unavailable: open it on the same host, verify Controller is running, and check bindings and port conflicts. Configure HTTPS and firewall access deliberately for remote use.
+- Dashboard unavailable: open it on the same host, verify Controller is running, and check bindings and port conflicts. Enable LAN access from System for a trusted private LAN; see the LAN guide above.
 - Blank cameras: fresh installations intentionally have empty URLs. Check credentials, RTSP reachability, transport, codecs, and layout assignments.
 - Update unavailable: check Internet connectivity, GitHub rate limits, repository visibility, manifest and checksum. Manual installer upgrades remain available.
 - Configuration recovery: preserve the data directory before inspecting `settings.json.bak` or pre-import backups. Do not share raw settings, screenshots or logs in bug reports.

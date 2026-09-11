@@ -47,6 +47,8 @@ jobs:
           dotnet build SpotMonitor.sln -c Release --no-restore
           $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
           node tests/admin-security.checks.cjs
+          dotnet run --project tests/SpotMonitor.LanAccessChecks -c Release
+          node tests/lan-firewall.checks.cjs
 
       - name: Check update helper failure reporting
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1

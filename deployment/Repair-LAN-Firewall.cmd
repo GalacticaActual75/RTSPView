@@ -1,16 +1,11 @@
 @echo off
 setlocal
-net session >nul 2>&1
+echo Configuring the private-LAN firewall rule. Run this shortcut as administrator.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Controller\Enable-LanAccess.ps1"
 if errorlevel 1 (
-  echo Right-click this file and choose "Run as administrator".
-  pause
-  exit /b 1
+  echo Could not configure the rule. Use administrator rights and set your trusted network profile to Private.
+) else (
+  echo Firewall configured. Enable LAN access on the System tab to open the admin panel to your LAN.
 )
-netsh advfirewall firewall delete rule name="SpotMonitor Web Admin - Private LAN" >nul 2>&1
-netsh advfirewall firewall delete rule name="SpotMonitor Web Admin - Block Public" >nul 2>&1
-netsh advfirewall firewall delete rule name="SpotMonitor Web Admin - LAN Only" >nul 2>&1
-netsh advfirewall firewall add rule name="SpotMonitor Web Admin - LAN Only" dir=in action=allow protocol=TCP localport=5080 remoteip=LocalSubnet profile=any enable=yes
-echo.
-echo SpotMonitor web administration is allowed from the local subnet only.
 pause
 endlocal
