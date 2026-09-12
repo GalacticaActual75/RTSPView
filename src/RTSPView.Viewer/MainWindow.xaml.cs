@@ -80,6 +80,8 @@ public partial class MainWindow : Window
     private int _cornerClickCount;
     private bool _leftButtonWasDown;
     private int? _focusedSlot;
+    private readonly SnapshotRefreshSchedule _snapshotSchedule = new();
+    private bool _refreshingSnapshots;
 
     public MainWindow()
     {
@@ -133,8 +135,25 @@ public partial class MainWindow : Window
                 Cameras = _allTiles.Select(tile => tile.GetTelemetry()).ToArray()
             });
             await ReloadExternalConfigurationAsync();
+            if (!_refreshingSnapshots && _snapshotSchedule.IsDue(DateTimeOffset.UtcNow, _settings.Snapshots))
+                _ = RefreshScheduledSnapshotsAsync();
         };
         _logger.Write("INFO", "Application startup: Phase 2 camera wall");
+    }
+
+    private async Task RefreshScheduledSnapshotsAsync()
+    {
+        _refreshingSnapshots = true;
+        try
+        {
+            foreach (var tile in _allTiles.ToArray())
+            {
+                if (!_settings.Snapshots.Enabled) break;
+                if (tile.IsPlaying) await tile.RefreshSnapshotAsync();
+            }
+        }
+        catch (Exception exception) { _logger.Write("WARNING", $"Scheduled snapshot refresh failed: {exception.Message}"); }
+        finally { _refreshingSnapshots = false; }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

@@ -35,6 +35,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private StreamActivity _activity = new();
     private volatile string _decoder = "Unknown";
     private bool _ownsEngine;
+    private long _snapshotCapturedTicks;
     private long _lastLostPictures = -1;
     private long _pendingLostPictures;
     private DateTimeOffset _lastFrameLossLogAt = DateTimeOffset.MinValue;
@@ -94,6 +95,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             Width = videoTrack?.Data.Video.Width,
             Height = videoTrack?.Data.Video.Height,
             Decoder = _decoder,
+            SnapshotCapturedAt = Interlocked.Read(ref _snapshotCapturedTicks) is var ticks && ticks > 0 ? new DateTimeOffset(ticks, TimeSpan.Zero) : null,
             FrameWarning = FrameWarning(DateTimeOffset.UtcNow),
             ReconnectCount = _status.ReconnectCount,
             StreamUptimeSeconds = _status.ConnectedAt is null ? null : (long)(DateTimeOffset.UtcNow - _status.ConnectedAt.Value).TotalSeconds,
@@ -676,11 +678,13 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
                 for (var check = 0; check < 20; check++)
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(100));
+                    if (_disposed || generation != _playGeneration || !ReferenceEquals(_player, player)) return false;
                     try
                     {
                         using (var completedSnapshot = new FileStream(attemptPath, FileMode.Open, FileAccess.Read, FileShare.None))
                             if (completedSnapshot.Length == 0) continue;
                         File.Move(attemptPath, path, overwrite: true);
+                        Interlocked.Exchange(ref _snapshotCapturedTicks, DateTimeOffset.UtcNow.Ticks);
                         temporaryPath = null;
                         return true;
                     }

@@ -46,6 +46,7 @@ $timer.Add_Tick({
         $message.Text = $status.message
         if ($status.logPath) { $script:logPath = $status.logPath; $log.Enabled = Test-Path -LiteralPath $script:logPath }
         if ($status.state -in @('complete', 'failed')) {
+            if ($status.state -eq 'complete') { $timer.Stop(); $window.Close(); return }
             $bar.Style = 'Continuous'
             $bar.Value = if ($status.state -eq 'complete') { 100 } else { 0 }
             $title.Text = if ($status.state -eq 'complete') { 'Update complete' } else { 'Update needs attention' }

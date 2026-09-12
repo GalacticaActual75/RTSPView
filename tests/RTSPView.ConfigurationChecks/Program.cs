@@ -7,6 +7,7 @@ Directory.CreateDirectory(root);
 try
 {
     StreamActivityChecks.Run();
+    await SnapshotChecks.RunAsync(root);
     await GitHubUpdateChecks.RunAsync(root);
     var migrationRoot = Path.Combine(root, "migration-user");
     Check(AppPaths.DefaultDataDirectory(migrationRoot) == Path.Combine(migrationRoot, "RTSPView"), "new installation uses RTSPView data directory");

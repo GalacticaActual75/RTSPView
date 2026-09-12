@@ -59,6 +59,9 @@ jobs:
       - name: Check update helper failure reporting
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
 
+      - name: Check update progress window completion
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateProgress.Checks.ps1
+
       - name: Check drawn viewport masks
         run: node tests/shape-editor.checks.cjs
 

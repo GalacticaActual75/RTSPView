@@ -8,6 +8,7 @@ internal static class Program
     [STAThread]
     private static int Main()
     {
+        Environment.SetEnvironmentVariable("RTSPVIEW_DATA_DIR", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "RTSPView-native-" + Guid.NewGuid().ToString("N")));
         var result = 1;
         var app = new Application();
         var wall = new Grid();

@@ -1,5 +1,11 @@
 /* Shared admin surfaces. Geometry inside video and layout canvases is unchanged. */
 :root{--content-width:1320px;--card-radius:10px;--card-padding:20px;--inset:#0e151e;--warning:#e7ba72}
+.snapshot-action{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}.snapshot-action .save-state{max-width:42ch}.snapshot-action .save-state:empty{display:none}
+.snapshot-action .save-state[data-tone]{color:var(--status-color)}
+.camera-page-toolbar{flex-wrap:wrap;gap:12px}#cameraCount{margin-right:auto}#page-overview .section-title{flex-wrap:wrap}
+#snapshotForm .display-field-row{grid-template-columns:minmax(0,240px) auto;justify-content:start;margin-bottom:12px}#snapshotForm .actions{grid-column:auto}
+.restart-action{display:flex;flex-direction:column;gap:7px;max-width:260px;align-items:flex-start}.restart-action small{color:var(--muted);font-size:12px;line-height:1.5}.viewer-action-strip{align-items:flex-start}
+@media(max-width:520px){#snapshotForm .display-field-row{grid-template-columns:minmax(0,1fr)}.snapshot-action{width:100%}}
 main{max-width:var(--content-width);padding:22px 24px 40px}
 .hero,main[data-page=overview] .hero{display:flex;align-items:flex-end;gap:24px;margin-bottom:20px}
 .hero>div:first-child,main[data-page=overview] .hero>div:first-child{display:block;min-width:0}

@@ -27,6 +27,7 @@ public sealed record AppSettings
     public bool ShowCameraNames { get; init; } = true;
     public bool ShowCameraStats { get; init; } = true;
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
+    public SnapshotSettings Snapshots { get; init; } = new();
 
     public static IReadOnlyList<CameraSettings> CreateCameraSlots() =>
         MainCameraSlots.Select((slot, index) => new CameraSettings { Slot = slot, Name = $"Camera {index + 1}", Enabled = index < 9 }).ToArray();
@@ -80,6 +81,7 @@ public sealed record AppSettings
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
+            Snapshots = (Snapshots ?? new()).Normalize(),
             Cameras = normalized,
             CameraCount = cameraCount,
             Layouts = layouts,

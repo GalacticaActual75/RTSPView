@@ -353,6 +353,22 @@ app.MapPut("/api/garage", async (DoorbellOverlaySettings overlay) =>
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
+app.MapPut("/api/snapshots/settings", async (SnapshotSettings snapshots) =>
+{
+    if (!double.IsFinite(snapshots.IntervalHours) || snapshots.IntervalHours is < 0.1 or > 168)
+        return Results.BadRequest(new { error = "Snapshot interval must be between 0.1 and 168 hours." });
+    await configGate.WaitAsync();
+    try
+    {
+        var settings = await settingsStore.LoadAsync();
+        var updated = (settings with { Snapshots = snapshots }).Normalize();
+        await settingsStore.SaveAsync(updated);
+        auditLog.Write("AUDIT", "Snapshot refresh settings changed from web admin");
+        return Results.Ok(updated.Snapshots);
+    }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
+
 app.MapPut("/api/display", async (DisplaySettings display) =>
 {
     await configGate.WaitAsync();

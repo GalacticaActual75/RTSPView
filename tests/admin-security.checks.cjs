@@ -32,6 +32,11 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
   for(const camera of [config.camera,...config.cameras,config.doorbellOverlay.camera,config.garageOverlay.camera,...config.additionalOverlays.map(o=>o.camera)])assert.equal(camera.rtspUrl,'','fresh camera URL empty');
+  assert.equal(config.snapshots.enabled,false,'snapshot schedule off by default');
+  assert.equal((await request(a,'/api/snapshots/settings','PUT',{enabled:true,intervalHours:0})).status,400,'invalid interval rejected');
+  assert.equal((await request(a,'/api/snapshots/settings','PUT',{enabled:true,intervalHours:0.5})).status,200);
+  assert.equal((await request(a,'/api/config')).json.snapshots.intervalHours,0.5,'snapshot settings persisted');
+  a.csrf='';assert.equal((await request(a,'/api/snapshots/settings','PUT',{enabled:false,intervalHours:1})).status,400,'snapshot CSRF required');await session(a);
   const state=fs.readFileSync(path.join(data,'web-security.json'),'utf8');assert(!state.includes(password));assert(!state.includes('admin'));assert.equal(JSON.parse(state).PasswordChangeRequired,false);assert(!fs.existsSync(path.join(data,'initial-admin-password.txt')));
   const url='rtsp://test-user:test-pass@camera.example/live?token=test-query';const camera={...config.cameras[0],rtspUrl:url};assert.equal((await request(a,'/api/cameras/1','PUT',camera)).status,200);
   const exported=await request(a,'/api/config/export');assert(!exported.text.includes('test-pass'));assert(!exported.text.includes('test-query'));

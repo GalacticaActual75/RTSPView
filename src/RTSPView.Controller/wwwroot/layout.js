@@ -12,7 +12,7 @@ const adminLayout = (() => {
     banner.remove();
     document.querySelector('header .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
-    for (const [id, title] of Object.entries({overview:'Overview', cameras:'Cameras', layouts:'Layouts',overlays:'Overlays', system:'System'})) {
+    for (const [id, title] of Object.entries({overview:'Overview', cameras:'Streams', layouts:'Layouts',overlays:'Overlays', system:'System'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
       button.dataset.page = id; button.onclick = () => select(id); nav.append(button);
       const page = document.createElement('section'); page.id = 'page-' + id; page.className = 'admin-page'; page.setAttribute('aria-label', title);
@@ -32,7 +32,7 @@ const adminLayout = (() => {
     performance.addEventListener('toggle', fitOverview);
     const extra = document.createElement('div'); extra.id = 'extraStats'; extra.className = 'stats'; performance.append(extra);
     const overviewHead = document.createElement('div'); overviewHead.className = 'section-title';
-    overviewHead.title = 'Select a camera snapshot to open its settings.';
+    overviewHead.title = 'Select a stream snapshot to open its settings.';
     const sizeLabel = document.createElement('label'); sizeLabel.className = 'overview-density';
     sizeLabel.innerHTML = 'Preview size<select aria-label="Dashboard preview size"><option value="fit">Fit wall</option><option value="large">Larger previews</option></select>';
     sizeLabel.querySelector('select').onchange = event => {fitWall = event.target.value === 'fit'; fitOverview();};
@@ -43,7 +43,7 @@ const adminLayout = (() => {
     const cameraHeader = cameraGrid.previousElementSibling;
     cameraHeader.classList.add('camera-page-toolbar');
     const count = document.createElement('span'); count.id='cameraCount';
-    const addCameraButton = document.createElement('button'); addCameraButton.type='button'; addCameraButton.id='addCamera'; addCameraButton.textContent='+ Add camera'; addCameraButton.onclick=()=>addCameraEntry();
+    const addCameraButton = document.createElement('button'); addCameraButton.type='button'; addCameraButton.id='addCamera'; addCameraButton.textContent='+ Add stream'; addCameraButton.onclick=()=>addCameraEntry();
     cameraHeader.replaceChildren(count,addCameraButton);
     pages.cameras.append(cameraHeader);
     const overlayNav = document.createElement('nav'); overlayNav.className = 'overlay-nav'; overlayNav.setAttribute('aria-label','Select overlay');
@@ -64,7 +64,7 @@ const adminLayout = (() => {
     updates.insertBefore(channelSettings, document.querySelector('#updateState'));
     channelSettings.querySelector('.release-summary').append(document.querySelector('#updateState'));
     const installDialog = document.createElement('dialog'); installDialog.id = 'updateConfirm';
-    installDialog.innerHTML = '<form method="dialog"><h2>Install selected release?</h2><p id="updateConfirmText"></p><p>The camera wall will restart. Follow progress on the Windows host.</p><a href="/api/config/export" download="RTSPView-config.json">Export configuration for rollback</a><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="install">Install now</button></div></form>';
+    installDialog.innerHTML = '<form method="dialog"><h2>Install selected release?</h2><p id="updateConfirmText"></p><p>The stream wall will restart. Follow progress on the Windows host.</p><a href="/api/config/export" download="RTSPView-config.json">Export configuration for rollback</a><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="install">Install now</button></div></form>';
     document.body.append(installDialog);
     viewer.querySelector('h2').textContent = 'Maintenance';
     viewer.querySelector('p').textContent = 'These commands take effect immediately on the Windows host.';
@@ -90,7 +90,7 @@ const adminLayout = (() => {
       button.setAttribute('aria-current', button.dataset.page === id ? 'page' : 'false');
     }
     if (id === 'overview' || id === 'cameras') pages[id].append(document.querySelector('#cameras'));
-    document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Cameras',layouts:'Layouts',overlays:'Overlays',system:'System'}[id];
+    document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Streams',layouts:'Layouts',overlays:'Overlays',system:'System'}[id];
     adminUi.page(id);
     window.dispatchEvent(new Event('resize'));
     window.scrollTo({top:0, behavior:'instant'});
@@ -173,7 +173,7 @@ const adminLayout = (() => {
       placement.append(placement.querySelector('.reset-doorbell-framing'));
       const help = placement.querySelector('.overlay-help'), details = document.createElement('details');
       details.innerHTML = '<summary>Framing help</summary>';
-      help.textContent = 'Drag in Wall preview to position the overlay. Use Source framing to choose the visible part of the camera image. The image keeps its proportions. Position 0 is left/top, 50 is centered, and 100 is right/bottom. Overlay software decoding may increase CPU usage.';
+      help.textContent = 'Drag in Wall preview to position the overlay. Use Source framing to choose the visible part of the stream image. The image keeps its proportions. Position 0 is left/top, 50 is centered, and 100 is right/bottom. Overlay software decoding may increase CPU usage.';
       details.append(help); placement.append(details);
     }
     toggles(form);

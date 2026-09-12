@@ -2,14 +2,14 @@
   <Grid Margin="20">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
-      <TextBlock Text="Camera slot" VerticalAlignment="Center" Margin="0,0,10,0"/>
+      <TextBlock Text="Stream slot" VerticalAlignment="Center" Margin="0,0,10,0"/>
       <ComboBox x:Name="SlotBox" Width="90" Height="30" SelectionChanged="SlotBox_SelectionChanged"></ComboBox>
       <CheckBox x:Name="EnabledBox" Content="Enabled" VerticalAlignment="Center" Margin="24,0,0,0"/>
     </StackPanel>
     <Grid Grid.Row="1">
       <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <Grid.RowDefinitions><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/><RowDefinition Height="46"/></Grid.RowDefinitions>
-      <TextBlock Text="Camera name" VerticalAlignment="Center"/><TextBox x:Name="NameBox" Grid.Column="1" Margin="0,7" Padding="8,4"/>
+      <TextBlock Text="Stream name" VerticalAlignment="Center"/><TextBox x:Name="NameBox" Grid.Column="1" Margin="0,7" Padding="8,4"/>
       <TextBlock Grid.Row="1" Text="RTSP URL" VerticalAlignment="Center"/><TextBox x:Name="UrlBox" Grid.Row="1" Grid.Column="1" Margin="0,7" Padding="8,4" ToolTip="Stored locally as plain text by deployment choice"/>
       <TextBlock Grid.Row="2" Text="RTSP transport" VerticalAlignment="Center"/><ComboBox x:Name="TransportBox" Grid.Row="2" Grid.Column="1" Width="140" HorizontalAlignment="Left" Margin="0,7"><ComboBoxItem>Auto</ComboBoxItem><ComboBoxItem>TCP</ComboBoxItem><ComboBoxItem>UDP</ComboBoxItem></ComboBox>
       <TextBlock Grid.Row="3" Text="Network cache (ms)" VerticalAlignment="Center"/><TextBox x:Name="CacheBox" Grid.Row="3" Grid.Column="1" Width="140" HorizontalAlignment="Left" Margin="0,7" Padding="8,4"/>

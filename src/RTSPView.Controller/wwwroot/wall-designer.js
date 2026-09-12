@@ -38,7 +38,7 @@ const wallDesigner = (() => {
       if(validTile(candidate,index)&&validTile(layout.tiles[swapIndex],swapIndex)){changed();return;}
       layout.tiles[index]=original;layout.tiles[swapIndex]=other;
     }
-    if (!validTile(candidate,index)) { render(); message('That tile overlaps another camera or extends beyond the grid.'); return; }
+    if (!validTile(candidate,index)) { render(); message('That tile overlaps another stream or extends beyond the grid.'); return; }
     current().tiles[index] = candidate; changed();
   }
   function preset(id) {
@@ -48,7 +48,7 @@ const wallDesigner = (() => {
   }
   function addCamera(slot, row, column) {
     const tile = {cameraSlot:slot,row,column,rowSpan:1,columnSpan:1};
-    if (!validTile(tile,-1)) { message('Choose an empty cell and a camera not already in this layout.'); return; }
+    if (!validTile(tile,-1)) { message('Choose an empty cell and a stream not already in this layout.'); return; }
     current().tiles.push(tile); selectedTile = current().tiles.length-1; changed();
   }
   async function persist(apply = false, revert = false) {
@@ -100,7 +100,7 @@ const wallDesigner = (() => {
     const workspace=el('div',undefined,'designer-workspace');root.append(workspace);
     const preview=el('section',undefined,'designer-preview');workspace.append(preview);
     const previewHead=el('div',undefined,'designer-preview-head');preview.append(previewHead);
-    const title=el('div');title.append(el('h2','Wall preview'),el('span',layout.rows+' × '+layout.columns+' grid · '+layout.tiles.length+' cameras','designer-meta'));previewHead.append(title);
+    const title=el('div');title.append(el('h2','Wall preview'),el('span',layout.rows+' × '+layout.columns+' grid · '+layout.tiles.length+' streams','designer-meta'));previewHead.append(title);
     const canvasControls=el('div',undefined,'designer-canvas-controls');preview.append(canvasControls);
     const format=el('select');format.add(new Option('Landscape · 16:9','16:9'));format.add(new Option('Portrait · 9:16','9:16'));format.value=layout.aspectRatio||'16:9';
     format.onchange=()=>{Object.assign(layout,wallLayoutPresets.transpose(layout));layout.aspectRatio=format.value;changed();};field('Screen format',format,canvasControls);
@@ -123,14 +123,14 @@ const wallDesigner = (() => {
       const icon=el('span',undefined,'designer-preset-icon');icon.setAttribute('aria-hidden','true');
       icon.style.gridTemplateRows='repeat('+template.rows+',1fr)';icon.style.gridTemplateColumns='repeat('+template.columns+',1fr)';icon.style.aspectRatio=(layout.aspectRatio||'16:9').replace(':','/');
       for(const tile of template.tiles){const cell=el('i');cell.style.gridArea=(tile.row+1)+' / '+(tile.column+1)+' / span '+tile.rowSpan+' / span '+tile.columnSpan;icon.append(cell);}
-      presetButton.append(icon,el('span',item.name),el('small',template.tiles.length+(template.tiles.length===1?' camera':' cameras')));
+      presetButton.append(icon,el('span',item.name),el('small',template.tiles.length+(template.tiles.length===1?' stream':' streams')));
     }
     const stage=el('div',undefined,'designer-stage');preview.append(stage);
-    board=el('div',undefined,'designer-board');board.setAttribute('aria-label','Camera wall layout preview');
+    board=el('div',undefined,'designer-board');board.setAttribute('aria-label','Stream wall layout preview');
     board.style.setProperty('--aspect',(layout.aspectRatio||'16:9').replace(':','/'));board.style.setProperty('--ratio',layout.aspectRatio==='9:16'?9/16:16/9);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
     board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,Math.floor((e.clientY-bounds.top)/bounds.height*layout.rows),Math.floor((e.clientX-bounds.left)/bounds.width*layout.columns));};
     layout.tiles.forEach((tile,index)=>{
-      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:'Camera',slot:tile.cameraSlot};
+      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:'Stream',slot:tile.cameraSlot};
       const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
       Object.assign(node.style,{left:tile.column/layout.columns*100+'%',top:tile.row/layout.rows*100+'%',width:tile.columnSpan/layout.columns*100+'%',height:tile.rowSpan/layout.rows*100+'%'});
@@ -163,7 +163,7 @@ const wallDesigner = (() => {
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot);
       const selected=el('div',undefined,'designer-selected');selected.append(el('span','SELECTED TILE','designer-eyebrow'),el('h3',camera.name));side.append(selected);
       const cameraSelect=el('select');for(const camera of config.cameras)cameraSelect.add(new Option(camera.name,camera.slot));cameraSelect.value=tile.cameraSlot;
-      cameraSelect.onchange=()=>updateTile({...tile,cameraSlot:Number(cameraSelect.value)},selectedTile);field('Camera',cameraSelect,side);
+      cameraSelect.onchange=()=>updateTile({...tile,cameraSlot:Number(cameraSelect.value)},selectedTile);field('Stream',cameraSelect,side);
       const properties=el('div',undefined,'designer-properties');side.append(properties);
       for(const [key,label,offset] of [['row','Row',1],['column','Column',1],['rowSpan','Height',0],['columnSpan','Width',0]]){
         const input=el('input');input.type='number';input.min=1;input.max=4;input.value=tile[key]+offset;
@@ -176,8 +176,8 @@ const wallDesigner = (() => {
     }
     const available=config.cameras.filter(camera=>!layout.tiles.some(t=>t.cameraSlot===camera.slot));
     const library=el('section',undefined,'designer-library');side.append(library);
-    const libraryHead=el('div');libraryHead.append(el('h3','Available cameras'),el('span',String(available.length),'designer-count'));library.append(libraryHead);
-    if(!available.length)library.append(el('p','All cameras are on this layout. Add more from Cameras.','designer-empty'));
+    const libraryHead=el('div');libraryHead.append(el('h3','Available streams'),el('span',String(available.length),'designer-count'));library.append(libraryHead);
+    if(!available.length)library.append(el('p','All streams are on this layout. Add more from Streams.','designer-empty'));
     else library.append(el('p','Drag onto the wall or select to add.','designer-help'));
     for(const camera of available){
       const node=button('',()=>{
@@ -190,7 +190,7 @@ const wallDesigner = (() => {
     status=el('p',dirty?'Unsaved changes. Apply when you are ready.':'Changes stay in draft until you apply.','designer-status');status.setAttribute('role','status');root.append(status);
     const hiddenOverlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])]
       .filter(overlay=>overlay.camera.enabled&&!layout.tiles.some(tile=>tile.cameraSlot===overlay.hostCameraSlot));
-    if(hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host camera is absent.','designer-help'));
+    if(hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
   }
   window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
   return {updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){

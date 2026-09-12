@@ -1,0 +1,10 @@
+# Beta stream controls
+
+- **Refresh snapshots** is available on Overview, Streams and System. It reads the current saved stream configuration, refreshes configured enabled streams and overlays through the existing authenticated per-slot command, and reports partial failures while keeping previous successful images.
+- **System → Browser snapshots** enables a viewer-side schedule, disabled by default. The interval is 0.1–168 hours (6 minutes–7 days), default 1 hour. The schedule starts a fresh interval when enabled or changed, does not overlap scheduled batches, and runs with the browser closed. Startup/reconnect captures remain enabled independently. Disabling stops future scheduled work; an already-running capture may finish.
+- Successful captures publish a timestamp so open browser cards, layout thumbnails and overlay previews load new snapshots. No live browser video or stream transcoding is added.
+- Updater progress windows close after the existing verified `complete` result. Failure results, missing/invalid status and stalled updates remain visible. Existing window-session handoff behavior is preserved.
+- UI labels use **Streams**. Existing stream names, API paths, configuration keys and internal identifiers remain compatible.
+- **Restart all streams** reconnects streams inside the existing viewer. **Restart viewer application** relaunches the viewer process and its streams. Both actions remain available with separate descriptions and existing confirmation behavior.
+
+Validation: snapshot scheduling/defaults/interval changes/disable, settings persistence and export/import, authenticated API validation and CSRF, decoded-video snapshot completion telemetry, updater complete/failure/malformed/stalled states, and existing native startup, focus, layout, shape, security and update-helper regressions. Browser fixture checks covered manual refresh with one unavailable stream, settings save, Streams navigation, and separate restart request routing. The browser tool stalled on the viewer-restart confirmation; that handler and its confirmation attribute remain unchanged. No real host settings or restarts were used for UI testing.

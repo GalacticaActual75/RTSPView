@@ -48,6 +48,9 @@ internal static class StreamTelemetryChecks
                 {
                     if (telemetry.Decoder != "Software decoding") throw new Exception("Software stream mislabeled as hardware");
                     Console.WriteLine($"PASS decoded fixture telemetry: {telemetry.Width}x{telemetry.Height}, {telemetry.Codec}, measured FPS/bitrate, software decoder and real frame timestamp");
+                    if (!await tile.RefreshSnapshotAsync() || tile.GetTelemetry().SnapshotCapturedAt is null)
+                        throw new Exception("Snapshot capture did not publish its completion timestamp");
+                    Console.WriteLine("PASS decoded fixture snapshot capture and completion telemetry");
                     return;
                 }
             }

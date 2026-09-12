@@ -11,6 +11,7 @@ public sealed record CameraTelemetry
     public uint? Width { get; init; }
     public uint? Height { get; init; }
     public string Decoder { get; init; } = "Unknown";
+    public DateTimeOffset? SnapshotCapturedAt { get; init; }
     public string? FrameWarning { get; init; }
     public int ReconnectCount { get; init; }
     public long? StreamUptimeSeconds { get; init; }

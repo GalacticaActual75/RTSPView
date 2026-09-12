@@ -2,14 +2,14 @@
 const adminUi = (() => {
   const streamPresentations = new WeakMap();
   const descriptions = {
-    overview: 'Monitor the camera wall, stream health, and host performance.',
-    cameras: 'Configure camera streams, connection settings, and recovery.',
-    layouts: 'Arrange cameras in a saved layout, then apply it to the wall.',
+    overview: 'Monitor the stream wall, stream health, and host performance.',
+    cameras: 'Configure streams, connection settings, and recovery.',
+    layouts: 'Arrange streams in a saved layout, then apply it to the wall.',
     overlays: 'Position, shape, and frame picture-in-picture streams. Save to apply changes to the wall.',
     system: 'Configure RTSPView settings, networking, display behavior, updates, and backups.'
   };
   function init() {
-    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=1'; document.head.append(css);
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=streams1'; document.head.append(css);
     const hero = document.querySelector('.hero');
     const description = document.createElement('p'); description.id = 'pageDescription';
     hero.querySelector('h1').after(description);
@@ -36,6 +36,15 @@ const adminUi = (() => {
     backup.querySelector('#importConfig').classList.add('danger-secondary');
     backup.querySelector('#configState').classList.add('information-note');
     document.querySelector('#updateState').setAttribute('role', 'status');
+    for (const [selector,label,help] of [
+      ['[data-action="restart-cameras"]','Restart all streams','Reconnect every stream without restarting the viewer application.'],
+      ['[data-action="restart"]','Restart viewer application','Close and relaunch the viewer, including all streams.']
+    ]) {
+      const button = document.querySelector(selector), group = document.createElement('div'); group.className = 'restart-action';
+      button.before(group); button.textContent = label;
+      const description = document.createElement('small'); description.id = button.dataset.action + '-help'; description.textContent = help;
+      button.setAttribute('aria-describedby',description.id); group.append(button,description);
+    }
   }
   function page(id) { document.querySelector('#pageDescription').textContent = descriptions[id]; }
   function host(status) {
