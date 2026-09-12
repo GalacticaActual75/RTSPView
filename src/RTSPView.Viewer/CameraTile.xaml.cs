@@ -32,7 +32,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private CameraRuntimeStatus _status = new();
     private DateTimeOffset _attemptStartedAt;
     private DateTimeOffset? _healthySince;
-    private int _lastDecodedFrames = -1;
+    private StreamActivity _activity = new();
+    private volatile string _decoder = "Unknown";
+    private bool _ownsEngine;
     private long _lastLostPictures = -1;
     private long _pendingLostPictures;
     private DateTimeOffset _lastFrameLossLogAt = DateTimeOffset.MinValue;
@@ -63,6 +65,19 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public bool IsPlaying => _player?.IsPlaying == true;
     public CameraRuntimeStatus Status => _status;
     public event EventHandler? PointerActivity;
+    public event EventHandler? FocusRequested;
+    public bool Focused { get; set; }
+
+    private void OverlayRoot_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        // Button clicks must never also change the wall layout.
+        if (e.OriginalSource is DependencyObject source)
+            for (var node = source; node is not null; node = node is FrameworkContentElement content ? content.Parent : System.Windows.Media.VisualTreeHelper.GetParent(node))
+                if (node is System.Windows.Controls.Primitives.ButtonBase) return;
+        FocusRequested?.Invoke(this, EventArgs.Empty);
+        e.Handled = true;
+    }
 
     public CameraTelemetry GetTelemetry()
     {
@@ -73,11 +88,13 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             Slot = _settings.Slot,
             Name = _settings.Name,
             State = _status.State.ToString(),
-            Fps = _player?.Fps ?? 0,
-            BitrateKbps = stats is null ? 0 : Math.Round(stats.Value.DemuxBitrate * 8000, 1),
+            Fps = IsPlaying && FrameWarning(DateTimeOffset.UtcNow) is null ? (float)_activity.FramesPerSecond : 0,
+            BitrateKbps = !IsPlaying || stats is null ? 0 : Math.Round(stats.Value.DemuxBitrate * 8000, 1),
             Codec = videoTrack is null ? null : FourCc(videoTrack.Value.Codec),
             Width = videoTrack?.Data.Video.Width,
             Height = videoTrack?.Data.Video.Height,
+            Decoder = _decoder,
+            FrameWarning = FrameWarning(DateTimeOffset.UtcNow),
             ReconnectCount = _status.ReconnectCount,
             StreamUptimeSeconds = _status.ConnectedAt is null ? null : (long)(DateTimeOffset.UtcNow - _status.ConnectedAt.Value).TotalSeconds,
             StreamStartedAt = _status.ConnectedAt,
@@ -136,10 +153,17 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             CompositedCanvas.Visibility = Visibility.Visible;
             RenderRoot.Children.Add(OverlayRoot);
         }
-        _libVlc = libVlc;
+        // LibVLC logs have no reliable media-player identity. A camera-owned engine
+        // lets decoder evidence describe this stream rather than another camera.
+        _libVlc = compositedVideo ? libVlc : new LibVLC("--no-video-title-show", "--no-osd");
+        _ownsEngine = !compositedVideo;
+        if (_ownsEngine) _libVlc.Log += OnDecoderLog;
         _logger = logger;
         _settings = settings;
         _requestHardwareDecoding = requestHardwareDecoding;
+        _decoder = compositedVideo || !requestHardwareDecoding ? "Software decoding" : "Hardware requested (unconfirmed)";
+        _attemptStartedAt = DateTimeOffset.UtcNow;
+        OverlayRoot.ToolTip = "Double-click the video to focus; double-click again to restore the wall.";
         Directory.CreateDirectory(_snapshotDirectory);
         NameText.Text = settings.Name;
         SlotText.Text = $"Slot {settings.Slot}";
@@ -151,6 +175,11 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void Apply(CameraSettings settings)
     {
+        if (_settings.RtspUrl != settings.RtspUrl)
+        {
+            _activity = new StreamActivity();
+            _status = _status with { LastFrameAt = null };
+        }
         _settings = settings;
         NameText.Text = settings.Name;
         SlotText.Text = $"Slot {settings.Slot}";
@@ -163,7 +192,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         _showCameraNames = showCameraNames;
         _showCameraStats = showCameraStats;
-        UpdateOverlayPresentation(DateTimeOffset.UtcNow, "Hardware decode");
+        UpdateOverlayPresentation(DateTimeOffset.UtcNow);
     }
 
     public (uint Width, uint Height)? GetVideoDimensions()
@@ -333,7 +362,25 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private void UpdateRestartButton() => RestartStreamButton.IsEnabled =
         _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);
 
-    public void Tick(string hardwareDecoder)
+    private string? FrameWarning(DateTimeOffset now) => !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl) || _pendingNativeStart
+        ? null : _activity.Warning(now, _attemptStartedAt);
+
+    private void OnDecoderLog(object? sender, LogEventArgs e)
+    {
+        var message = e.FormattedLog;
+        if (!_useCompositedOutput && _requestHardwareDecoding &&
+            (message.Contains("for hardware decoding", StringComparison.OrdinalIgnoreCase) ||
+             message.Contains("using hw decoder module", StringComparison.OrdinalIgnoreCase)))
+        {
+            var module = System.Text.RegularExpressions.Regex.Match(message,
+                @"\b(d3d11va|dxva2|nvdec|cuda|vaapi|vdpau|videotoolbox)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            _decoder = module.Success ? $"Hardware active ({module.Value.ToUpperInvariant()})" : "Hardware active";
+        }
+        if (e.Level >= LogLevel.Warning && !message.Contains("picture is too late to be displayed", StringComparison.OrdinalIgnoreCase))
+            _logger?.Write($"VLC-{e.Level}", $"Camera {_settings.Slot}: {message}");
+    }
+
+    public void Tick()
     {
         if (_pendingNativeStart) { ResumeNativeStart(); return; }
         if (_disposed || !_settings.Enabled) return;
@@ -344,7 +391,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
                 ApplyVideoSizing(_player);
         }
         var now = DateTimeOffset.UtcNow;
-        UpdateOverlayPresentation(now, hardwareDecoder);
+        UpdateOverlayPresentation(now);
 
         if (_status.NextReconnectAt is not null)
         {
@@ -369,8 +416,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         if (_player?.IsPlaying == true)
         {
             ObserveFrameProgress(now);
-            if (_status.LastFrameAt is not null &&
-                now - _status.LastFrameAt > TimeSpan.FromSeconds(Math.Clamp(_settings.WatchdogTimeoutSeconds, 8, 120)))
+            if (now - (_status.LastFrameAt > _attemptStartedAt ? _status.LastFrameAt.Value : _attemptStartedAt) > TimeSpan.FromSeconds(Math.Clamp(_settings.WatchdogTimeoutSeconds, 8, 120)))
             {
                 ScheduleRecovery("No decoded-frame progress; watchdog detected a stalled stream");
                 return;
@@ -379,17 +425,20 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             if (_healthySince is not null && now - _healthySince > TimeSpan.FromSeconds(60) && _status.ConsecutiveFailures > 0)
                 _status = _status with { ConsecutiveFailures = 0 };
 
-            UpdateOverlayPresentation(now, hardwareDecoder);
+            UpdateOverlayPresentation(now);
         }
-        else UpdateOverlayPresentation(now, hardwareDecoder);
+        else UpdateOverlayPresentation(now);
     }
 
-    private void UpdateOverlayPresentation(DateTimeOffset now, string hardwareDecoder)
+    private void UpdateOverlayPresentation(DateTimeOffset now)
     {
-        if (_useCompositedOutput) hardwareDecoder = "Composited video (CPU)";
+        var warning = FrameWarning(now);
+        StaleBanner.Visibility = warning is null ? Visibility.Collapsed : Visibility.Visible;
+        StaleText.Text = warning is null ? string.Empty : "STALE VIDEO — " + warning;
         var connectionNeedsAttention = _settings.Enabled && _status.State is not CameraConnectionState.Live and not CameraConnectionState.Disabled and not CameraConnectionState.NotConfigured;
         var recentlyRecovered = _status.State == CameraConnectionState.Live && _healthySince is not null && now - _healthySince < TimeSpan.FromSeconds(15);
-        var forceVisible = connectionNeedsAttention || recentlyRecovered;
+        FocusText.Visibility = Focused ? Visibility.Visible : Visibility.Collapsed;
+        var forceVisible = connectionNeedsAttention || recentlyRecovered || Focused;
         var showName = _showCameraNames || forceVisible;
         var showStats = _showCameraStats || forceVisible;
 
@@ -398,10 +447,11 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         {
             if (_status.State == CameraConnectionState.Live && _player is not null)
             {
-                var stats = _player.Media?.Statistics;
-                var bitrate = stats is null ? string.Empty : $" • {stats.Value.DemuxBitrate * 8000:0} kb/s";
+                var telemetry = GetTelemetry();
+                var resolution = telemetry.Width > 0 && telemetry.Height > 0 ? $"{telemetry.Width}×{telemetry.Height}" : "Resolution unknown";
+                var bitrate = $" • {telemetry.BitrateKbps:0} kb/s";
                 var uptime = _status.ConnectedAt is null ? string.Empty : $" • {(now - _status.ConnectedAt.Value):hh\\:mm\\:ss}";
-                DetailsText.Text = $"{_player.Fps:0.0} fps{bitrate} • {hardwareDecoder} • R:{_status.ReconnectCount}{uptime}";
+                DetailsText.Text = $"{resolution} • {telemetry.Codec ?? "Codec unknown"} • {telemetry.Fps:0.0} fps{bitrate} • {_decoder} • R:{_status.ReconnectCount}{uptime}";
             }
             else DetailsText.Text = $"{_status.State} • R:{_status.ReconnectCount}";
             DetailsText.Visibility = Visibility.Visible;
@@ -418,12 +468,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         var stats = _player?.Media?.Statistics;
         if (stats is null) return;
-        var decodedFrames = stats.Value.DecodedVideo;
-        if (decodedFrames != _lastDecodedFrames)
-        {
-            _lastDecodedFrames = decodedFrames;
-            _status = _status with { LastFrameAt = now };
-        }
+        _activity.Observe(stats.Value.DecodedVideo, now);
+        _status = _status with { LastFrameAt = _activity.LastFrameAt };
 
         var lostPictures = (long)stats.Value.LostPictures;
         if (_lastLostPictures >= 0)
@@ -465,8 +511,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             if (!ReferenceEquals(_player, player)) return;
             var now = DateTimeOffset.UtcNow;
             _healthySince = now;
-            _lastDecodedFrames = -1;
-            _status = _status with { State = CameraConnectionState.Live, ConnectedAt = now, LastFrameAt = now, NextReconnectAt = null };
+            _status = _status with { State = CameraConnectionState.Live, ConnectedAt = now, NextReconnectAt = null };
             var generation = _playGeneration;
             _ = CaptureSnapshotAsync(player, generation, waitForFirstFrame: true);
             SetOverlay("Live", false);
@@ -562,7 +607,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _attemptStartedAt = DateTimeOffset.UtcNow;
         _playGeneration++;
         _healthySince = null;
-        _lastDecodedFrames = -1;
+        _activity.BeginAttempt(_attemptStartedAt);
+        _decoder = _useCompositedOutput || !_requestHardwareDecoding ? "Software decoding" : "Hardware requested (unconfirmed)";
         _lastLostPictures = -1;
         _pendingLostPictures = 0;
         _lastFrameLossLogAt = DateTimeOffset.MinValue;
@@ -740,7 +786,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         presenter?.Deactivate();
         var player = _player;
         var media = _media;
-        QueuePlayerOperation(() => { player?.Stop(); media?.Dispose(); player?.Dispose(); presenter?.Dispose(); });
+        var engine = _libVlc;
+        QueuePlayerOperation(() => { player?.Stop(); media?.Dispose(); player?.Dispose(); presenter?.Dispose(); if (_ownsEngine) engine?.Dispose(); });
         try { _playerOperation.Wait(TimeSpan.FromSeconds(5)); } catch (AggregateException) { }
     }
 }

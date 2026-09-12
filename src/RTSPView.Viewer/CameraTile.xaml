@@ -3,11 +3,12 @@
    <Grid x:Name="RenderRoot">
     <Canvas x:Name="CompositedCanvas" ClipToBounds="True" Visibility="Collapsed"><Image x:Name="CompositedImage" Stretch="Fill"/></Canvas>
     <vlc:VideoView x:Name="VideoView" Background="Black">
-      <Grid x:Name="OverlayRoot" Visibility="Collapsed" Background="#02000000" MouseEnter="OverlayRoot_MouseEnter" MouseLeave="OverlayRoot_MouseLeave" MouseMove="OverlayRoot_MouseMove">
+      <Grid x:Name="OverlayRoot" Visibility="Collapsed" Background="#02000000" MouseEnter="OverlayRoot_MouseEnter" MouseLeave="OverlayRoot_MouseLeave" MouseMove="OverlayRoot_MouseMove" MouseLeftButtonDown="OverlayRoot_MouseLeftButtonDown">
         <Border x:Name="OverlayPanel" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="8" Padding="8,4" CornerRadius="3" Background="#B0101010">
           <StackPanel>
             <TextBlock x:Name="NameText" Foreground="White" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
             <TextBlock x:Name="DetailsText" Foreground="#B8C1CC" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"/>
+            <TextBlock x:Name="FocusText" Text="Focused • Double-click to return to the wall" Foreground="#83CEFF" FontSize="12" Visibility="Collapsed"/>
           </StackPanel>
         </Border>
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -15,6 +16,9 @@
           <TextBlock x:Name="SlotText" Foreground="#59616B" FontSize="12" Margin="0,5,0,0" HorizontalAlignment="Center"/>
         </StackPanel>
         <Button x:Name="RestartStreamButton" Width="118" Height="32" Margin="2" HorizontalAlignment="Center" VerticalAlignment="Center" Content="Restart stream" Click="RestartStreamButton_Click" Background="#D91F2328" Foreground="White" BorderBrush="#343A40" BorderThickness="1" ToolTip="Restart only this camera stream" Visibility="Collapsed"/>
+        <Border x:Name="StaleBanner" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="8" Padding="10,6" Background="#EE842D19" CornerRadius="3" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30">
+          <TextBlock x:Name="StaleText" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" TextAlignment="Center"/>
+        </Border>
         <Ellipse x:Name="EllipticalViewportEdge" Margin="-1.5" Stroke="#E6000000" StrokeThickness="3" Fill="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
         <Border x:Name="RoundedViewportEdge" Margin="-1.5" BorderBrush="#E6000000" BorderThickness="3" Background="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
         <Path x:Name="CustomViewportEdge" Margin="-1.5" Stretch="Fill" Stroke="#E6000000" StrokeThickness="3" Fill="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>

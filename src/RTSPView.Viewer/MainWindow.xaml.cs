@@ -54,6 +54,7 @@ public partial class MainWindow : Window
             {
                 var tile = new CameraTile();
                 tile.PointerActivity += Tile_PointerActivity;
+                tile.FocusRequested += Tile_FocusRequested;
                 var window = CreateOverlayWindow(camera.Name, tile);
                 tile.Initialize(_libVlc, _logger, camera, _settings.RequestHardwareDecoding, compositedVideo: true);
                 entry = (tile, window, camera);
@@ -66,7 +67,6 @@ public partial class MainWindow : Window
     }
     private bool _overlayLayoutQueued;
     private AppSettings _settings = new();
-    private string _hardwareDecoder = "HW requested";
     private DateTime _settingsLastWriteUtc;
     private bool _reloadInProgress;
     private readonly ViewerTelemetryPublisher _telemetryPublisher = new();
@@ -79,6 +79,7 @@ public partial class MainWindow : Window
     private DateTime _cornerClickWindowStarted;
     private int _cornerClickCount;
     private bool _leftButtonWasDown;
+    private int? _focusedSlot;
 
     public MainWindow()
     {
@@ -106,11 +107,6 @@ public partial class MainWindow : Window
         _libVlc = new LibVLC("--no-video-title-show", "--no-osd");
         _libVlc.Log += (_, eventArgs) =>
         {
-            var hardwareMatch = Regex.Match(eventArgs.FormattedLog, @"Using\s+(?<module>\S+)\s+\((?<device>.+?)(?:,\s+vendor\b|\)\s+for\s+hardware decoding)", RegexOptions.IgnoreCase);
-            if (hardwareMatch.Success && eventArgs.FormattedLog.Contains("hardware decoding", StringComparison.OrdinalIgnoreCase))
-                _hardwareDecoder = $"{hardwareMatch.Groups["module"].Value} • {hardwareMatch.Groups["device"].Value}";
-            else if (eventArgs.FormattedLog.Contains("using hw decoder module", StringComparison.OrdinalIgnoreCase) && _hardwareDecoder == "HW requested")
-                _hardwareDecoder = "Hardware decode active";
             if (eventArgs.Level >= LogLevel.Warning)
             {
                 // LibVLC emits late-picture messages from its shared engine without
@@ -128,12 +124,12 @@ public partial class MainWindow : Window
             if (_settings.AllOverlays().Any(overlay => overlay.Camera.Enabled))
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
-            foreach (var tile in _allTiles) tile.Tick(_hardwareDecoder);
+            foreach (var tile in _allTiles) tile.Tick();
             _telemetryPublisher.Publish(new ViewerTelemetry
             {
                 ViewerUptimeSeconds = (long)_viewerUptime.Elapsed.TotalSeconds,
                 ViewerMemoryMb = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1024d / 1024d, 1),
-                HardwareDecoder = _hardwareDecoder,
+                HardwareDecoder = "See per-camera decoder status",
                 Cameras = _allTiles.Select(tile => tile.GetTelemetry()).ToArray()
             });
             await ReloadExternalConfigurationAsync();
@@ -149,7 +145,11 @@ public partial class MainWindow : Window
         SlotBox.ItemsSource = Enumerable.Range(1, _settings.CameraCount).ToArray();
         SlotBox.SelectedIndex = 0;
         _allTiles = [.. _tiles, DoorbellTile, GarageTile];
-        foreach (var tile in _allTiles) tile.PointerActivity += Tile_PointerActivity;
+        foreach (var tile in _allTiles)
+        {
+            tile.PointerActivity += Tile_PointerActivity;
+            tile.FocusRequested += Tile_FocusRequested;
+        }
         _settings = (await _settingsStore.LoadAsync()).Normalize();
         SlotBox.ItemsSource = Enumerable.Range(1, _settings.CameraCount).ToArray();
         SlotBox.SelectedIndex = 0;
@@ -188,32 +188,22 @@ public partial class MainWindow : Window
     private void ApplyWallLayout()
     {
         var layout = _settings.Layouts.Single(item => item.Id == _settings.ActiveLayoutId);
+        if (_focusedSlot.HasValue && !_allTiles.Any(tile => tile.Slot == _focusedSlot)) _focusedSlot = null;
+        foreach (var tile in _allTiles) tile.Focused = tile.Slot == _focusedSlot;
         SizeWall();
-        WallGrid.RowDefinitions.Clear();
-        WallGrid.ColumnDefinitions.Clear();
-        for (var row = 0; row < layout.Rows; row++) WallGrid.RowDefinitions.Add(new RowDefinition());
-        for (var column = 0; column < layout.Columns; column++) WallGrid.ColumnDefinitions.Add(new ColumnDefinition());
-        for (var index = 0; index < _tiles.Length; index++)
-        {
-            var tile = _tiles[index];
-            var placement = layout.Tiles.FirstOrDefault(item => item.CameraSlot == AppSettings.MainCameraSlots[index]);
-            if (placement is null)
-            {
-                tile.SetWallVisibility(false);
-                continue;
-            }
-            Grid.SetRow(tile, placement.Row);
-            Grid.SetColumn(tile, placement.Column);
-            Grid.SetRowSpan(tile, placement.RowSpan);
-            Grid.SetColumnSpan(tile, placement.ColumnSpan);
-            tile.SetWallVisibility(true);
-        }
+        CameraWallPresentation.Apply(WallGrid, _tiles, layout, _focusedSlot);
         QueueOverlayLayouts();
     }
 
     private void SizeWall()
     {
         var layout = _settings.Layouts.Single(item => item.Id == _settings.ActiveLayoutId);
+        if (_focusedSlot.HasValue)
+        {
+            WallGrid.Width = Math.Max(0, WallViewport.ActualWidth);
+            WallGrid.Height = Math.Max(0, WallViewport.ActualHeight);
+            return;
+        }
         var size = layout.Fit(WallViewport.ActualWidth, WallViewport.ActualHeight);
         WallGrid.Width = size.Width;
         WallGrid.Height = size.Height;
@@ -469,6 +459,29 @@ public partial class MainWindow : Window
         DoorbellOverlaySettings overlay)
     {
         if (overlayWindow is null || _tiles.Length == 0) return;
+        if (_focusedSlot.HasValue)
+        {
+            if (_focusedSlot != overlay.Camera.Slot || !CanDisplayOverlayWindows())
+            {
+                HideOverlayWindowHierarchy(overlayWindow, overlayTile);
+                return;
+            }
+            var origin = WallGrid.PointToScreen(new System.Windows.Point());
+            var scale = VisualTreeHelper.GetDpi(WallGrid);
+            overlayWindow.Left = origin.X / scale.DpiScaleX;
+            overlayWindow.Top = origin.Y / scale.DpiScaleY;
+            overlayWindow.Width = Math.Max(1, WallGrid.ActualWidth);
+            overlayWindow.Height = Math.Max(1, WallGrid.ActualHeight);
+            var plain = overlay with { ViewportShape = DoorbellViewportShape.Native };
+            overlayTile.ApplyVideoSizing(100, 50, 50, overlayWindow.Width, overlayWindow.Height);
+            overlayTile.ApplyViewportEdgeSmoothing(plain, overlayWindow.Width, overlayWindow.Height);
+            OverlayWindowOpacity.Apply(overlayWindow, 100);
+            if (!overlayWindow.IsVisible) overlayWindow.Show();
+            ShowOverlayWindowHierarchy(overlayWindow, overlayTile);
+            SetWindowRgn(new WindowInteropHelper(overlayWindow).Handle, IntPtr.Zero, true);
+            BringOverlayWindowToFront(overlayWindow);
+            return;
+        }
         if (!overlay.Camera.Enabled || !CanDisplayOverlayWindows())
         {
             HideOverlayWindowHierarchy(overlayWindow, overlayTile);
@@ -771,6 +784,21 @@ public partial class MainWindow : Window
     private void Window_MouseMove(object sender, System.Windows.Input.MouseEventArgs e) => RegisterPointerActivity();
 
     private void Tile_PointerActivity(object? sender, EventArgs e) => RegisterPointerActivity();
+
+    private void Tile_FocusRequested(object? sender, EventArgs e)
+    {
+        if (sender is not CameraTile tile) return;
+        // Reserve the fullscreen escape corner for its existing five-click gesture.
+        if (_isFullScreen)
+        {
+            var position = System.Windows.Forms.Cursor.Position;
+            var bounds = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).Bounds;
+            if (position.X >= bounds.Right - 64 && position.Y < bounds.Top + 64) return;
+        }
+        _focusedSlot = _focusedSlot == tile.Slot ? null : tile.Slot;
+        RegisterPointerActivity();
+        ApplyWallLayout();
+    }
 
     private void RegisterPointerActivity()
     {

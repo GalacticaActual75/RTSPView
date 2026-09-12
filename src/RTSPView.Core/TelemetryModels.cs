@@ -10,6 +10,8 @@ public sealed record CameraTelemetry
     public string? Codec { get; init; }
     public uint? Width { get; init; }
     public uint? Height { get; init; }
+    public string Decoder { get; init; } = "Unknown";
+    public string? FrameWarning { get; init; }
     public int ReconnectCount { get; init; }
     public long? StreamUptimeSeconds { get; init; }
     public DateTimeOffset? StreamStartedAt { get; init; }

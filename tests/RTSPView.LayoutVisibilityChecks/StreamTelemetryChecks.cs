@@ -1,0 +1,58 @@
+using System.IO;
+using System.Reflection;
+using System.Text;
+using System.Windows;
+using System.Windows.Threading;
+using LibVLCSharp.Shared;
+using RTSPView.Core;
+using RTSPView.Infrastructure;
+using RTSPView.Viewer;
+
+internal static class StreamTelemetryChecks
+{
+    public static async Task Run()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RTSPView-stream-checks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var file = Path.Combine(directory, "synthetic.y4m");
+        using (var output = File.Create(file))
+        {
+            output.Write(Encoding.ASCII.GetBytes("YUV4MPEG2 W160 H120 F30:1 Ip A1:1 C420jpeg\n"));
+            for (var frame = 0; frame < 180; frame++)
+            {
+                output.Write(Encoding.ASCII.GetBytes("FRAME\n"));
+                output.Write(Enumerable.Repeat((byte)(40 + frame % 100), 160 * 120).ToArray());
+                output.Write(Enumerable.Repeat((byte)128, 160 * 120 / 2).ToArray());
+            }
+        }
+        using var engine = new LibVLC("--no-video-title-show", "--no-osd");
+        var tile = new CameraTile();
+        var window = new Window { Content = tile, Width = 400, Height = 300, Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false };
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        try
+        {
+            tile.Initialize(engine, new RollingFileLogger(Path.Combine(directory, "logs")), new CameraSettings { Enabled = true }, false, compositedVideo: true);
+            window.Show(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            // Substitute a deterministic local fixture only in the test; production remains RTSP-only.
+            var player = (MediaPlayer)typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)!;
+            var media = new Media(engine, new Uri(file));
+            media.AddOption(":avcodec-hw=none"); media.AddOption(":no-audio");
+            typeof(CameraTile).GetField("_media", flags)!.SetValue(tile, media);
+            if (!player.Play(media)) throw new Exception("Synthetic video did not start");
+            for (var attempt = 0; attempt < 60; attempt++)
+            {
+                await Task.Delay(100); tile.Tick();
+                var telemetry = tile.GetTelemetry();
+                if (telemetry.Width == 160 && telemetry.Height == 120 && telemetry.Fps > 0 &&
+                    !string.IsNullOrWhiteSpace(telemetry.Codec) && telemetry.BitrateKbps > 0 && telemetry.LastFrameAt is not null)
+                {
+                    if (telemetry.Decoder != "Software decoding") throw new Exception("Software stream mislabeled as hardware");
+                    Console.WriteLine($"PASS decoded fixture telemetry: {telemetry.Width}x{telemetry.Height}, {telemetry.Codec}, measured FPS/bitrate, software decoder and real frame timestamp");
+                    return;
+                }
+            }
+            throw new Exception("Decoded fixture telemetry did not report dimensions, codec, progress and bitrate");
+        }
+        finally { tile.Dispose(); window.Close(); }
+    }
+}
