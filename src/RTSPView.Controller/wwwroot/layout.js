@@ -54,15 +54,15 @@ const adminLayout = (() => {
       const grid = document.querySelector('#' + id); grid.classList.add('overlay-workspace');grid.previousElementSibling.remove(); grid.hidden = id !== 'doorbell'; pages.overlays.append(grid);
     }
     const overlayHead = document.createElement('div'); overlayHead.className = 'section-title';
-    overlayHead.innerHTML = '<p>Adjust the preview, then save to apply changes to the camera wall.</p>';
     pages.overlays.prepend(overlayHead, overlayNav);
-    const add = document.createElement('button');add.type='button';add.id='addOverlay';add.textContent='+';add.setAttribute('aria-label','Add overlay');add.title='Add overlay';add.onclick=()=>addOverlay();overlayNav.append(add);
+    const add = document.createElement('button');add.type='button';add.id='addOverlay';add.textContent='+ Add overlay';add.setAttribute('aria-label','Add overlay');add.title='Add overlay';add.onclick=()=>addOverlay();overlayNav.append(add);
     const addState=document.createElement('p');addState.id='addOverlayState';addState.setAttribute('role','status');overlayHead.append(addState);
     const viewer = document.querySelector('.viewer-display-panel'), display = document.querySelector('#displayForm'), updates = document.querySelector('#updatePanel');
     display.className = 'panel control-panel'; updates.className = 'panel control-panel';
     const channelSettings = document.createElement('div'); channelSettings.className = 'update-channel-settings';
-    channelSettings.innerHTML = '<label>Update channel<select id="updateChannel"><option value="stable">Stable (main)</option><option value="beta">Beta</option></select></label><dl class="update-versions"><div><dt>Installed</dt><dd id="installedRelease">Checking…</dd></div><div><dt>Available on selected channel</dt><dd id="availableRelease">Checking…</dd></div></dl><p>Changing channels does not install anything. Install the selected release to switch this host.</p><a href="/api/config/export" download="RTSPView-config.json">Export configuration before installing</a>';
+    channelSettings.innerHTML = '<div class="channel-choice"><label>Update channel<select id="updateChannel"><option value="stable">Stable (main)</option><option value="beta">Beta</option></select></label><a href="/api/config/export" download="RTSPView-config.json">Export configuration before installing</a></div><div class="release-summary"><dl class="update-versions"><div><dt>Installed</dt><dd id="installedRelease">Checking…</dd></div><div><dt>Available on selected channel</dt><dd id="availableRelease">Checking…</dd></div></dl></div><p class="channel-help">Changing channels does not install anything. Install the selected release to switch this host.</p>';
     updates.insertBefore(channelSettings, document.querySelector('#updateState'));
+    channelSettings.querySelector('.release-summary').append(document.querySelector('#updateState'));
     const installDialog = document.createElement('dialog'); installDialog.id = 'updateConfirm';
     installDialog.innerHTML = '<form method="dialog"><h2>Install selected release?</h2><p id="updateConfirmText"></p><p>The camera wall will restart. Follow progress on the Windows host.</p><a href="/api/config/export" download="RTSPView-config.json">Export configuration for rollback</a><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="install">Install now</button></div></form>';
     document.body.append(installDialog);
@@ -77,6 +77,7 @@ const adminLayout = (() => {
     // Commands from camera cards must remain visible outside the System page.
     document.body.append(document.querySelector('#controlState'));
     toggles(document.querySelector('#displayForm'));
+    adminUi.init();
     window.addEventListener('resize', fitOverview);
     select('overview');
   }
@@ -90,12 +91,14 @@ const adminLayout = (() => {
     }
     if (id === 'overview' || id === 'cameras') pages[id].append(document.querySelector('#cameras'));
     document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Cameras',layouts:'Layouts',overlays:'Overlays',system:'System'}[id];
+    adminUi.page(id);
     window.dispatchEvent(new Event('resize'));
     window.scrollTo({top:0, behavior:'instant'});
     fitOverview();
   }
   function metrics() {
     const stats = document.querySelector('#stats');
+    stats.firstElementChild.dataset.tone = stats.firstElementChild.querySelector('b').textContent === 'Connected' ? 'healthy' : 'error';
     document.querySelector('#extraStats').replaceChildren(...[...stats.children].slice(4));
     fitOverview();
   }
@@ -144,21 +147,28 @@ const adminLayout = (() => {
       form.append(open);
     }
     if (overlayMode) {
+      const stream = form.querySelector('.camera-preview');
+      const status = document.createElement('details'); status.className = 'inspector-section overlay-status'; status.open = true;
+      const heading = document.createElement('summary'); heading.textContent = 'Overlay status'; status.append(heading);
+      stream.before(status); status.append(stream);
       settings.querySelector('summary').textContent = 'Overlay controls';
       const placement = settings.querySelector('.overlay-placement');
-      const connection = document.createElement('details'); connection.innerHTML = '<summary>Connection and recovery</summary>';
+      const connection = document.createElement('details'); connection.className = 'inspector-section'; connection.innerHTML = '<summary>Connection and recovery</summary>';
       for (const child of [...settings.children]) if (child !== placement && child.tagName !== 'SUMMARY') connection.append(child);
       settings.append(connection);
       connection.append(form.querySelector('.restart-camera'));
       const makeGroup = (title, names) => {
-        const group = document.createElement('fieldset'); const legend = document.createElement('legend'); legend.textContent = title; group.append(legend);
+        const section = document.createElement('details'); section.className = 'inspector-section'; section.open = true;
+        const heading = document.createElement('summary'); heading.textContent = title; section.append(heading);
+        const group = document.createElement('div'); group.className = 'inspector-fields'; section.append(group);
         for (const name of names) group.append(form.elements[name].closest('label'));
-        placement.append(group); return group;
+        placement.append(section); return group;
       };
       for (const title of placement.querySelectorAll('.overlay-group-title')) title.remove();
       makeGroup('Placement', ['hostCameraSlot','viewportWidthPercent','viewportHeightPercent','viewportHorizontalPositionPercent','viewportVerticalPositionPercent']);
-      const appearance = makeGroup('Appearance',['viewportShape','viewportOpacityPercent']);
-      appearance.append(placement.querySelector('.open-shape-editor'),placement.querySelector('.custom-viewport-upload'));
+      makeGroup('Appearance',['viewportOpacityPercent']);
+      const shape = makeGroup('Shape / Mask',['viewportShape']);
+      shape.append(placement.querySelector('.open-shape-editor'),placement.querySelector('.custom-viewport-upload'));
       makeGroup('Framing',['zoomPercent','imageHorizontalPositionPercent','imageVerticalPositionPercent']);
       placement.append(placement.querySelector('.reset-doorbell-framing'));
       const help = placement.querySelector('.overlay-help'), details = document.createElement('details');

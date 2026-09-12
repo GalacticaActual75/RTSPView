@@ -1,14 +1,32 @@
 /* LAN access lives in System; all changes use the existing authenticated/CSRF API helper. */
 function createNetworkPanel() {
  const panel=document.createElement('form');panel.id='networkForm';panel.className='panel control-panel';
- panel.innerHTML='<h2>LAN access</h2><p>Allow devices on your trusted private network to open this admin panel. HTTP is unencrypted; no certificate is needed.</p><div class="checks"><label class="toggle-control"><input name="enabled" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span>Enable LAN access</label></div><p>Windows will ask for administrator approval on the RTSPView host when enabling access. Its network connection must be set to Private.</p><div class="actions"><button type="submit">Save LAN access</button></div><p id="networkState" role="status"></p><div id="networkAddresses"></div>';
+ panel.innerHTML='<h2>LAN Access</h2><p>Allow devices on your trusted private network to open this admin panel.</p><div class="settings-action-row"><div><label class="toggle-control"><input name="enabled" type="checkbox" role="switch" aria-describedby="lanHelp"><span class="toggle-track" aria-hidden="true"></span>Enable LAN access</label><p id="lanHelp">Windows will ask for administrator approval on the RTSPView host when enabling access. Its network connection must be set to Private.</p></div><button type="submit">Save LAN access</button></div><p id="networkState" role="status"></p><section class="inset-panel" aria-label="Admin URLs (LAN only)"><h3>Admin URLs (LAN only)</h3><div id="networkAddresses"></div><span id="copyAddressState" role="status"></span></section><p class="network-warning">HTTP is unencrypted; no certificate is needed. Use only on a trusted private network.</p>';
  document.querySelector('#page-system').prepend(panel);
  function render(state) {
   panel.elements.enabled.checked=state.enabled;panel.elements.enabled.disabled=!state.managed;
   panel.querySelector('button').disabled=!state.managed;
   panel.querySelector('#networkState').textContent=state.message;
   const addresses=panel.querySelector('#networkAddresses');addresses.replaceChildren();
-  if(state.managed && state.enabled)for(const url of state.addresses){const row=document.createElement('p'),link=document.createElement('a');link.href=url;link.textContent=url;link.target='_blank';link.rel='noopener';row.append(link);addresses.append(row)}
+  if(state.managed && state.enabled)for(const url of state.addresses){
+   const row=document.createElement('div'),link=document.createElement('a'),copy=document.createElement('button');row.className='address-row';
+   link.href=url;link.textContent=url;link.target='_blank';link.rel='noopener';
+   copy.type='button';copy.className='secondary copy-address';copy.textContent='Copy';copy.setAttribute('aria-label','Copy '+url);
+   copy.onclick=async()=>{
+    const status=panel.querySelector('#copyAddressState');
+    try {
+     if(navigator.clipboard && window.isSecureContext)await navigator.clipboard.writeText(url);
+     else {
+      // LAN HTTP does not expose Clipboard API. Keep a selection-based fallback.
+      const field=document.createElement('textarea');field.value=url;field.className='clipboard-source';field.setAttribute('aria-label','LAN URL to copy');document.body.append(field);field.select();
+      try{if(!document.execCommand('copy'))throw new Error('Copy unavailable');}finally{field.remove();copy.focus();}
+     }
+     status.textContent='Address copied.';
+    }catch{status.textContent='Copy unavailable. Select the address and copy it manually.';}
+   };
+   row.append(link,copy);addresses.append(row);
+  }
+  if(!addresses.children.length)addresses.textContent=state.enabled?'No LAN addresses available.':'Enable LAN access to see available addresses.';
  }
  panel.onsubmit=async event=>{
   event.preventDefault();const enabled=panel.elements.enabled.checked,button=panel.querySelector('button');button.disabled=true;
