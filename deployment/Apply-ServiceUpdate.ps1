@@ -2,13 +2,20 @@
 # It survives stopping/replacing RTSPViewMaintenance. It accepts no caller arguments.
 $ErrorActionPreference = 'Stop'
 $progressPath = Join-Path $PSScriptRoot 'progress.json'
+$logPath = Join-Path $PSScriptRoot 'update.log'
+$installerLogPath = Join-Path $PSScriptRoot 'installer.log'
+$script:lastLogMessage = $null
 $taskWasEnabled = $false
 $wallStopped = $false
 $job = $null
 function Report([string]$State, [string]$Message) {
     try {
+    if ($Message -ne $script:lastLogMessage) {
+        ('{0:o} [{1}] {2}' -f [DateTimeOffset]::UtcNow, $State, $Message) | Add-Content -LiteralPath $logPath -Encoding UTF8
+        $script:lastLogMessage = $Message
+    }
     $temporary = $progressPath + '.tmp'
-    @{ state=$State; message=$Message; windowSession='service'; updatedAt=[DateTimeOffset]::UtcNow.ToString('o') } |
+    @{ state=$State; message=$Message; windowSession='service'; updatedAt=[DateTimeOffset]::UtcNow.ToString('o'); logPath=$logPath } |
         ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding UTF8
     Move-Item -LiteralPath $temporary -Destination $progressPath -Force
     } catch { Write-Warning 'Update progress could not be written.' }
@@ -17,7 +24,7 @@ function Start-UserWall {
     $runner = Join-Path $job.InstallRoot 'Run-Appliance.ps1'
     $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     [RTSPViewUserLaunch]::Launch([uint32]$job.SessionId, [string]$job.AllowedSid, $powershell,
-        ('"' + $powershell + '" -NoProfile -WindowStyle Hidden -File "' + $runner + '"'), [string]$job.InstallRoot)
+        ('"' + $powershell + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $runner + '"'), [string]$job.InstallRoot)
 }
 try {
     if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -ne 'S-1-5-18') { throw 'Service updates must run through RTSPViewMaintenance.' }
@@ -75,13 +82,15 @@ public static class RTSPViewUserLaunch {
     $service = Get-Service RTSPViewMaintenance
     $service.Stop(); $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
     $wallStopped = $true
-    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /SERVICEUPDATE=1 /DIR="' + $root + '"'
+    Report 'working' ('Installer details will be saved to ' + $installerLogPath)
+    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /SERVICEUPDATE=1 /LOG="' + $installerLogPath + '" /DIR="' + $root + '"'
     $process = Start-Process -FilePath $installer -ArgumentList $arguments -WindowStyle Hidden -PassThru
     while (!$process.WaitForExit(1000)) { Report 'working' 'Installing RTSPView. Please keep this host on.' }
     if ($process.ExitCode -ne 0) { throw "The RTSPView installer exited with code $($process.ExitCode)." }
     $controller = Join-Path $root 'Controller\SpotMonitor.Controller.exe'
     if ((Get-Item -LiteralPath $controller).VersionInfo.ProductVersion.Split('+')[0] -ne $job.Version) { throw 'Installed version does not match the confirmed release.' }
     Start-Service RTSPViewMaintenance
+    Report 'working' 'Installation completed. Starting the Controller and viewer in the signed-in user session.'
     Start-UserWall
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(60)
     do {
@@ -89,7 +98,7 @@ public static class RTSPViewUserLaunch {
         $viewerReady = Get-Process -Name 'SpotMonitor.Viewer' -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $job.SessionId -and $_.Path -eq (Join-Path $root 'Viewer\SpotMonitor.Viewer.exe') }
         $controllerReady = Get-Process -Name 'SpotMonitor.Controller' -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $job.SessionId -and $_.Path -eq $controller }
     } until (($viewerReady -and $controllerReady) -or [DateTimeOffset]::UtcNow -ge $deadline)
-    if (!$viewerReady -or !$controllerReady) { throw 'Update installed, but the viewer and Controller did not both return. Launch RTSPView on the host.' }
+    if (!$viewerReady -or !$controllerReady) { throw "Update installed, but the viewer and Controller did not both return (Controller running: $([bool]$controllerReady); viewer running: $([bool]$viewerReady)). Launch RTSPView on the host." }
     Report 'complete' "RTSPView $($job.Version) is installed and the viewer has restarted."
 }
 catch {

@@ -11,7 +11,10 @@ Add-Type -TypeDefinition @'
 public static class RTSPViewUserLaunch {
  public static bool Deny; public static int Launches;
  public static void Validate(uint session,string sid) { if(Deny) throw new System.Exception("Fake account unavailable"); }
- public static void Launch(uint session,string sid,string app,string command,string directory) { Launches++; }
+ public static void Launch(uint session,string sid,string app,string command,string directory) {
+  if (!command.Contains("-ExecutionPolicy Bypass") || !command.Contains("-WindowStyle Hidden") || !command.Contains("Run-Appliance.ps1")) throw new System.Exception("Wall launcher must use the installed script's process-scoped execution policy and stay hidden.");
+  Launches++;
+ }
 }
 '@
 $source = [regex]::Replace($source, $nativePattern, '# Native actions replaced by fake launcher for this check only.')
@@ -32,6 +35,7 @@ function Start-Service { $global:rtspTeststarted++ }
 function Start-Process {
     param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
     if ($FilePath -notlike '*\installer.exe' -or $ArgumentList -notlike '*/SERVICEUPDATE=1*') { throw 'Unexpected process request' }
+    if ($ArgumentList -notlike '*/LOG="*installer.log"*') { throw 'Installer diagnostics were not enabled' }
     $global:rtspTestinstalls++
     $p = [pscustomobject]@{ ExitCode=$global:rtspTestinstallerExit }
     $p | Add-Member ScriptMethod WaitForExit { return $true }
@@ -56,6 +60,8 @@ foreach ($scenario in @('success','hash','installer','session')) {
     [RTSPViewUserLaunch]::Deny = $scenario -eq 'session'; [RTSPViewUserLaunch]::Launches=0
     & $worker
     $result = Get-Content -Raw -LiteralPath (Join-Path $directory 'progress.json') | ConvertFrom-Json
+    if ($result.logPath -ne (Join-Path $directory 'update.log') -or !(Test-Path -LiteralPath $result.logPath)) { throw 'Progress must expose an existing update log on success and failure.' }
+    if (!(Get-Content -Raw -LiteralPath $result.logPath).Contains($result.message)) { throw 'Update log does not include the final result.' }
     if ($scenario -eq 'success') {
         if ($result.state -ne 'complete' -or $global:rtspTestinstalls -ne 1 -or [RTSPViewUserLaunch]::Launches -ne 1 -or $global:rtspTestenabled -ne 1) { throw "Successful update failed: $($result.message)" }
     } else {

@@ -4,7 +4,7 @@
 .snapshot-action .save-state[data-tone]{color:var(--status-color)}
 .camera-page-toolbar{flex-wrap:wrap;gap:12px}#cameraCount{margin-right:auto}#page-overview .section-title{flex-wrap:wrap}
 #snapshotForm .display-field-row{grid-template-columns:minmax(0,240px) auto;justify-content:start;margin-bottom:12px}#snapshotForm .actions{grid-column:auto}
-.restart-action{display:flex;flex-direction:column;gap:7px;max-width:260px;align-items:flex-start}.restart-action small{color:var(--muted);font-size:12px;line-height:1.5}.viewer-action-strip{align-items:flex-start}
+.restart-action{display:flex;flex-direction:column;gap:7px;max-width:100%;align-items:flex-start}.restart-action small{width:0;min-width:100%;color:var(--muted);font-size:12px;line-height:1.5}.viewer-action-strip{align-items:flex-start;justify-content:flex-start;gap:12px}.viewer-action-strip>button{flex:0 0 auto}.viewer-action-strip .restart-action{flex:0 1 auto}
 @media(max-width:520px){#snapshotForm .display-field-row{grid-template-columns:minmax(0,1fr)}.snapshot-action{width:100%}}
 main{max-width:var(--content-width);padding:22px 24px 40px}
 .hero,main[data-page=overview] .hero{display:flex;align-items:flex-end;gap:24px;margin-bottom:20px}
