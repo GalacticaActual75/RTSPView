@@ -98,3 +98,18 @@ await childConnected;
 await (Task)typeof(MaintenanceService).GetMethod("HandleAsync", fields)!.Invoke(service, new object[] { childPipe })!;
 await child.WaitForExitAsync(childLimit.Token);
 Check(child.ExitCode == 0, "separate Controller process authenticates without impersonation");
+
+foreach (var selection in new[] { ("beta", "../installer.exe"), ("other", "1.0.40"), ("stable", "1.0.40-beta.12") })
+{
+    try { ServiceUpdateCoordinator.ValidateSelection(selection.Item1, selection.Item2); throw new Exception("Invalid app update selection accepted"); }
+    catch (InvalidDataException) { }
+}
+ServiceUpdateCoordinator.ValidateSelection("beta", "1.0.40-beta.12");
+Check(!new RTSPView.Infrastructure.UpdateManifest("1.0.39", "installer.exe", "", DateTimeOffset.UtcNow).SupportsServiceUpdates,
+    "older manifests require the UAC path by default");
+var appBlocker = new TaskCompletionSource<MaintenanceStatus>();
+var sharedGate = new MaintenanceEngine(() => false, () => throw new Exception("PawnIO raced update"), () => Task.FromResult(0), _ => { });
+var appTask = sharedGate.RunAppUpdateAsync(() => appBlocker.Task);
+Check(!sharedGate.TryBeginStop() && (await sharedGate.HandleAsync(new("prepare"))).State == "downloading", "update verification excludes driver installation and service shutdown");
+appBlocker.SetResult(new() { Available = true, State = "update-installing" }); await appTask;
+Check(sharedGate.TryBeginStop(), "service can stop after handing installation to independent worker");

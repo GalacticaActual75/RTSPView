@@ -2,9 +2,9 @@ const dependencyUi = (()=>{
   let panel,busy=false,loading=false,revision=0;
   function init(){
     panel=document.createElement('div');panel.className='dependency-controls';
-    panel.innerHTML='<div class="actions"><button type="button" class="secondary" data-helper disabled>Enable maintenance helper</button><button type="button" data-install disabled>Install PawnIO on host</button></div><p data-dependency-status role="status">Checking host dependencies…</p><p>Enabling the helper requires Windows administrator approval once on this host. After that, PawnIO installation can run from this panel with UAC enabled. The viewer stays open; only temperature readings pause during installation. Windows may require a restart.</p>';
+    panel.innerHTML='<div class="actions"><button type="button" class="secondary" data-helper disabled>Enable maintenance helper</button><button type="button" data-install disabled>Install PawnIO on host</button></div><p data-dependency-status role="status">Checking host dependencies…</p><p>Enabling the helper requires Windows administrator approval once on this host. After that, PawnIO and supported RTSPView updates can install with UAC enabled, without another prompt. The viewer stays open; only temperature readings pause during installation. Windows may require a restart.</p>';
     document.querySelector('#temperature-dependencies-title').after(panel);
-    panel.querySelector('[data-helper]').onclick=()=>start('enable-helper','Enable the RTSPView maintenance service for this Windows user? Approve Windows setup on the host. The service installs the verified PawnIO dependency and reads temperature sensors.');
+    panel.querySelector('[data-helper]').onclick=()=>start('enable-helper','Enable the RTSPView maintenance service for this Windows user? Approve Windows setup on the host. The service installs verified PawnIO and RTSPView updates and reads temperature sensors.');
     panel.querySelector('[data-install]').onclick=()=>start('install','Install the official PawnIO driver on the RTSPView host? The live viewer stays open; temperature readings pause during installation. Windows may require a restart.');
   }
   async function start(action,prompt){
@@ -18,7 +18,7 @@ const dependencyUi = (()=>{
     if(busy||loading)return;loading=true;const current=revision;
     try{
       const state=await api('/api/dependencies/pawnio');if(current!==revision)return;
-      const active=['starting','enabling','downloading','installing'].includes(state.state);
+      const active=['starting','enabling','downloading','installing','update-installing'].includes(state.state);
       panel.querySelector('[data-helper]').disabled=active||state.available;
       panel.querySelector('[data-install]').disabled=active||!state.available||state.pawnInstalled;
       panel.querySelector('[data-dependency-status]').textContent=(state.pawnInstalled?'PawnIO installed. ':'')+state.message;

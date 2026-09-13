@@ -63,6 +63,9 @@ jobs:
       - name: Check update helper failure reporting
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
 
+      - name: Check service update worker with fake host actions
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/ServiceUpdate.Checks.ps1
+
       - name: Check update progress window completion
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateProgress.Checks.ps1
 
@@ -97,6 +100,7 @@ jobs:
             Installer = $installer.Name
             Sha256 = $hash
             PublishedAt = (Get-Date).ToUniversalTime().ToString('o')
+            SupportsServiceUpdates = $true
           } | ConvertTo-Json | Set-Content 'dist/update.json'
 
       - name: Publish GitHub Release

@@ -22,6 +22,19 @@ public sealed class MaintenanceEngine
     public bool Busy => _status.State is "downloading" or "installing";
     // Hold the operation gate through service shutdown so a new install cannot race stopping.
     public bool TryBeginStop() => _gate.Wait(0);
+    public async Task<MaintenanceStatus> RunAppUpdateAsync(Func<Task<MaintenanceStatus>> action)
+    {
+        if (!await _gate.WaitAsync(0)) return Status;
+        try
+        {
+            Report("downloading", "Verifying the selected RTSPView update with GitHub.");
+            var status = await action();
+            Volatile.Write(ref _status, status);
+            return status;
+        }
+        catch { Report("failed", "RTSPView update preparation failed. No unverified installer was launched."); throw; }
+        finally { _gate.Release(); }
+    }
 
     private void Report(string state, string message, Guid? id = null, bool restart = false)
     {

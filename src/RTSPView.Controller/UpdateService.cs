@@ -3,6 +3,7 @@ using System.Reflection;
 using RTSPView.Core;
 using System.Text.Json;
 using RTSPView.Infrastructure;
+using RTSPView.Hardware;
 
 namespace RTSPView.Controller;
 
@@ -15,12 +16,14 @@ public sealed class UpdateService : IDisposable
     private bool _launched;
     private string? _activeProgressPath;
     private readonly UpdateChannelStore _channels;
+    private readonly MaintenanceClient? _maintenance;
     public Func<Task<bool>>? ExternalMaintenanceActive { get; set; }
 
-    public UpdateService(string dataDirectory, RollingFileLogger logger)
+    public UpdateService(string dataDirectory, RollingFileLogger logger, MaintenanceClient? maintenance = null)
     {
         _dataDirectory = dataDirectory;
         _logger = logger;
+        _maintenance = maintenance;
         _channels = new UpdateChannelStore(dataDirectory);
         _source = new GitHubUpdateSource(Path.Combine(dataDirectory, "github-cooldown.json"));
     }
@@ -129,6 +132,43 @@ public sealed class UpdateService : IDisposable
             foreach (var argument in new[] { "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", progressScript, "-StatusPath", progressPath })
                 progressStart.ArgumentList.Add(argument);
             _ = Process.Start(progressStart) ?? throw new InvalidOperationException("Windows did not start the update progress window.");
+            if (_maintenance is not null)
+            {
+                MaintenanceStatus? helper = null;
+                try
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    helper = await _maintenance.SendAsync(new("status"), timeout.Token);
+                }
+                catch (Exception error) when (error is IOException or OperationCanceledException or UnauthorizedAccessException or JsonException) { }
+                var serviceCompatible = false;
+                if (helper is { Available: true, SupportsAppUpdates: true })
+                {
+                    var candidate = await _source.FindAsync(channel, refresh: true, cancellationToken: cancellationToken);
+                    if (candidate?.Manifest.Version != expectedVersion) throw new InvalidOperationException("The available release changed. Check for updates and confirm the new version.");
+                    serviceCompatible = candidate.Manifest.SupportsServiceUpdates;
+                }
+                if (serviceCompatible)
+                {
+                    WriteProgress(progressPath, "working", "The enabled helper is downloading and verifying the confirmed release. No additional Windows approval is needed.");
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(12));
+                    var ready = await _maintenance.SendAsync(new("prepare-update", Channel: channel, Version: expectedVersion), timeout.Token);
+                    if (ready.State != "update-ready" || ready.OperationId is null || ready.ProgressPath is null) throw new IOException(ready.Message);
+                    var serviceProgress = Path.GetFullPath(ready.ProgressPath);
+                    var expectedDirectory = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Maintenance", "State", "Updates", ready.OperationId.Value.ToString("N")));
+                    if (!string.Equals(serviceProgress, Path.Combine(expectedDirectory, "progress.json"), StringComparison.OrdinalIgnoreCase)) throw new IOException("Unexpected service update progress location.");
+                    var progress = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe")) { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden };
+                    foreach (var argument in new[] { "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", Path.Combine(AppContext.BaseDirectory, "Show-UpdateProgress.ps1"), "-StatusPath", serviceProgress, "-WindowSession", "service" }) progress.ArgumentList.Add(argument);
+                    WriteProgress(progressPath, "complete", "Download verified. Installation progress is opening.");
+                    using var progressWindow = Process.Start(progress) ?? throw new IOException("The update progress window could not start.");
+                    var launched = await _maintenance.SendAsync(new("install-update", ready.OperationId), timeout.Token);
+                    if (launched.State != "update-installing") throw new IOException(launched.Message);
+                    _launched = true; _activeProgressPath = serviceProgress;
+                    _logger.Write("AUDIT", $"RTSPView {expectedVersion} update accepted by the maintenance helper.");
+                    return new(true, $"RTSPView {expectedVersion} is installing through the enabled helper. No additional UAC approval is required. The page will disconnect during installation.");
+                }
+            }
+
             var release = await _source.FindAsync(channel, refresh: true, cancellationToken: cancellationToken)
                 ?? throw new InvalidDataException("No GitHub release is available for this channel.");
             var manifest = release.Manifest;

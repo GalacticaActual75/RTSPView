@@ -19,6 +19,7 @@ public sealed class MaintenanceService : ServiceBase
     private readonly string _stateDirectory = Path.Combine(AppContext.BaseDirectory, "State");
     private TemperatureStatus _temperatures = new();
     private MaintenanceEngine? _engine;
+    private ServiceUpdateCoordinator? _updates;
     private Task? _worker, _sampler;
     private string _allowedSid = "";
     private string _installer = "";
@@ -41,6 +42,7 @@ public sealed class MaintenanceService : ServiceBase
         var statusPath = Path.Combine(_stateDirectory, "status.json");
         var previous = File.Exists(statusPath) ? JsonSerializer.Deserialize<MaintenanceStatus>(File.ReadAllText(statusPath)) : null;
         _engine = new MaintenanceEngine(PawnInstalled, PrepareAsync, InstallAsync, Persist, previous);
+        _updates = new ServiceUpdateCoordinator(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..")), _stateDirectory, _allowedSid);
         // An interrupted operation is never automatically replayed after a service restart.
         _worker = Task.Run(ServeAsync);
         _sampler = Task.Run(SampleAsync);
@@ -154,16 +156,29 @@ public sealed class MaintenanceService : ServiceBase
                 var text = new System.Text.StringBuilder(); var character = new char[1];
                 while (await reader.ReadAsync(character.AsMemory(), timeout.Token) != 0 && character[0] != '\n')
                 { if (text.Length >= 1024) throw new InvalidDataException("Request too long."); text.Append(character[0]); }
-                MaintenanceClientIdentity.Verify(pipe, _allowedSid);
+                var session = MaintenanceClientIdentity.Verify(pipe, _allowedSid);
                 var request = JsonSerializer.Deserialize<MaintenanceRequest>(text.ToString()) ?? throw new InvalidDataException();
-                var status = await _engine!.HandleAsync(request);
+                MaintenanceStatus status;
+                if (request.Command == "status" && _engine!.Busy) status = _engine.Status;
+                else if (_updates is not null && request.Command == "status" && request.OperationId is null && _updates.Status is { } updateStatus)
+                    status = updateStatus;
+                else if (_updates?.Busy == true) status = _updates.Status!;
+                else if (_updates is not null && request.Command == "prepare-update")
+                    status = await _engine!.RunAppUpdateAsync(() => _updates.PrepareAsync(request, session));
+                else if (_updates is not null && request.Command == "install-update")
+                    status = await _engine!.RunAppUpdateAsync(() => Task.FromResult(_updates.Launch(request)));
+                else
+                {
+                    if (request.Channel is not null || request.Version is not null) throw new InvalidDataException("Unexpected update fields.");
+                    status = await _engine!.HandleAsync(request);
+                }
                 var sample = Volatile.Read(ref _temperatures);
-                status = status with { Temperatures = sample.IsFresh(DateTimeOffset.UtcNow) ? sample : null };
+                status = status with { SupportsAppUpdates = _updates is not null, PawnInstalled = PawnInstalled(), Temperatures = sample.IsFresh(DateTimeOffset.UtcNow) ? sample : null };
                 await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
                 using var writeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 await writer.WriteLineAsync(JsonSerializer.Serialize(status).AsMemory(), writeTimeout.Token);
             }
-            catch (Exception error) when (error is IOException or OperationCanceledException or JsonException or ArgumentException or UnauthorizedAccessException)
+            catch (Exception error)
             {
                 // Never turn a rejected request into an empty JSON response. No privileged
                 // action is performed here, and unauthorized clients receive no sensor data.

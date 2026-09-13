@@ -7,7 +7,7 @@ namespace RTSPView.Maintenance;
 
 public static class MaintenanceClientIdentity
 {
-    public static void Verify(NamedPipeServerStream pipe, string allowedSid)
+    public static uint Verify(NamedPipeServerStream pipe, string allowedSid)
     {
         if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var processId)) throw Failure("identify the connected Controller process");
         using var process = OpenProcess(0x1000, false, processId); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -21,6 +21,8 @@ public static class MaintenanceClientIdentity
         }
         // The pipe ACL also restricts connections to this account and denies network clients.
         // No client impersonation or client-supplied PID is used for privileged actions.
+        if (!ProcessIdToSessionId(processId, out var sessionId)) throw Failure("identify the Controller session");
+        return sessionId;
     }
 
     private static IOException Failure(string action) => new("Cannot " + action + " (Windows error " + Marshal.GetLastWin32Error() + ").");
@@ -30,4 +32,6 @@ public static class MaintenanceClientIdentity
     private static extern SafeProcessHandle OpenProcess(uint access, bool inherit, uint processId);
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool OpenProcessToken(SafeProcessHandle process, uint access, out SafeAccessTokenHandle token);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
 }

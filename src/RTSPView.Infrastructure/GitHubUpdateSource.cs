@@ -200,5 +200,5 @@ public sealed class GitHubRateLimitException(DateTimeOffset retryAt) : HttpReque
     public DateTimeOffset RetryAt { get; } = retryAt;
 }
 
-public sealed record UpdateManifest(string Version, string Installer, string Sha256, DateTimeOffset PublishedAt);
+public sealed record UpdateManifest(string Version, string Installer, string Sha256, DateTimeOffset PublishedAt, bool SupportsServiceUpdates = false);
 public sealed record GitHubUpdate(UpdateManifest Manifest, long InstallerAssetId, long InstallerSize);

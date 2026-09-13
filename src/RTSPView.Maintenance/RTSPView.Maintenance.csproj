@@ -8,6 +8,8 @@
     <PackageReference Include="System.IO.Pipes.AccessControl" Version="5.0.0" />
     <ProjectReference Include="..\RTSPView.Hardware\RTSPView.Hardware.csproj" />
     <ProjectReference Include="..\RTSPView.Core\RTSPView.Core.csproj" />
+    <ProjectReference Include="..\RTSPView.Infrastructure\RTSPView.Infrastructure.csproj" />
+    <Content Include="..\..\deployment\Apply-ServiceUpdate.ps1" Link="Apply-ServiceUpdate.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\RTSPView.Controller\ThirdParty\*.txt" Link="ThirdParty\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

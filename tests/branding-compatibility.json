@@ -89,6 +89,15 @@
     ],
     "src/RTSPView.Controller/PawnIoInstaller.cs": [
       "SpotMonitor.Viewer"
+    ],
+    "deployment/Apply-ServiceUpdate.ps1": [
+      "SpotMonitor Camera Wall", "SpotMonitor.Controller", "SpotMonitor.Viewer"
+    ],
+    "src/RTSPView.Maintenance/ServiceUpdateCoordinator.cs": [
+      "SpotMonitor.Controller.exe"
+    ],
+    "tests/ServiceUpdate.Checks.ps1": [
+      "SpotMonitor.Controller.exe", "SpotMonitor.Viewer.exe"
     ]
   }
 }

@@ -60,7 +60,8 @@ if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
-builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>()));
+builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>(),
+    builder.Environment.IsEnvironment("Testing") ? null : provider.GetRequiredService<MaintenanceClient>()));
 builder.Services.AddSingleton(provider => new PawnIoInstaller(provider.GetRequiredService<MaintenanceClient>(), provider.GetRequiredService<TemperatureMonitor>(),
     provider.GetRequiredService<UpdateService>(), !builder.Environment.IsEnvironment("Testing")));
 builder.Services.AddSingleton(provider =>
@@ -105,7 +106,7 @@ var pawnIo = app.Services.GetRequiredService<PawnIoInstaller>();
 var viewerCommands = app.Services.GetRequiredService<ViewerCommandClient>();
 var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
 var updates = app.Services.GetRequiredService<UpdateService>();
-updates.ExternalMaintenanceActive = async () => (await pawnIo.RemoteStatusAsync()).State is "installing" or "downloading";
+updates.ExternalMaintenanceActive = async () => (await pawnIo.RemoteStatusAsync()).State is "installing" or "downloading" or "update-installing";
 var updateMonitor = app.Services.GetRequiredService<UpdateMonitor>();
 var restartScheduler = app.Services.GetRequiredService<RestartScheduler>();
 var scheduleTimeZoneId = TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaZone) ? ianaZone : TimeZoneInfo.Local.Id;

@@ -13,7 +13,7 @@ public sealed class ViewerSupervisor(ViewerTelemetryClient telemetry, ViewerComm
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-            if (dependencies.Busy || (await dependencies.StatusAsync()).State is "installing" or "downloading") continue;
+            if (dependencies.Busy || (await dependencies.StatusAsync()).State is "installing" or "downloading" or "update-installing") continue;
             var now = DateTimeOffset.UtcNow;
             if (now - _startedAt < TimeSpan.FromSeconds(45) || now - _lastRecoveryAttempt < TimeSpan.FromMinutes(1)) continue;
             var lastSeen = telemetry.LastReceivedAt ?? _startedAt;

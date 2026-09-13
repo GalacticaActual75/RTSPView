@@ -14,7 +14,7 @@ const temperatureUi = (() => {
         <h3 id="temperature-dependencies-title">Sensor requirements</h3>
         <p>CPU temperature readings may require the PawnIO driver and administrator access. Use the host installation controls, or install its official signed edition manually on the computer running RTSPView and restart the Controller.</p>
         <p><a href="https://pawnio.eu/" target="_blank" rel="noopener noreferrer">Download PawnIO (official site, opens in a new tab)</a></p>
-        <p>LibreHardwareMonitor is included with RTSPView; no separate download is needed. The optional maintenance helper installs only the verified PawnIO package and reads sensors. UAC stays enabled.</p>
+        <p>LibreHardwareMonitor is included with RTSPView; no separate download is needed. The optional maintenance helper installs verified PawnIO and RTSPView releases and reads sensors. UAC stays enabled.</p>
       </section>`;
     document.querySelector('#displayForm').after(form);
     form.addEventListener('change',()=>message('Unsaved changes.'));
