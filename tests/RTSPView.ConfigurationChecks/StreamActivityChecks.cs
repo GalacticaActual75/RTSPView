@@ -5,6 +5,12 @@ internal static class StreamActivityChecks
     public static void Run()
     {
         var now = DateTimeOffset.UtcNow;
+        var status = new CameraRuntimeStatus {State=CameraConnectionState.Live,LastFrameAt=now,LastError="Old watchdog error",ReconnectCount=2};
+        Check(status.WithFrameProgress(now).LastError is not null,"no frames must not clear error");
+        Check((status with {State=CameraConnectionState.Reconnecting}).WithFrameProgress(now.AddSeconds(1)).LastError is not null,"recovery still pending");
+        Check((status with {NextReconnectAt=now.AddSeconds(5)}).WithFrameProgress(now.AddSeconds(1)).LastError is not null,"pending restart retains error");
+        var recovered=status.WithFrameProgress(now.AddSeconds(1));
+        Check(recovered.LastError is null && recovered.ReconnectCount==2,"real frame recovery clears error, preserves history");
         var stream = new StreamActivity();
         stream.BeginAttempt(now);
         stream.Observe(0, now.AddSeconds(1));

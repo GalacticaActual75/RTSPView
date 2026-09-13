@@ -23,4 +23,11 @@ public sealed record CameraRuntimeStatus
     public DateTimeOffset? LastReconnectAt { get; init; }
     public DateTimeOffset? NextReconnectAt { get; init; }
     public string? LastError { get; init; }
+
+    public CameraRuntimeStatus WithFrameProgress(DateTimeOffset? lastFrameAt) => this with
+    {
+        LastFrameAt = lastFrameAt,
+        LastError = State == CameraConnectionState.Live && NextReconnectAt is null &&
+            lastFrameAt is not null && (LastFrameAt is null || lastFrameAt > LastFrameAt) ? null : LastError
+    };
 }

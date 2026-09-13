@@ -471,7 +471,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         var stats = _player?.Media?.Statistics;
         if (stats is null) return;
         _activity.Observe(stats.Value.DecodedVideo, now);
-        _status = _status with { LastFrameAt = _activity.LastFrameAt };
+        _status = _status.WithFrameProgress(_activity.LastFrameAt);
 
         var lostPictures = (long)stats.Value.LostPictures;
         if (_lastLostPictures >= 0)

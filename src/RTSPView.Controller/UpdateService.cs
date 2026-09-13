@@ -57,6 +57,33 @@ public sealed class UpdateService : IDisposable
         finally { _gate.Release(); }
     }
 
+    // Serialize scheduled maintenance with update staging, including the elevated installer handoff.
+    public async Task<bool> TryRunMaintenanceAsync(Func<Task> action, CancellationToken cancellationToken)
+    {
+        if (!await _gate.WaitAsync(0, cancellationToken)) return false;
+        try
+        {
+            var directory = Path.Combine(_dataDirectory, "updates");
+            if (Directory.Exists(directory))
+            {
+                foreach (var path in Directory.EnumerateFiles(directory, "progress-*.json"))
+                {
+                    // Recent unfinished helpers also protect a newly restarted Controller.
+                    if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddHours(-2) && path != _activeProgressPath) continue;
+                    try
+                    {
+                        using var progress = JsonDocument.Parse(File.ReadAllText(path));
+                        if (progress.RootElement.GetProperty("state").GetString() is not ("complete" or "failed")) return false;
+                    }
+                    catch (Exception error) when (error is IOException or JsonException or KeyNotFoundException) { return false; }
+                }
+            }
+            await action();
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<UpdateLaunchResult> StageAndLaunchAsync(string expectedChannel, string expectedVersion, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);

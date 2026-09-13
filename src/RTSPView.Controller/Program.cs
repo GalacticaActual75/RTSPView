@@ -55,6 +55,21 @@ builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
 builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>()));
+builder.Services.AddSingleton(provider => new RestartScheduler(dataDirectory, async (action, token) =>
+{
+    if (action == "viewer")
+    {
+        var result = await provider.GetRequiredService<ViewerCommandClient>().SendAsync(ViewerCommandType.RestartViewer, null, token);
+        return result.Success ? "Viewer accepted the scheduled restart." : "Viewer restart failed: " + result.Message;
+    }
+    using var process = Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 0 /d p:0:0 /c \"RTSPView scheduled host restart\"")
+        { UseShellExecute = false, CreateNoWindow = true }) ?? throw new InvalidOperationException("Windows did not start the restart command.");
+    await process.WaitForExitAsync(token);
+    return process.ExitCode == 0 ? "Windows accepted the scheduled host restart." : "Windows rejected the scheduled restart. Check host permissions.";
+}, provider.GetRequiredService<UpdateService>().TryRunMaintenanceAsync,
+    message => provider.GetRequiredService<RollingFileLogger>().Write("SCHEDULE", message)));
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<RestartScheduler>());
 if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<ViewerSupervisor>();
 
 var app = builder.Build();
@@ -69,6 +84,8 @@ var systemMetrics = app.Services.GetRequiredService<SystemMetricsCollector>();
 var viewerCommands = app.Services.GetRequiredService<ViewerCommandClient>();
 var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
 var updates = app.Services.GetRequiredService<UpdateService>();
+var restartScheduler = app.Services.GetRequiredService<RestartScheduler>();
+var scheduleTimeZoneId = TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaZone) ? ianaZone : TimeZoneInfo.Local.Id;
 var loginLimiter = new LoginAttemptLimiter();
 
 app.Use(async (context, next) =>
@@ -462,6 +479,24 @@ app.MapPost("/api/control/viewer/{action}", async (string action, CancellationTo
     auditLog.Write("AUDIT", $"Remote viewer action '{action}' requested: {result.Message}");
     return CommandResult(result);
 }).RequireAuthorization();
+app.MapGet("/api/restart-schedule", async () => Results.Ok(new
+{
+    schedule = await restartScheduler.ReadAsync(), timeZone = TimeZoneInfo.Local.DisplayName, timeZoneId = scheduleTimeZoneId, serverTime = DateTimeOffset.UtcNow
+})).RequireAuthorization();
+app.MapPut("/api/restart-schedule", async (RestartScheduleRequest request) =>
+{
+    if (request.Settings is null) return Results.BadRequest(new { error = "Schedule settings are required." });
+    try { await restartScheduler.ConfigureAsync(request.Settings, request.HostAcknowledged, DateTimeOffset.UtcNow); }
+    catch (ArgumentException error) { return Results.BadRequest(new { error = error.Message }); }
+    return Results.Ok(new { schedule = await restartScheduler.ReadAsync(), timeZone = TimeZoneInfo.Local.DisplayName, timeZoneId = scheduleTimeZoneId, serverTime = DateTimeOffset.UtcNow });
+}).RequireAuthorization();
+app.MapPost("/api/restart-schedule/skip", async () =>
+{
+    await restartScheduler.SkipAsync(DateTimeOffset.UtcNow);
+    auditLog.Write("AUDIT", "Administrator skipped the next scheduled restart.");
+    return Results.Ok(new { schedule = await restartScheduler.ReadAsync(), timeZone = TimeZoneInfo.Local.DisplayName, timeZoneId = scheduleTimeZoneId, serverTime = DateTimeOffset.UtcNow });
+}).RequireAuthorization();
+
 app.MapPost("/api/control/system/{action}", (string action, ConfirmedAction request) =>
 {
     if (!request.Confirmed) return Results.BadRequest(new { error = "Explicit confirmation is required." });

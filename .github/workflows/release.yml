@@ -48,6 +48,8 @@ jobs:
           $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
           node tests/admin-security.checks.cjs
           dotnet run --project tests/RTSPView.LanAccessChecks -c Release
+          dotnet run --project tests/RTSPView.RestartScheduleChecks -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Restart scheduling checks failed." }
           node tests/lan-firewall.checks.cjs
           node tests/branding.checks.cjs
 

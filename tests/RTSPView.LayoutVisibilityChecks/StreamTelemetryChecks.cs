@@ -51,6 +51,17 @@ internal static class StreamTelemetryChecks
                     if (!await tile.RefreshSnapshotAsync() || tile.GetTelemetry().SnapshotCapturedAt is null)
                         throw new Exception("Snapshot capture did not publish its completion timestamp");
                     Console.WriteLine("PASS decoded fixture snapshot capture and completion telemetry");
+                    var statusField = typeof(CameraTile).GetField("_status", flags)!;
+                    var status = (CameraRuntimeStatus)statusField.GetValue(tile)!;
+                    statusField.SetValue(tile, status with { State = CameraConnectionState.Live, LastError = "Previous watchdog failure", ReconnectCount = 2 });
+                    for (var recovery = 0; recovery < 20; recovery++)
+                    {
+                        await Task.Delay(100); tile.Tick();
+                        if (tile.GetTelemetry().LastError is null) break;
+                    }
+                    if (tile.GetTelemetry().LastError is not null || tile.GetTelemetry().ReconnectCount != 2)
+                        throw new Exception("Real frame recovery did not clear the active error while preserving reconnect history");
+                    Console.WriteLine("PASS recovered stream clears active error without restarting or losing reconnect history");
                     return;
                 }
             }
