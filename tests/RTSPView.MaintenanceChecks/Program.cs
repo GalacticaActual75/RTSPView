@@ -32,3 +32,24 @@ Check((await concurrent.HandleAsync(new("prepare"))).State == "downloading", "co
 blocker.SetResult(); await pending;
 try { HelperSetup.ValidateProtectedPath(Path.GetTempPath()); throw new Exception("Unprotected path accepted"); }
 catch (InvalidOperationException) { Console.WriteLine("PASS helper rejects unprotected install location"); }
+
+var security = new System.IO.Pipes.PipeSecurity();
+security.AddAccessRule(new System.IO.Pipes.PipeAccessRule(System.Security.Principal.WindowsIdentity.GetCurrent().User!, System.IO.Pipes.PipeAccessRights.FullControl, System.Security.AccessControl.AccessControlType.Allow));
+var pipeName = "RTSPView-test-" + Guid.NewGuid();
+using var pipe = System.IO.Pipes.NamedPipeServerStreamAcl.Create(pipeName, System.IO.Pipes.PipeDirection.InOut, 10, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous | System.IO.Pipes.PipeOptions.FirstPipeInstance, 4096, 4096, security);
+Check(pipe.IsAsync, "production pipe options accepted by bundled runtime");
+using var service = new MaintenanceService();
+var fields = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+typeof(MaintenanceService).GetField("_allowedSid", fields)!.SetValue(service, System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value);
+typeof(MaintenanceService).GetField("_engine", fields)!.SetValue(service, engine);
+using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+var accepting = pipe.WaitForConnectionAsync(timeout.Token);
+using var client = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous, System.Security.Principal.TokenImpersonationLevel.Identification);
+await client.ConnectAsync(timeout.Token); await accepting;
+var handling = (Task)typeof(MaintenanceService).GetMethod("HandleAsync", fields)!.Invoke(service, new object[] { pipe })!;
+using var writer = new StreamWriter(client, leaveOpen: true) { AutoFlush = true };
+using var reader = new StreamReader(client, leaveOpen: true);
+await writer.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(new MaintenanceRequest("status")));
+var response = await reader.ReadLineAsync(timeout.Token);
+Check(response is not null && System.Text.Json.JsonSerializer.Deserialize<MaintenanceStatus>(response)!.Available, "authenticated status request reaches actual service handler");
+await handling;

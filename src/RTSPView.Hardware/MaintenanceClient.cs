@@ -19,10 +19,7 @@ public sealed class MaintenanceClient(string helperPath)
         await pipe.ConnectAsync(connect.Token);
         // Never trust a user process squatting on the helper's pipe name.
         if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var processId)) throw new IOException("Cannot identify maintenance helper.");
-        using var process = OpenProcess(0x1000, false, processId);
-        var path = new StringBuilder(32768); var size = path.Capacity;
-        if (process.IsInvalid || !QueryFullProcessImageName(process, 0, path, ref size) || !path.ToString().Equals(HelperPath, StringComparison.OrdinalIgnoreCase))
-            throw new UnauthorizedAccessException("Unexpected maintenance helper process.");
+        MaintenanceServiceIdentity.Verify(processId);
         await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
         using var reader = new StreamReader(pipe, leaveOpen: true);
         await writer.WriteLineAsync(JsonSerializer.Serialize(request).AsMemory(), token);
@@ -32,8 +29,6 @@ public sealed class MaintenanceClient(string helperPath)
         return JsonSerializer.Deserialize<MaintenanceStatus>(response.ToString()) ?? throw new InvalidDataException("Missing maintenance response.");
     }
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint processId);
-    [DllImport("kernel32.dll", SetLastError = true)] private static extern SafeProcessHandle OpenProcess(uint access, bool inherit, uint processId);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, StringBuilder path, ref int size);
 }
 
 public sealed class ServiceTemperatureSensors(MaintenanceClient client) : ITemperatureSensors

@@ -30,8 +30,18 @@ public sealed class PawnIoInstaller(MaintenanceClient client, TemperatureMonitor
             return _local is { State: "failed" } ? _local with { Available = remote.Available, PawnInstalled = remote.PawnInstalled } : remote;
         }
         catch (Exception error) when (error is IOException or OperationCanceledException or UnauthorizedAccessException or JsonException)
-        { return _local ?? new(); }
+        { return _local ?? ConnectionFailure(error); }
     }
+    public static MaintenanceStatus ConnectionFailure(Exception error) => new()
+    {
+        State = "unavailable",
+        Message = error switch
+        {
+            OperationCanceledException => "The maintenance helper is not responding. Check the RTSPViewMaintenance service on the host; setup may not have completed or the service may have stopped.",
+            UnauthorizedAccessException => "The Controller could not authenticate the maintenance helper connection. " + error.Message,
+            _ => "The maintenance helper connection failed: " + error.Message
+        }
+    };
     public Task<bool> StartAsync(bool enable)
     {
         if (!hostActionsAllowed || Interlocked.CompareExchange(ref _busy, 1, 0) != 0) return Task.FromResult(false);
@@ -62,7 +72,21 @@ public sealed class PawnIoInstaller(MaintenanceClient client, TemperatureMonitor
         using var process = Process.Start(start) ?? throw new IOException("Windows could not start maintenance setup.");
         await process.WaitForExitAsync();
         if (process.ExitCode != 0) throw new IOException("Maintenance setup failed. Check administrator approval and that RTSPView is installed in an administrator-protected Program Files folder.");
-        _local = null;
+        // SCM accepting 'start' does not prove that the service's pipe is ready.
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                var status = await client.SendAsync(new("status"), timeout.Token);
+                if (status.Available) { _local = null; return; }
+                lastError = new IOException(status.Message);
+            }
+            catch (Exception error) when (error is IOException or OperationCanceledException or UnauthorizedAccessException or JsonException) { lastError = error; }
+            await Task.Delay(500);
+        }
+        throw new IOException("Windows setup exited successfully, but the helper did not become ready. " + ConnectionFailure(lastError ?? new IOException("No ready response.")).Message);
     }
     private async Task InstallAsync()
     {
