@@ -13,6 +13,13 @@ public sealed record RestartScheduleState
     public string Result { get; init; } = "No scheduled restarts yet.";
 }
 
+public sealed record RestartSchedulesState
+{
+    public string SelectedAction { get; init; } = "viewer";
+    public RestartScheduleState Viewer { get; init; } = new();
+    public RestartScheduleState Host { get; init; } = new() { Settings = new() { Action = "host" } };
+}
+
 // The host-local file deliberately lives outside portable stream configuration backups.
 public sealed class RestartScheduler : BackgroundService
 {
@@ -22,7 +29,13 @@ public sealed class RestartScheduler : BackgroundService
     private readonly Action<string> _log;
     private readonly TimeZoneInfo _zone;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private RestartScheduleState _state;
+    private RestartSchedulesState _schedules = new();
+    private RestartScheduleState State(string action) => action switch
+    {
+        "viewer" => _schedules.Viewer,
+        "host" => _schedules.Host,
+        _ => throw new ArgumentException("Choose viewer or host.")
+    };
 
     public RestartScheduler(string directory, Func<string, CancellationToken, Task<string>> execute,
         Func<Func<Task>, CancellationToken, Task<bool>> maintenance, Action<string> log,
@@ -30,39 +43,71 @@ public sealed class RestartScheduler : BackgroundService
     {
         _path = Path.Combine(directory, "restart-schedule.json");
         (_execute, _maintenance, _log, _zone) = (execute, maintenance, log, zone ?? TimeZoneInfo.Local);
-        _state = new();
         if (File.Exists(_path))
         {
             try
             {
-                _state = JsonSerializer.Deserialize<RestartScheduleState>(File.ReadAllText(_path)) ?? throw new InvalidDataException();
-                if (_state.Settings is null) throw new InvalidDataException();
-                _state.Settings.Validate();
+                var json = File.ReadAllText(_path);
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind != JsonValueKind.Object) throw new InvalidDataException();
+                if (document.RootElement.TryGetProperty("Settings", out _))
+                {
+                    // Preserve the existing single schedule in its original action slot.
+                    var legacy = JsonSerializer.Deserialize<RestartScheduleState>(json) ?? throw new InvalidDataException();
+                    if (legacy.Settings is null) throw new InvalidDataException();
+                    legacy.Settings.Validate();
+                    _schedules = legacy.Settings.Action == "host"
+                        ? new() { Host = legacy, SelectedAction = "host" } : new() { Viewer = legacy };
+                }
+                else
+                    _schedules = JsonSerializer.Deserialize<RestartSchedulesState>(json) ?? throw new InvalidDataException();
+                foreach (var action in new[] { "viewer", "host" })
+                {
+                    var state = State(action);
+                    if (state?.Settings is null || state.Settings.Action != action) throw new InvalidDataException();
+                    state.Settings.Validate();
+                }
+                _ = State(_schedules.SelectedAction);
             }
             catch (Exception error) when (error is IOException or JsonException or ArgumentException or InvalidDataException or UnauthorizedAccessException)
             {
-                _state = new() { Result = "Schedule could not be read; automatic restarts are disabled. Save settings to recover." };
-                _log(_state.Result);
+                const string message = "Schedules could not be read; automatic restarts are disabled. Save settings to recover.";
+                _schedules = new() { Viewer = new() { Result = message }, Host = new() { Settings = new() { Action = "host" }, Result = message } };
+                _log(message);
             }
         }
         var current = now ?? DateTimeOffset.UtcNow;
-        if (_state.PendingUntil is not null || _state.NextRun <= current || (_state.Settings.Enabled && _state.NextRun is null))
+        foreach (var action in new[] { "viewer", "host" })
         {
-            try { Save(_state with { NextRun = _state.Settings.NextAfter(current, _zone), PendingUntil = null,
-                Result = "Missed or interrupted restart skipped at Controller startup." }); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            var state = State(action);
+            if (state.PendingUntil is not null || state.NextRun <= current || (state.Settings.Enabled && state.NextRun is null))
             {
-                _state = _state with { Settings = _state.Settings with {Enabled=false}, NextRun=null, PendingUntil=null,
-                    Result="Schedule state could not be saved; automatic restarts are disabled until settings are saved successfully." };
-                _log(_state.Result);
+                try { Save(state with { NextRun = state.Settings.NextAfter(current, _zone), PendingUntil = null,
+                    Result = "Missed or interrupted restart skipped at Controller startup." }); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    var disabled = state with { Settings = state.Settings with {Enabled=false}, NextRun=null, PendingUntil=null,
+                        Result="Schedule state could not be saved; automatic restarts are disabled until settings are saved successfully." };
+                    _schedules = Replace(disabled);
+                    _log(disabled.Result);
+                }
             }
         }
     }
 
-    public async Task<RestartScheduleState> ReadAsync()
+    private static RestartScheduleState Copy(RestartScheduleState state) => state with { Settings = state.Settings with { Days = state.Settings.Days.ToArray() } };
+
+    public async Task<RestartSchedulesState> ReadAllAsync()
     {
         await _gate.WaitAsync();
-        try { return _state with { Settings = _state.Settings with { Days = _state.Settings.Days.ToArray() } }; }
+        try { return _schedules with { Viewer = Copy(_schedules.Viewer), Host = Copy(_schedules.Host) }; }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<RestartScheduleState> ReadAsync(string? action = null)
+    {
+        await _gate.WaitAsync();
+        try { return Copy(State(action ?? _schedules.SelectedAction)); }
         finally { _gate.Release(); }
     }
 
@@ -74,24 +119,26 @@ public sealed class RestartScheduler : BackgroundService
         await _gate.WaitAsync();
         try
         {
-            Save(_state with { Settings = settings with { Days = settings.Days.Distinct().ToArray() },
+            var state = State(settings.Action);
+            Save(state with { Settings = settings with { Days = settings.Days.Distinct().ToArray() },
                 NextRun = settings.NextAfter(now, _zone), PendingUntil = null,
-                Result = settings.Enabled ? "Schedule saved." : "Schedule disabled." });
-            _log(_state.Result);
+                Result = settings.Enabled ? "Schedule saved." : "Schedule disabled." }, select: true);
+            _log($"{settings.Action}: {State(settings.Action).Result}");
         }
         finally { _gate.Release(); }
     }
 
-    public async Task SkipAsync(DateTimeOffset now)
+    public async Task SkipAsync(DateTimeOffset now, string? action = null)
     {
         await _gate.WaitAsync();
         try
         {
-            if (!_state.Settings.Enabled || _state.NextRun is null) return;
-            var next = _state.PendingUntil is null && _state.NextRun > now ? _state.NextRun.Value : now;
-            Save(_state with { NextRun = _state.Settings.NextAfter(next, _zone), PendingUntil = null,
+            var state = State(action ?? _schedules.SelectedAction);
+            if (!state.Settings.Enabled || state.NextRun is null) return;
+            var next = state.PendingUntil is null && state.NextRun > now ? state.NextRun.Value : now;
+            Save(state with { NextRun = state.Settings.NextAfter(next, _zone), PendingUntil = null,
                 Result = "Scheduled restart skipped by administrator." });
-            _log(_state.Result);
+            _log($"{state.Settings.Action}: {State(state.Settings.Action).Result}");
         }
         finally { _gate.Release(); }
     }
@@ -101,53 +148,71 @@ public sealed class RestartScheduler : BackgroundService
         await _gate.WaitAsync(token);
         try
         {
-            if (!_state.Settings.Enabled || _state.NextRun is null || _state.NextRun > now) return;
-            if (_state.PendingUntil is { } pending && pending > now) return;
-            // Sleep/resume or a long scheduler interruption must not cause a surprise catch-up reboot.
-            if ((_state.PendingUntil ?? _state.NextRun) < now.AddMinutes(-2))
-            {
-                Save(_state with { NextRun = _state.Settings.NextAfter(now, _zone), PendingUntil = null,
-                    Result = "Missed restart skipped after host inactivity." });
-                return;
-            }
-            var ran = await _maintenance(async () =>
-            {
-                if (_state.Settings.Action == "host" && _state.PendingUntil is null)
-                {
-                    Save(_state with { PendingUntil = now.AddSeconds(60), Result = "Windows host restart in 60 seconds. Cancel to skip this run." });
-                    _log(_state.Result);
-                    return;
-                }
-                var action = _state.Settings.Action;
-                // Persist consumption before the side effect: a crash cannot replay this occurrence.
-                Save(_state with { NextRun = _state.Settings.NextAfter(now, _zone), PendingUntil = null,
-                    LastRun = now, Result = $"Scheduled {action} restart requested; completion not yet confirmed.",
-                    LastResult = $"Scheduled {action} restart requested; completion not yet confirmed." });
-                try { var result = await _execute(action, token); Save(_state with { Result = result, LastResult = result }); }
-                catch (Exception error) when (error is not OperationCanceledException)
-                {
-                    var result = $"Scheduled {action} restart failed ({error.GetType().Name}). Check host permissions and logs.";
-                    Save(_state with { Result = result, LastResult = result });
-                }
-                _log(_state.Result);
-            }, token);
-            if (!ran)
-            {
-                // Retry after the update, with a fresh countdown for host restarts.
-                Save(_state with { NextRun = now.AddMinutes(1), PendingUntil = null,
-                    Result = "Restart deferred while an RTSPView update is active." });
-            }
+            await TickActionAsync("host", now, token);
+            await TickActionAsync("viewer", now, token);
         }
         finally { _gate.Release(); }
     }
 
-    private void Save(RestartScheduleState state)
+    private async Task TickActionAsync(string scheduledAction, DateTimeOffset now, CancellationToken token)
     {
+        var state = State(scheduledAction);
+        if (!state.Settings.Enabled || state.NextRun is null || state.NextRun > now) return;
+        if (state.PendingUntil is { } pending && pending > now) return;
+        // Sleep/resume or a long scheduler interruption must not cause a surprise catch-up reboot.
+        if ((state.PendingUntil ?? state.NextRun) < now.AddMinutes(-2))
+        {
+            Save(state with { NextRun = state.Settings.NextAfter(now, _zone), PendingUntil = null,
+                Result = "Missed restart skipped after host inactivity." });
+            return;
+        }
+        if (scheduledAction == "viewer" && (_schedules.Host.PendingUntil is not null || _schedules.Host.LastRun == now))
+        {
+            Save(state with { NextRun = state.Settings.NextAfter(now, _zone),
+                Result = "Viewer restart skipped because a Windows host restart is pending or was just requested." });
+            return;
+        }
+        var ran = await _maintenance(async () =>
+        {
+            if (state.Settings.Action == "host" && state.PendingUntil is null)
+            {
+                Save(state with { PendingUntil = now.AddSeconds(60), Result = "Windows host restart in 60 seconds. Cancel to skip this run." });
+                _log(State(scheduledAction).Result);
+                return;
+            }
+            var action = state.Settings.Action;
+            // Persist consumption before the side effect: a crash cannot replay this occurrence.
+            Save(state with { NextRun = state.Settings.NextAfter(now, _zone), PendingUntil = null,
+                LastRun = now, Result = $"Scheduled {action} restart requested; completion not yet confirmed.",
+                LastResult = $"Scheduled {action} restart requested; completion not yet confirmed." });
+            try { var result = await _execute(action, token); Save(State(action) with { Result = result, LastResult = result }); }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                var result = $"Scheduled {action} restart failed ({error.GetType().Name}). Check host permissions and logs.";
+                Save(State(action) with { Result = result, LastResult = result });
+            }
+            _log(State(action).Result);
+        }, token);
+        if (!ran)
+        {
+            // Retry after the update, with a fresh countdown for host restarts.
+            Save(state with { NextRun = now.AddMinutes(1), PendingUntil = null,
+                Result = "Restart deferred while an RTSPView update is active." });
+        }
+    }
+
+    private RestartSchedulesState Replace(RestartScheduleState state) => state.Settings.Action == "host"
+        ? _schedules with { Host = state } : _schedules with { Viewer = state };
+
+    private void Save(RestartScheduleState state, bool select = false)
+    {
+        var schedules = Replace(state);
+        if (select) schedules = schedules with { SelectedAction = state.Settings.Action };
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         var temp = _path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(state));
+        File.WriteAllText(temp, JsonSerializer.Serialize(schedules));
         File.Move(temp, _path, true);
-        _state = state;
+        _schedules = schedules;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

@@ -4,6 +4,8 @@
     <AssemblyName>SpotMonitor.Controller</AssemblyName>
     <RootNamespace>RTSPView.Controller</RootNamespace><OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework><RuntimeIdentifier>win-x64</RuntimeIdentifier><ApplicationIcon>Assets\RTSPView.Controller.ico</ApplicationIcon></PropertyGroup>
   <ItemGroup>
+    <Content Include="ThirdParty\*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.1" />
     <ProjectReference Include="..\RTSPView.Core\RTSPView.Core.csproj"/>
     <ProjectReference Include="..\RTSPView.Infrastructure\RTSPView.Infrastructure.csproj"/>

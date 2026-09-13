@@ -133,3 +133,20 @@ label{line-height:1.5}a{color:#8ec2ff}.secondary[href]{display:inline-flex;align
 .restart-countdown[hidden],#restartScheduleForm [hidden]{display:none!important}
 @media(max-width:700px){.restart-form-grid,.restart-status{grid-template-columns:1fr}.restart-countdown{flex-wrap:wrap}}
 .update-notifications{border-top:1px solid var(--line);margin-top:16px;padding-top:16px}.update-notifications p{margin:8px 0 0}.update-check-times{color:var(--muted);overflow-wrap:anywhere}
+.system-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:6px;margin-bottom:18px;background:var(--inset);border:1px solid var(--line);border-radius:10px}
+.system-tabs [role=tab]{flex:1 1 auto;background:transparent;color:var(--muted);padding:10px 14px;min-height:40px;white-space:nowrap;border:1px solid transparent}
+.system-tabs [role=tab]:hover{background:#1a2532;color:var(--text)}
+.system-tabs [role=tab][aria-selected=true]{background:#1c3046;border-color:#36597f;color:#a5d0ff}
+.system-tabs [role=tab]:focus-visible,.system-tab-panel:focus-visible{outline:2px solid #8ec2ff;outline-offset:3px}
+.system-tab-panel{min-width:0}.system-tab-panel>.control-panel:last-child{margin-bottom:0}
+@media(max-width:600px){.system-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.system-tabs [role=tab]{white-space:normal;padding:9px 6px;font-size:12px}}
+.restart-schedules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:20px 0}
+.restart-schedule-card{min-width:0;padding:18px;background:var(--inset);border:1px solid var(--line);border-radius:9px}
+.restart-schedule-card h3{margin:0 0 6px;font-size:16px}.restart-schedule-card>p{font-size:13px}.restart-schedule-card .restart-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.restart-schedule-card .restart-status{grid-template-columns:1fr 1fr;gap:12px}.restart-schedule-card .restart-status>div:last-child{grid-column:1/-1}
+.restart-schedule-card .actions{gap:8px;flex-wrap:wrap}.restart-schedule-card .restart-message:empty{display:none}
+@media(max-width:1000px){.restart-schedules{grid-template-columns:1fr}}
+@media(max-width:480px){.restart-schedule-card{padding:14px}.restart-schedule-card .restart-form-grid,.restart-schedule-card .restart-status{grid-template-columns:1fr}}
+.temperature-fields{border:0;margin:0;padding:0;min-width:0}.temperature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}.temperature-device{padding:16px;background:var(--inset);border:1px solid var(--line);border-radius:8px;min-width:0}.temperature-device h3{margin:0 0 8px;font-size:15px}.temperature-device .temperature-reading{font-size:22px;font-weight:600;color:var(--text)}.temperature-device .temperature-high{color:#ff9292}.temperature-device .toggle-control{margin-bottom:16px}.temperature-fields>.toggle-control+p{margin-top:10px}.temperature-device input[type=number]{max-width:240px}@media(max-width:600px){.temperature-grid{grid-template-columns:1fr}}
+.temperature-device>label:last-child{display:block}.temperature-device input[type=number]{display:block;margin-top:7px;width:100%}
+#extraStats{grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:600px){#extraStats{grid-template-columns:repeat(2,minmax(0,1fr))}}

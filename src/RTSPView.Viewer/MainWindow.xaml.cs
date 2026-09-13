@@ -83,6 +83,9 @@ public partial class MainWindow : Window
     private readonly SnapshotRefreshSchedule _snapshotSchedule = new();
     private bool _refreshingSnapshots;
     private UpdateBadgeWindow? _updateBadge;
+    private TemperatureWarningWindow? _temperatureWarning;
+    private TemperatureStatus? _temperatureStatus;
+    private DateTime _lastTemperatureRead;
     private WallUpdateNotice? _updateNotice;
     private DateTime _lastUpdateNoticeRead;
     private bool _dialogOpen;
@@ -128,6 +131,7 @@ public partial class MainWindow : Window
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
             RefreshUpdateBadge();
+            RefreshTemperatureWarning();
             if (_settings.AllOverlays().Any(overlay => overlay.Camera.Enabled))
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
@@ -159,6 +163,28 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) { _logger.Write("WARNING", $"Scheduled snapshot refresh failed: {exception.Message}"); }
         finally { _refreshingSnapshots = false; }
+    }
+
+    private void RefreshTemperatureWarning()
+    {
+        if (DateTime.UtcNow - _lastTemperatureRead > TimeSpan.FromSeconds(5))
+        {
+            _lastTemperatureRead = DateTime.UtcNow;
+            try { _temperatureStatus = System.Text.Json.JsonSerializer.Deserialize<TemperatureStatus>(File.ReadAllText(Path.Combine(_dataDirectory, "temperature-status.json"))); }
+            catch (Exception error) when (error is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { _temperatureStatus = null; }
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (!CanDisplayOverlayWindows() || (_temperatureStatus?.CpuWarning(now) != true && _temperatureStatus?.GpuWarning(now) != true))
+        { _temperatureWarning?.SetStatus(null, now); return; }
+        _temperatureWarning ??= new TemperatureWarningWindow(this);
+        if (!_temperatureWarning.SetStatus(_temperatureStatus, now)) return;
+        var origin = WallViewport.PointToScreen(new System.Windows.Point());
+        var dpi = VisualTreeHelper.GetDpi(WallViewport);
+        _temperatureWarning.Width = Math.Min(340, Math.Max(1, WallViewport.ActualWidth - 32));
+        _temperatureWarning.Left = origin.X / dpi.DpiScaleX + 16;
+        _temperatureWarning.Top = origin.Y / dpi.DpiScaleY + 16;
+        if (!_temperatureWarning.IsVisible) _temperatureWarning.Show();
+        BringOverlayWindowToFront(_temperatureWarning);
     }
 
     private void RefreshUpdateBadge()
@@ -464,6 +490,7 @@ public partial class MainWindow : Window
 
     private void HideOverlayWindows()
     {
+        _temperatureWarning?.SetStatus(null, DateTimeOffset.UtcNow);
         _updateBadge?.Hide();
         HideOverlayWindowHierarchy(_doorbellWindow, DoorbellTile);
         HideOverlayWindowHierarchy(_garageWindow, GarageTile);
@@ -1017,6 +1044,7 @@ public partial class MainWindow : Window
         _diagnosticsTimer.Stop();
         _cursorTimer.Stop();
         _updateBadge?.Close();
+        _temperatureWarning?.Close();
         Mouse.OverrideCursor = null;
         foreach (var tile in _allTiles) tile.Dispose();
         foreach (var entry in _additionalOverlays.Values)

@@ -1,0 +1,4 @@
+RTSPView uses the unmodified LibreHardwareMonitorLib 0.9.6 package (MPL-2.0).
+Source code: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/v0.9.6
+Package: https://www.nuget.org/packages/LibreHardwareMonitorLib/0.9.6
+The accompanying LICENSE and NOTICES files are provided by that upstream release.

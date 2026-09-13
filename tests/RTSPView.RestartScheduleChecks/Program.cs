@@ -14,6 +14,8 @@ void Check(bool condition, string message) { if (!condition) throw new Exception
 try
 {
     await UpdateMonitorChecks.Run(root);
+    await IndependentSchedulesChecks.Run(root);
+    await TemperatureChecks.Run(root);
     var s = Scheduler();
     Check(!(await s.ReadAsync()).Settings.Enabled,"default disabled");
     var interval = new RestartScheduleSettings { Enabled=true,Mode="interval",IntervalHours=1 };

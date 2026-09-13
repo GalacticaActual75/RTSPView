@@ -16,3 +16,7 @@ Only frontend presentation files change. No production endpoints, request payloa
 Browser QA covered Overview, Cameras, Layouts, Overlays and System at desktop, tablet and phone widths. At 1440px all five page containers measured 1320px and titles had the same horizontal position. No horizontal page overflow was found at 390px. Keyboard navigation showed visible toggle focus outlines. Checks included expanded camera settings, layout discard state, custom SVG controls and shape dialog, source framing, overlay save payloads, display save payloads and LAN copying. Selecting another update channel issued only the channel request; installation still required its separate confirmation dialog, which was canceled.
 
 Release build, administrator security, LAN firewall mock checks, shape editor, layout presets, branding and JavaScript syntax checks passed. Visual checks used synthetic previews, not live camera feeds.
+
+## System tabs
+
+System groups existing controls into Viewer, Network & security, Updates, Backups, Maintenance, and Logs tabs. Cards and controls are moved intact, preserving unsaved edits and existing save handlers. Tabs use ARIA tab/panel relationships, one keyboard tab stop, Left/Right cycling, and Home/End navigation. The tab row wraps on narrow screens. This does not change routes or make tab selection save settings. Maintenance contains the independent viewer and Windows host restart schedules.

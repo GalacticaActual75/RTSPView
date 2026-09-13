@@ -52,6 +52,10 @@ builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.C
 builder.Services.AddSingleton<ViewerTelemetryClient>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<ViewerTelemetryClient>());
 builder.Services.AddSingleton<SystemMetricsCollector>();
+builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, new HardwareTemperatureSensors(),
+    message => provider.GetRequiredService<RollingFileLogger>().Write("TEMPERATURE", message)));
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
 builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>()));
@@ -92,6 +96,7 @@ var security = await WebSecurity.LoadOrCreateAsync(Path.Combine(dataDirectory, "
 var configGate = new SemaphoreSlim(1, 1);
 var viewerTelemetry = app.Services.GetRequiredService<ViewerTelemetryClient>();
 var systemMetrics = app.Services.GetRequiredService<SystemMetricsCollector>();
+var temperatures = app.Services.GetRequiredService<TemperatureMonitor>();
 var viewerCommands = app.Services.GetRequiredService<ViewerCommandClient>();
 var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
 var updates = app.Services.GetRequiredService<UpdateService>();
@@ -223,7 +228,16 @@ app.MapGet("/api/status", () => Results.Ok(new
 app.MapGet("/api/telemetry", () =>
 {
     var viewer = viewerTelemetry.Latest;
-    return Results.Ok(new ApplianceTelemetry { ViewerConnected = viewer is not null, Viewer = viewer, System = systemMetrics.GetSnapshot() });
+    var temperature = temperatures.Status(DateTimeOffset.UtcNow);
+    return Results.Ok(new ApplianceTelemetry { ViewerConnected = viewer is not null, Viewer = viewer,
+        System = systemMetrics.GetSnapshot() with { CpuTemperatureC = temperature.CpuC, GpuTemperatureC = temperature.GpuC } });
+}).RequireAuthorization();
+app.MapGet("/api/temperatures", () => Results.Ok(temperatures.Status(DateTimeOffset.UtcNow))).RequireAuthorization();
+app.MapPut("/api/temperatures", async (TemperatureSettings settings) =>
+{
+    try { await temperatures.ConfigureAsync(settings); }
+    catch (ArgumentException error) { return Results.BadRequest(new { error = error.Message }); }
+    return Results.Ok(temperatures.Status(DateTimeOffset.UtcNow));
 }).RequireAuthorization();
 app.MapGet("/api/network", () => Results.Ok(network.Status())).RequireAuthorization();
 app.MapPut("/api/network", async (HttpContext context, LanAccessRequest request) =>
@@ -495,22 +509,26 @@ app.MapPost("/api/control/viewer/{action}", async (string action, CancellationTo
     auditLog.Write("AUDIT", $"Remote viewer action '{action}' requested: {result.Message}");
     return CommandResult(result);
 }).RequireAuthorization();
-app.MapGet("/api/restart-schedule", async () => Results.Ok(new
+async Task<object> RestartScheduleStatus()
 {
-    schedule = await restartScheduler.ReadAsync(), timeZone = TimeZoneInfo.Local.DisplayName, timeZoneId = scheduleTimeZoneId, serverTime = DateTimeOffset.UtcNow
-})).RequireAuthorization();
+    var schedules = await restartScheduler.ReadAllAsync();
+    return new { schedule = schedules.SelectedAction == "host" ? schedules.Host : schedules.Viewer,
+        schedules, timeZone = TimeZoneInfo.Local.DisplayName, timeZoneId = scheduleTimeZoneId, serverTime = DateTimeOffset.UtcNow };
+}
+app.MapGet("/api/restart-schedule", async () => Results.Ok(await RestartScheduleStatus())).RequireAuthorization();
 app.MapPut("/api/restart-schedule", async (RestartScheduleRequest request) =>
 {
     if (request.Settings is null) return Results.BadRequest(new { error = "Schedule settings are required." });
     try { await restartScheduler.ConfigureAsync(request.Settings, request.HostAcknowledged, DateTimeOffset.UtcNow); }
     catch (ArgumentException error) { return Results.BadRequest(new { error = error.Message }); }
-    return Results.Ok(new { schedule = await restartScheduler.ReadAsync(), timeZone = TimeZoneInfo.Local.DisplayName, timeZoneId = scheduleTimeZoneId, serverTime = DateTimeOffset.UtcNow });
+    return Results.Ok(await RestartScheduleStatus());
 }).RequireAuthorization();
-app.MapPost("/api/restart-schedule/skip", async () =>
+app.MapPost("/api/restart-schedule/skip", async (string? action) =>
 {
-    await restartScheduler.SkipAsync(DateTimeOffset.UtcNow);
+    try { await restartScheduler.SkipAsync(DateTimeOffset.UtcNow, action); }
+    catch (ArgumentException error) { return Results.BadRequest(new { error = error.Message }); }
     auditLog.Write("AUDIT", "Administrator skipped the next scheduled restart.");
-    return Results.Ok(new { schedule = await restartScheduler.ReadAsync(), timeZone = TimeZoneInfo.Local.DisplayName, timeZoneId = scheduleTimeZoneId, serverTime = DateTimeOffset.UtcNow });
+    return Results.Ok(await RestartScheduleStatus());
 }).RequireAuthorization();
 
 app.MapPost("/api/control/system/{action}", (string action, ConfirmedAction request) =>

@@ -9,7 +9,7 @@ const adminUi = (() => {
     system: 'Configure RTSPView settings, networking, display behavior, updates, and backups.'
   };
   function init() {
-    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=streams1'; document.head.append(css);
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=temperatures1'; document.head.append(css);
     const hero = document.querySelector('.hero');
     const description = document.createElement('p'); description.id = 'pageDescription';
     hero.querySelector('h1').after(description);

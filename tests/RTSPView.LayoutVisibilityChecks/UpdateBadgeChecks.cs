@@ -12,6 +12,23 @@ internal static class UpdateBadgeChecks
 {
     public static async Task Run(Window owner)
     {
+        var thermal = new TemperatureWarningWindow(owner) { Left = -20000, Top = -20000 };
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var status = new TemperatureStatus { Timestamp = now, CpuC = 96, GpuC = 91,
+                Settings = new() { ShowWarnings = true, CpuWarningEnabled = true, GpuWarningEnabled = true } };
+            if (!thermal.SetStatus(status, now)) throw new Exception("Hot sensors did not warn");
+            thermal.Show(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            var panel = (Border)thermal.Content;
+            if (((SolidColorBrush)panel.Background).Color.A < 210 || !((TextBlock)panel.Child).Text.Contains("GPU")) throw new Exception("Thermal warning readability");
+            Capture(panel, "temperature-warning.png");
+            if (thermal.SetStatus(status with { Settings = status.Settings with { ShowWarnings = false } }, now) || thermal.IsVisible)
+                throw new Exception("Master temperature toggle did not hide warning");
+            if (thermal.SetStatus(status, now.AddSeconds(21))) throw new Exception("Stale temperature warning remained");
+            Console.WriteLine("PASS smoked temperature warning, master off and stale reading dismissal.");
+        }
+        finally { thermal.Close(); }
         // Render the shipped bottom bar without wiring any real browser/stream actions.
         var xaml=System.Xml.Linq.XDocument.Load(Path.Combine(Directory.GetCurrentDirectory(),"src","RTSPView.Viewer","MainWindow.xaml"));
         var bar=xaml.Descendants().First(e=>e.Name.LocalName=="Border"&&e.Attributes().Any(a=>a.Name.LocalName=="Name"&&a.Value=="ControlBar"));
