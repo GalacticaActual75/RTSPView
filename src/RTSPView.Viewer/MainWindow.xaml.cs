@@ -128,6 +128,7 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         _diagnosticsTimer.Tick += async (_, _) =>
         {
+            RefreshAutomationOverlays();
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
             RefreshUpdateBadge();
@@ -558,7 +559,7 @@ public partial class MainWindow : Window
             BringOverlayWindowToFront(overlayWindow);
             return;
         }
-        if (!overlay.Camera.Enabled || !CanDisplayOverlayWindows())
+        if (!OverlayEnabled(overlay) || !CanDisplayOverlayWindows())
         {
             HideOverlayWindowHierarchy(overlayWindow, overlayTile);
             return;
@@ -885,7 +886,14 @@ public partial class MainWindow : Window
             var bounds = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).Bounds;
             if (position.X >= bounds.Right - 64 && position.Y < bounds.Top + 64) return;
         }
+        if (_automatedSlots.Contains(tile.Slot) && _settings.AllOverlays().Any(o => o.Camera.Slot == tile.Slot && !o.Camera.Enabled))
+        {
+            DismissAutomation();
+            RegisterPointerActivity();
+            return;
+        }
         _focusedSlot = _focusedSlot == tile.Slot ? null : tile.Slot;
+        DismissAutomation();
         RegisterPointerActivity();
         ApplyWallLayout();
     }
@@ -928,6 +936,8 @@ public partial class MainWindow : Window
         var commandTile = _allTiles.FirstOrDefault(tile => tile.GetTelemetry().Slot == command.Slot);
         switch (command.Type)
         {
+            case ViewerCommandType.AutomationOverlays:
+                return ApplyAutomation(command);
             case ViewerCommandType.RestartCamera when commandTile is not null:
                 commandTile.Start();
                 var streamName = commandTile.GetTelemetry().Name;
@@ -973,6 +983,7 @@ public partial class MainWindow : Window
     {
         var dialog = new ConfigurationWindow(_settings, _settingsStore) { Owner = this };
         if (WithOverlaysSuppressed(() => dialog.ShowDialog()) != true) return;
+        ClearAutomation();
         _settings = dialog.Settings.Normalize();
         SyncAdditionalOverlays();
         ApplyWallLayout();
@@ -1022,6 +1033,7 @@ public partial class MainWindow : Window
         try
         {
             var updated = (await _settingsStore.LoadAsync()).Normalize();
+            ClearAutomation();
             var previousDoorbell = _settings.DoorbellOverlay.Camera;
             var previousGarage = _settings.GarageOverlay.Camera;
             for (var index = 0; index < _tiles.Length; index++)

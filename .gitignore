@@ -23,6 +23,7 @@ secrets.json
 settings.json
 settings.json.*
 web-security.json*
+automation.json*
 initial-admin-password.txt
 data-protection/
 snapshots/

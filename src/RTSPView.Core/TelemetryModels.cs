@@ -59,8 +59,9 @@ public enum ViewerCommandType
     RestartViewer,
     EnterFullScreen,
     ExitFullScreen,
-    CaptureCameraSnapshot
+    CaptureCameraSnapshot,
+    AutomationOverlays
 }
 
-public sealed record ViewerCommand(Guid Id, ViewerCommandType Type, int? Slot = null);
+public sealed record ViewerCommand(Guid Id, ViewerCommandType Type, int? Slot = null, AutomationPresentation? Automation = null);
 public sealed record ViewerCommandResult(Guid Id, bool Success, string Message);

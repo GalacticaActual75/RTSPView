@@ -7,17 +7,21 @@ namespace RTSPView.Controller;
 public sealed class ViewerCommandClient
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly string _pipeName;
+    public ViewerCommandClient(string pipeName = "RTSPView.Commands.v1") => _pipeName = pipeName;
 
-    public async Task<ViewerCommandResult> SendAsync(ViewerCommandType type, int? slot, CancellationToken cancellationToken)
+    public Task<ViewerCommandResult> SendAsync(ViewerCommandType type, int? slot, CancellationToken cancellationToken) =>
+        SendAsync(new ViewerCommand(Guid.NewGuid(), type, slot), cancellationToken);
+
+    public async Task<ViewerCommandResult> SendAsync(ViewerCommand command, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await using var pipe = new NamedPipeClientStream(".", ViewerCommandServerPipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await using var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(8));
+            timeout.CancelAfter(TimeSpan.FromSeconds(command.Type == ViewerCommandType.AutomationOverlays ? 1 : 8));
             await pipe.ConnectAsync(timeout.Token);
-            var command = new ViewerCommand(Guid.NewGuid(), type, slot);
             await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
             using var reader = new StreamReader(pipe, leaveOpen: true);
             await writer.WriteLineAsync(JsonSerializer.Serialize(command));
@@ -34,5 +38,4 @@ public sealed class ViewerCommandClient
         finally { _gate.Release(); }
     }
 
-    private const string ViewerCommandServerPipeName = "RTSPView.Commands.v1";
 }

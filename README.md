@@ -23,6 +23,66 @@ Use Windows 10/11 x64 with a current graphics driver. Download the installer and
 
 The dashboard starts local-only on TCP 5080. After initial setup, use **System → LAN access** to enable HTTP access on your trusted private LAN. HTTPS is optional; see the LAN instructions below.
 
+## MQTT person-to-overlay automation (beta)
+
+Open **System → Automation** to configure the broker and person-detection rules.
+The Controller maintains the MQTT connection even with the browser closed; the
+Viewer must be running to display overlays. Automation is disabled by default.
+
+1. In Scrypted, install its official **MQTT** plugin and enable the MQTT extension
+   on the source cameras. Use its built-in broker or an existing independent broker;
+   Home Assistant is not required. The built-in broker defaults to TCP 1883.
+2. In RTSPView, enter **Broker host**, **Port**, **Transport**, and authentication
+   settings. These are broker credentials, separate from the Scrypted web login.
+   TLS validates the host certificate using Windows trust. Each Controller needs
+   a unique **Client ID** under Advanced connection settings.
+3. Configure the target overlay's stream and appearance in **Overlays**. Leave its
+   stream disabled if it should appear only during automation. An overlay that is
+   already enabled remains visible when automation clears.
+4. Select **Add rule**. Choose the target overlay, then add one or more source
+   cameras. Enter each camera's exact MQTT topic, normally
+   `scrypted/<scrypted-device-id>/ObjectDetector`. Scrypted IDs are not RTSPView
+   stream slots. An example event is
+   `{"timestamp":1789318449255,"detections":[{"className":"person","score":0.827}]}`.
+5. Set **Clear delay (minutes)**, enable the rule, and use **Test connection**.
+   Testing checks the draft connection and enabled subscriptions without saving
+   or activating actions. Turn on **Enable automation**, then **Save automation**.
+
+Person detection on **any source camera** shows the selected overlay and renews
+one shared clear timer. Fresh frames of the same person keep it visible. Empty,
+motion-only, face-only, and duplicate messages do not renew the timer. Clear means
+no new matching detections for the configured interval, not proof of an empty
+scene. Multiple rules can share an overlay; it stays until all requests expire.
+Different overlays can be active simultaneously. Saved layouts are not changed.
+
+Manual focus takes priority. Double-click a temporary, otherwise-disabled overlay
+to dismiss the current detection episode; fresh detections in that same episode
+do not undo the dismissal. New episodes can activate it after the clear interval.
+Hidden/minimized viewers are not brought forward. An overlay's configured host
+tile must be present in the active layout. Editing stream/layout configuration
+cancels existing automation requests. Disabling or deleting a rule releases its
+request. Viewer-local timers restore visibility even if Controller or MQTT stops.
+
+**Status and troubleshooting:** Connected confirms the broker/subscriptions, not
+person detection or successful playback. The tab reports the last message result,
+last person time, and per-rule clear countdown. If nothing appears, check the
+source topic, target stream URL, host tile visibility, manual focus, and Viewer
+connection. MQTT can accept a topic subscription with no publisher. Keep the
+Scrypted and Windows clocks synchronized: retained messages, events older than
+10 seconds, events over 2 seconds in the future, and pre-connection events beyond
+that tolerance are ignored. Reconnection uses a clean session, backoff, and no
+queued action replay. Loss of MQTT updates lets the existing timer expire.
+
+Connection settings and rules live in `automation.json`, separate from general
+configuration exports. Passwords are protected for the Controller's Windows
+identity and never returned to the GUI. Leave the password blank to keep it;
+use **Clear saved password** to remove it. Re-enter credentials when moving to a
+different Windows account/host. RTSPView does not modify the Scrypted broker.
+
+The first beta supports person-triggered overlays. Full-screen camera focus and
+layouts that enlarge an active camera while keeping all streams visible are
+planned follow-ups, not implemented actions.
+
 ## Temperature monitoring and optional maintenance helper
 
 Under **System → Viewer → Temperature reporting**, enable CPU/GPU warnings and choose a maximum for each sensor. The master warning switch turns all temperature warnings off. Above the selected maximum, the live wall shows a large red warning on a smoked background. Unavailable or stale readings do not trigger an alarm.

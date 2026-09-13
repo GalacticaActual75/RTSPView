@@ -59,6 +59,10 @@ builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, 
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
 builder.Services.AddSingleton<ViewerCommandClient>();
+builder.Services.AddSingleton(provider => new AutomationService(dataDirectory,
+    provider.GetRequiredService<IDataProtectionProvider>(), provider.GetRequiredService<ViewerCommandClient>()));
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<AutomationService>());
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
 builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>(),
     builder.Environment.IsEnvironment("Testing") ? null : provider.GetRequiredService<MaintenanceClient>()));
@@ -302,6 +306,22 @@ app.MapPost("/api/update/install", async (UpdateInstallRequest request, Cancella
 }).RequireAuthorization();
 
 app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();
+app.MapGet("/api/automation", (AutomationService automation) => Results.Ok(automation.Configuration)).RequireAuthorization();
+app.MapGet("/api/automation/status", (AutomationService automation) => Results.Ok(automation.Status)).RequireAuthorization();
+app.MapPut("/api/automation", async (AutomationRequest request, AutomationService automation, CancellationToken token) =>
+{
+    if (request.Settings is null) return Results.BadRequest(new { error = "Automation settings are required." });
+    try { await automation.SaveAsync(request, token); }
+    catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
+    auditLog.Write("AUTOMATION", "Automation settings saved");
+    return Results.Ok(automation.Configuration);
+}).RequireAuthorization();
+app.MapPost("/api/automation/test", async (AutomationRequest request, AutomationService automation, CancellationToken token) =>
+{
+    if (request.Settings is null) return Results.BadRequest(new { error = "Automation settings are required." });
+    try { return Results.Ok(await automation.TestAsync(request, token)); }
+    catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
+}).RequireAuthorization();
 app.MapGet("/api/config/export", async (HttpContext context) =>
 {
     context.Response.Headers.CacheControl = "no-store";

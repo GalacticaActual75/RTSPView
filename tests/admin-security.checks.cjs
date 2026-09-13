@@ -31,6 +31,17 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  const automation=(await request(a,'/api/automation')).json;
+  assert.equal(automation.settings.enabled,false,'automation defaults off');
+  const mqttSecret='test-mqtt-'+crypto.randomUUID();
+  const savedAutomation=await request(a,'/api/automation','PUT',{settings:automation.settings,password:mqttSecret});
+  assert.equal(savedAutomation.status,200);assert.equal(savedAutomation.json.hasPassword,true);
+  assert(!savedAutomation.text.includes(mqttSecret),'saved secret is not returned');
+  assert(!fs.readFileSync(path.join(data,'automation.json'),'utf8').includes(mqttSecret),'secret encrypted on disk');
+  assert.equal((await request(a,'/api/automation','PUT',{settings:automation.settings,password:null})).json.hasPassword,true,'blank preserves password');
+  assert.equal((await request(a,'/api/automation','PUT',{settings:automation.settings,clearPassword:true})).json.hasPassword,false,'explicit clear removes password');
+  assert.equal((await request(a,'/api/automation/test','POST',{settings:automation.settings})).status,400,'test requires broker host');
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,host:null}})).status,400,'invalid connection is rejected');
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:false})).status,400,'dependency install requires confirmation');
   assert.equal((await request(a,'/api/dependencies/pawnio/arbitrary','POST',{confirmed:true})).status,404,'arbitrary maintenance actions rejected');
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:true})).status,409,'test environment cannot install host dependencies');
