@@ -11,4 +11,23 @@
 .automation-source { grid-template-columns: minmax(150px, 1fr) minmax(200px, 1.5fr) auto; }
 .automation-source { padding: 12px 0; border-top: 1px solid var(--line, #334155); }
 .automation-connection, .rule-status { color: var(--muted, #94a3b8); }
+.mqtt-tools { border-top: 1px solid var(--line); padding-top: 16px; margin: 24px 0; }
+.mqtt-tools details { margin: 12px 0; }
+.mqtt-tools summary, .source-event summary { cursor: pointer; overflow-wrap: anywhere; }
+.mqtt-messages { max-height: 520px; overflow: auto; margin-top: 16px; }
+.mqtt-messages > details { padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
+.mqtt-messages details details { margin-left: 12px; }
+.mqtt-messages pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #090f16; font-size: 12px; }
+.source-event { min-width: 0; }
+.source-event details { margin-top: 8px; }
+.automation-source { align-items: start; }
+.automation-source > button { margin-top: 24px; }
+.automation-camera-preview { margin-top: 12px; display: grid; justify-items: start; gap: 8px; }
+.automation-camera-preview[hidden] { display: none; }
+.automation-camera-preview img { width: 160px; height: 90px; max-width: 100%; object-fit: contain; background: #090f16; border-radius: 4px; }
+.automation-camera-preview small { color: var(--muted); }
+.automation-camera-preview button { padding: 6px 10px; font-size: 12px; }
+.overlay-display-mode { min-width: 180px; max-width: 240px; }
+.overlay-automation-info { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.overlay-automation-info p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 @media (max-width: 800px) { .automation-grid, .automation-rule > .automation-grid, .automation-source { grid-template-columns: 1fr; } }

@@ -10,6 +10,7 @@ using RTSPView.Infrastructure;
 namespace RTSPView.Controller;
 
 public sealed record AutomationRequest(AutomationSettings Settings, string? Password, bool ClearPassword = false);
+public sealed record MqttDiagnosticsRequest(AutomationRequest Connection, string Prefix = "scrypted");
 internal sealed record StoredAutomation(AutomationSettings Settings, string ProtectedPassword);
 public sealed record AutomationStatus(string Connection, string LastResult, DateTimeOffset? LastMessage,
     DateTimeOffset? LastPerson, object[] Rules);
@@ -25,6 +26,7 @@ public sealed class AutomationService : BackgroundService
     private int _revision;
     private AutomationStatus _status = new("Disabled", "Waiting", null, null, []);
     public AutomationStatus Status => _status;
+    public MqttDiagnostics Diagnostics { get; } = new();
     public object Configuration => new { settings = _stored.Settings, hasPassword = _stored.ProtectedPassword.Length > 0 };
 
     public AutomationService(string directory, IDataProtectionProvider protection, ViewerCommandClient viewer)
@@ -96,11 +98,28 @@ public sealed class AutomationService : BackgroundService
             await client.ConnectAsync(Options(request.Settings, Password(request), true), timeout.Token);
             await Subscribe(client, request.Settings, timeout.Token);
             await client.DisconnectAsync(new MqttClientDisconnectOptions(), timeout.Token);
-            return new { success = true, message = "Connected. Enabled rule subscriptions accepted. No actions were enabled or settings saved." };
+            return new { success = true, message = "Connected. Broker accepted the connection" +
+                (request.Settings.Rules.Any(r => r.Enabled) ? " and enabled rule subscriptions" : "") + ". No actions were enabled or settings saved." };
         }
         catch (Exception e) when (e is not OperationCanceledException || !token.IsCancellationRequested)
         { return new { success = false, message = "Connection or subscription failed. Check host, port, authentication, TLS trust and broker permissions." }; }
     }
+
+    public async Task StartDiagnosticsAsync(MqttDiagnosticsRequest request, CancellationToken token)
+    {
+        if (request.Connection?.Settings is null) throw new InvalidDataException("Connection settings are required.");
+        var settings = request.Connection.Settings with { Enabled = false, Rules = [] };
+        settings.Validate(await _cameras.LoadAsync(token), true);
+        await Diagnostics.StartAsync(Options(settings, Password(request.Connection), true), request.Prefix, token);
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await Diagnostics.StopAsync(cancellationToken);
+        await base.StopAsync(cancellationToken);
+    }
+
+    public override void Dispose() { Diagnostics.Dispose(); base.Dispose(); }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

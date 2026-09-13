@@ -42,6 +42,16 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/automation','PUT',{settings:automation.settings,clearPassword:true})).json.hasPassword,false,'explicit clear removes password');
   assert.equal((await request(a,'/api/automation/test','POST',{settings:automation.settings})).status,400,'test requires broker host');
   assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,host:null}})).status,400,'invalid connection is rejected');
+  assert.equal((await request(a,'/api/automation/diagnostics')).json.connection,'Stopped','discovery starts stopped');
+  assert.equal((await request(a,'/api/automation/diagnostics/start','POST',{connection:{settings:automation.settings}})).status,400,'discovery requires broker host');
+  assert.equal((await request(a,'/api/automation/diagnostics/start','POST',{connection:{settings:{...automation.settings,host:'localhost'}},prefix:'#'})).status,400,'discovery rejects unrestricted wildcard prefix');
+  a.csrf='';assert.equal((await request(a,'/api/automation/diagnostics/stop','POST',{})).status,400,'discovery stop requires CSRF');await session(a);
+  const automaticOverlay={...config.doorbellOverlay,camera:{...config.doorbellOverlay.camera,enabled:false,rtspUrl:'rtsp://example.test/doorbell'}};
+  assert.equal((await request(a,'/api/doorbell','PUT',automaticOverlay)).status,200,'automation-only overlay saves');
+  assert.equal((await request(a,'/api/config')).json.doorbellOverlay.camera.enabled,false,'automation-only overlay stays hidden after reload');
+  assert.equal((await request(a,'/api/doorbell','PUT',{...automaticOverlay,camera:{...automaticOverlay.camera,enabled:true}})).status,200,'always-visible overlay saves');
+  assert.equal((await request(a,'/api/config')).json.doorbellOverlay.camera.enabled,true,'always-visible mode persists');
+  await request(a,'/api/doorbell','PUT',config.doorbellOverlay);
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:false})).status,400,'dependency install requires confirmation');
   assert.equal((await request(a,'/api/dependencies/pawnio/arbitrary','POST',{confirmed:true})).status,404,'arbitrary maintenance actions rejected');
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:true})).status,409,'test environment cannot install host dependencies');

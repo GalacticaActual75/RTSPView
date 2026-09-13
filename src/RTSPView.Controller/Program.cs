@@ -308,6 +308,22 @@ app.MapPost("/api/update/install", async (UpdateInstallRequest request, Cancella
 app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();
 app.MapGet("/api/automation", (AutomationService automation) => Results.Ok(automation.Configuration)).RequireAuthorization();
 app.MapGet("/api/automation/status", (AutomationService automation) => Results.Ok(automation.Status)).RequireAuthorization();
+app.MapGet("/api/automation/diagnostics", (HttpContext context, AutomationService automation) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    return Results.Ok(automation.Diagnostics.Snapshot());
+}).RequireAuthorization();
+app.MapPost("/api/automation/diagnostics/start", async (MqttDiagnosticsRequest request, AutomationService automation, CancellationToken token) =>
+{
+    try { await automation.StartDiagnosticsAsync(request, token); }
+    catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
+    return Results.Ok(automation.Diagnostics.Snapshot());
+}).RequireAuthorization();
+app.MapPost("/api/automation/diagnostics/stop", async (AutomationService automation, CancellationToken token) =>
+{
+    await automation.Diagnostics.StopAsync(token);
+    return Results.Ok(automation.Diagnostics.Snapshot());
+}).RequireAuthorization();
 app.MapPut("/api/automation", async (AutomationRequest request, AutomationService automation, CancellationToken token) =>
 {
     if (request.Settings is null) return Results.BadRequest(new { error = "Automation settings are required." });

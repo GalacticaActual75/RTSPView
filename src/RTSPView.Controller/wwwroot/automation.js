@@ -1,6 +1,7 @@
 /* All event processing runs in Controller. This tab only edits configuration. */
 const automationUi = (() => {
   let form, rules, message, connection, inventory = [], overlays = [], loaded = false, dirty = false, busy = false, refreshing = false;
+  let savedRules = [], discovered = [], diagnosticState = null, paused = false, clearedThrough = 0, diagnosticBusy = false;
   const uuid = () => '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
     (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16));
   function init() {
@@ -21,16 +22,33 @@ const automationUi = (() => {
       <details><summary>Advanced connection settings</summary><label>Client ID<input name="clientId" maxlength="64" required pattern="[A-Za-z0-9_-]+"></label>
       <p>Use a unique client ID for each RTSPView Controller. TLS uses the Windows trusted certificate store.</p></details>
       </fieldset><fieldset class="automation-fields"><legend>Person detection rules</legend>
-      <p>Select one or more source cameras and enter each camera’s Scrypted ObjectDetector topic. Any selected source can keep the overlay visible.</p>
+      <p>Use Discover topics below, then choose each source camera and its observed event topic. Any selected source can keep the overlay visible. Manual topics remain available under Advanced.</p>
       <div class="automation-rules"></div><button type="button" class="secondary automation-add">Add rule</button>
-      <p>Configure overlay streams and appearance in Overlays. Leave an overlay disabled there if it should appear only during automation. An already enabled overlay remains visible after a rule clears.</p>
+      <p>Choose <b>Automation only</b> as the target’s Display mode in Overlays to hide it while waiting. Always visible overlays remain on screen after a rule clears.</p>
       <p>Clear means no new person detections; it does not prove the scene is empty. During a broker outage, the existing clear timer still expires.</p>
-      </fieldset><div class="control-buttons"><button type="button" class="secondary automation-test">Test connection</button>
+      </fieldset><section class="mqtt-tools" aria-label="MQTT discovery and details">
+      <h3>MQTT discovery and details</h3><p>Listen using the connection fields above, even before saving a rule. Discovery does not trigger overlays. A listening session lasts five minutes.</p>
+      <details><summary>Advanced discovery settings</summary><label>Topic prefix<input class="mqtt-prefix" value="scrypted" maxlength="400" spellcheck="false"></label></details>
+      <div class="control-buttons"><button type="button" class="secondary mqtt-start">Discover topics / Start listening</button><button type="button" class="secondary mqtt-stop">Stop listening</button></div>
+      <p class="mqtt-status" role="status">Not listening</p>
+      <details class="mqtt-feed"><summary>Raw MQTT details</summary>
+      <p>Received messages grouped by camera and topic. These are observations, not confirmation that a rule ran. Rule activity is shown above.</p>
+      <div class="control-buttons"><button type="button" class="secondary mqtt-pause">Pause feed</button><button type="button" class="secondary mqtt-clear">Clear feed</button></div>
+      <label>Filter camera or topic<input class="mqtt-filter" type="search" placeholder="Camera name or topic"></label>
+      <div class="mqtt-messages"></div></details></section>
+      <div class="control-buttons"><button type="button" class="secondary automation-test">Test connection</button>
       <button type="button" class="secondary automation-cancel">Cancel edits</button><button type="submit">Save automation</button></div>
       <p class="automation-message" role="status"></p>`;
     rules = form.querySelector('.automation-rules'); message = form.querySelector('.automation-message'); connection = form.querySelector('.automation-connection');
-    document.querySelector('#page-system').append(form);
-    form.addEventListener('input', () => { dirty = true; }); form.addEventListener('change', () => { dirty = true; });
+    document.querySelector('#page-automation').append(form);
+    const markDirty = e => { if (!e.target.closest('.mqtt-tools')) { dirty = true; form.dataset.dirty = 'true'; } };
+    form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);
+    form.querySelector('.mqtt-start').onclick = () => diagnostics(true);
+    form.querySelector('.mqtt-stop').onclick = () => diagnostics(false);
+    form.querySelector('.mqtt-pause').onclick = e => { paused = !paused; e.target.textContent = paused ? 'Resume feed' : 'Pause feed'; if (!paused) renderFeed(); };
+    form.querySelector('.mqtt-clear').onclick = () => { clearedThrough = Math.max(clearedThrough, ...(diagnosticState?.messages || []).map(m => m.id)); form.querySelector('.mqtt-messages').replaceChildren(); };
+    form.querySelector('.mqtt-filter').oninput = () => { if (!paused) renderFeed(); };
+    form.querySelector('.mqtt-feed').ontoggle = () => { if (!paused) renderFeed(); };
     form.querySelector('.automation-add').onclick = () => { if (rules.children.length >= 32) return; addRule(); dirty = true; };
     form.querySelector('.automation-cancel').onclick = async () => { dirty = false; loaded = false; await load(); };
     form.querySelector('.automation-test').onclick = () => mutate(true);
@@ -47,10 +65,19 @@ const automationUi = (() => {
     const row = document.createElement('div'); row.className = 'automation-source automation-grid';
     const cameraLabel = document.createElement('label'); cameraLabel.textContent = 'Source camera';
     const select = optionSelect(inventory, source.cameraSlot, 'Source camera'); select.className = 'source-camera'; cameraLabel.append(select);
-    const topicLabel = document.createElement('label'); topicLabel.textContent = 'MQTT person-event topic';
-    const input = document.createElement('input'); input.className = 'source-topic'; input.required = true; input.maxLength = 512; input.placeholder = 'scrypted/<device-id>/ObjectDetector'; input.value = source.topic || ''; input.spellcheck = false; topicLabel.append(input);
+    const cameraColumn = document.createElement('div'); cameraColumn.append(cameraLabel);
+    addCameraPreview(select, cameraColumn);
+    const topicLabel = document.createElement('div'); topicLabel.className = 'source-event';
+    const chooserLabel = document.createElement('label'); chooserLabel.textContent = 'Detected camera / event topic';
+    const chooser = document.createElement('select'); chooser.className = 'source-discovered'; chooserLabel.append(chooser); topicLabel.append(chooserLabel);
+    const advanced = document.createElement('details'); advanced.innerHTML = '<summary>Advanced: exact MQTT topic</summary>';
+    const manualLabel = document.createElement('label'); manualLabel.textContent = 'MQTT person-event topic';
+    const input = document.createElement('input'); input.className = 'source-topic'; input.required = true; input.maxLength = 512; input.placeholder = 'scrypted/<device-id>/ObjectDetector'; input.value = source.topic || ''; input.spellcheck = false; manualLabel.append(input); advanced.append(manualLabel); topicLabel.append(advanced);
+    chooser.onchange = () => { input.value = chooser.value; advanced.open = !chooser.value; if (!chooser.value) input.focus(); dirty = true; };
+    input.oninput = () => updateSourceChoices(row, false);
+    select.onchange = () => { input.value = ''; updateSourceChoices(row, true); };
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Remove source'; remove.onclick = () => { row.remove(); dirty = true; };
-    row.append(cameraLabel, topicLabel, remove); container.append(row);
+    row.append(cameraColumn, topicLabel, remove); container.append(row); updateSourceChoices(row, true);
   }
   function addRule(rule = {id: uuid(), name: 'Person overlay', enabled: true, clearMinutes: 2, sources: []}) {
     const card = document.createElement('fieldset'); card.className = 'automation-rule'; card.dataset.id = rule.id;
@@ -84,7 +111,8 @@ const automationUi = (() => {
     f.enabled.checked = settings.enabled; f.host.value = settings.host; f.port.value = settings.port;
     f.tls.value = String(settings.tls); f.authenticate.value = String(settings.authenticate); f.username.value = settings.username; f.clientId.value = settings.clientId;
     f.password.value = ''; f.password.placeholder = data.hasPassword ? 'Saved — leave blank to keep' : 'Not set'; f.clearPassword.checked = false;
-    rules.replaceChildren(); settings.rules.forEach(addRule); dirty = false; loaded = true;
+    savedRules = settings.rules;
+    rules.replaceChildren(); settings.rules.forEach(addRule); dirty = false; form.dataset.dirty = 'false'; loaded = true; refreshOverlayLinks();
   }
   async function load(config) {
     try {
@@ -95,8 +123,11 @@ const automationUi = (() => {
     } catch (e) { message.textContent = e.message; }
   }
   async function mutate(test) {
-    if (busy || !form.reportValidity()) return;
-    busy = true; const request = draft();
+    if (busy) return;
+    for (const input of form.querySelectorAll('.source-topic')) if (!input.value.trim()) input.closest('details').open = true;
+    // Testing a connection must also work while a new rule is incomplete.
+    if (!test && !form.reportValidity()) return;
+    busy = true; const request = draft(); if (test) request.settings.rules = [];
     for (const button of form.querySelectorAll('button')) button.disabled = true;
     for (const fieldset of form.querySelectorAll(':scope > fieldset')) fieldset.disabled = true;
     message.textContent = test ? 'Testing from Controller…' : 'Saving…';
@@ -114,10 +145,123 @@ const automationUi = (() => {
       connection.textContent = `${status.connection} · ${status.lastResult}${status.lastPerson ? ' · Last person: ' + new Date(status.lastPerson).toLocaleTimeString() : ''}`;
       for (const card of rules.children) {
         const state = status.rules.find(r => r.id === card.dataset.id), remaining = state?.expiresAt ? Math.max(0, Math.ceil((new Date(state.expiresAt) - Date.now()) / 1000)) : 0;
-        card.querySelector('.rule-status').textContent = status.connection === 'Disabled' ? 'Automation disabled' : !state ? 'Not saved' : !state.enabled ? 'Disabled' : remaining ? `Detection active · clear in ${remaining}s` : 'Waiting for person';
+        const target = overlays.find(o => o.slot === Number(card.querySelector('.rule-overlay').value));
+        card.querySelector('.rule-status').textContent = (dirty ? 'Unsaved changes · ' : '') + (status.connection === 'Disabled' ? 'Automation disabled' : !state ? 'Not saved' : !state.enabled ? 'Disabled' : remaining ? `Detection active · clear in ${remaining}s` : 'Waiting for person') + (target?.enabled ? ' · Target is Always visible; choose Automation only in Overlays to hide it while waiting.' : '');
       }
+      if (!document.querySelector('#page-automation').hidden) await refreshDiagnostics();
     } catch { connection.textContent = 'Controller unavailable'; }
     finally { refreshing = false; }
   }
-  return {init, load, refresh};
+  function updateSourceChoices(row, suggest) {
+    const input = row.querySelector('.source-topic'), chooser = row.querySelector('.source-discovered');
+    const slot = Number(row.querySelector('.source-camera').value), camera = inventory.find(c => c.slot === slot);
+    if (suggest && !input.value && camera) {
+      const known = [...new Set(savedRules.flatMap(r => r.sources).filter(s => s.cameraSlot === slot).map(s => s.topic))];
+      const matches = discovered.filter(t => t.cameraName?.toLowerCase() === camera.name.toLowerCase());
+      if (known.length === 1 || matches.length === 1) { input.value = known.length === 1 ? known[0] : matches[0].topic; dirty = true; form.dataset.dirty = 'true'; }
+    }
+    const choices = discovered.map(t => ({value: t.topic, label: `${t.cameraName || 'Camera name unavailable'} · ${t.topic}${t.personSeen ? ' · Person observed' : ''}`}));
+    if (input.value && !choices.some(c => c.value === input.value)) choices.unshift({value:input.value, label:'Configured topic · ' + input.value});
+    const signature = JSON.stringify(choices);
+    if (chooser.dataset.choices !== signature) {
+      chooser.replaceChildren(new Option('Choose a discovered topic, or enter one under Advanced', ''));
+      for (const choice of choices) chooser.add(new Option(choice.label, choice.value));
+      chooser.dataset.choices = signature;
+    }
+    chooser.value = input.value;
+  }
+  function addCameraPreview(select, column) {
+    const preview = document.createElement('div'); preview.className = 'automation-camera-preview';
+    const image = document.createElement('img'); image.width = 160; image.height = 90;
+    const caption = document.createElement('small'); caption.textContent = 'Latest snapshot';
+    const refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'secondary'; refresh.textContent = 'Refresh snapshot';
+    preview.append(image, caption, refresh); column.append(preview);
+    let generation = 0;
+    function show() {
+      generation++; preview.hidden = !select.value; image.hidden = true; caption.textContent = 'Loading snapshot…';
+      if (!select.value) { image.removeAttribute('src'); return; }
+      const name = inventory.find(c => c.slot === Number(select.value))?.name || 'Selected camera';
+      image.alt = name + ' latest snapshot'; refresh.setAttribute('aria-label', 'Refresh snapshot for ' + name);
+      image.onload = () => { image.hidden = false; caption.textContent = 'Latest snapshot · not live video'; };
+      image.onerror = () => { image.hidden = true; caption.textContent = 'Snapshot unavailable'; };
+      image.src = `/api/cameras/${Number(select.value)}/thumbnail?v=${Date.now()}`;
+    }
+    refresh.onclick = async () => {
+      const current = generation, slot = Number(select.value); refresh.disabled = true;
+      try { await api(`/api/cameras/${slot}/thumbnail/refresh`, {method:'POST'}); if (current === generation) show(); }
+      catch(e) { if (current === generation) caption.textContent = e.message; }
+      finally { refresh.disabled = false; }
+    };
+    select.addEventListener('change', show); show();
+  }
+  async function diagnostics(start) {
+    if (diagnosticBusy) return; diagnosticBusy = true;
+    const status = form.querySelector('.mqtt-status'); status.textContent = start ? 'Starting discovery…' : 'Stopping…';
+    try {
+      const request = draft(); request.settings.rules = []; request.settings.enabled = false;
+      diagnosticState = await api('/api/automation/diagnostics/' + (start ? 'start' : 'stop'), {method:'POST', body:JSON.stringify(start ? {connection:request, prefix:form.querySelector('.mqtt-prefix').value.trim()} : {})});
+      if (start) { discovered = []; clearedThrough = 0; paused = false; form.querySelector('.mqtt-pause').textContent = 'Pause feed'; }
+      applyDiagnostics();
+    } catch(e) { status.textContent = e.message; }
+    finally { diagnosticBusy = false; }
+  }
+  async function refreshDiagnostics() {
+    if (diagnosticBusy) return;
+    diagnosticState = await api('/api/automation/diagnostics'); applyDiagnostics();
+  }
+  function applyDiagnostics() {
+    discovered = diagnosticState.topics || [];
+    form.querySelector('.mqtt-status').textContent = `${diagnosticState.connection} · ${discovered.length} object-event topics observed${diagnosticState.until ? ' · Session ends ' + new Date(diagnosticState.until).toLocaleTimeString() : ''}. If none appear, trigger camera activity and check that its MQTT extension is enabled.`;
+    for (const row of form.querySelectorAll('.automation-source')) updateSourceChoices(row, true);
+    if (!paused) renderFeed();
+  }
+  function renderFeed() {
+    if (!form.querySelector('.mqtt-feed').open) return;
+    const container = form.querySelector('.mqtt-messages'), filter = form.querySelector('.mqtt-filter').value.toLowerCase();
+    const open = new Set([...container.querySelectorAll('details[open]')].map(d => d.dataset.key));
+    const groups = new Map();
+    for (const entry of [...(diagnosticState?.messages || [])].reverse()) {
+      if (entry.id <= clearedThrough) continue;
+      const base = entry.topic.slice(0, entry.topic.lastIndexOf('/'));
+      const name = discovered.find(t => t.topic === base + '/ObjectDetector')?.cameraName || inventory.find(c => savedRules.some(r => r.sources.some(s => s.cameraSlot === c.slot && s.topic === base + '/ObjectDetector')))?.name || base;
+      if (!`${name} ${entry.topic}`.toLowerCase().includes(filter)) continue;
+      const key = `${name} · ${entry.topic}`;
+      if (!groups.has(key)) groups.set(key, []); groups.get(key).push(entry);
+    }
+    container.replaceChildren();
+    if (!groups.size) { container.textContent = 'No received messages match. Start listening and trigger camera activity.'; return; }
+    for (const [key, entries] of groups) {
+      const category = document.createElement('details'); category.dataset.key = key; category.open = open.has(key);
+      const title = document.createElement('summary'); title.textContent = `${key} (${entries.length})`; category.append(title);
+      for (const entry of entries) {
+        const row = document.createElement('details'); row.dataset.key = String(entry.id); row.open = open.has(String(entry.id));
+        const heading = document.createElement('summary'); heading.textContent = `${new Date(entry.received).toLocaleTimeString()} · Retained: ${entry.retained ? 'yes — not a live trigger' : 'no'} · QoS ${entry.qos}${entry.truncated ? ' · Payload truncated to 8 KB' : ''}`;
+        const pre = document.createElement('pre'); try { pre.textContent = JSON.stringify(JSON.parse(entry.payload), null, 2); } catch { pre.textContent = entry.payload; }
+        row.append(heading, pre); category.append(row);
+      }
+      container.append(category);
+    }
+  }
+  function decorateOverlay(overlayForm) {
+    const info = document.createElement('div'); info.className = 'overlay-automation-info';
+    info.innerHTML = '<p class="overlay-mode-help"></p><p class="overlay-rule-links"></p><button type="button" class="secondary">Open Automation</button>';
+    overlayForm.querySelector('.card-head').after(info);
+    info.querySelector('button').onclick = () => adminLayout.select('automation');
+    overlayForm.addEventListener('change', () => refreshOverlayLinks());
+    overlayForm.addEventListener('input', () => refreshOverlayLinks()); refreshOverlayLinks();
+  }
+  function refreshOverlayLinks() {
+    for (const info of document.querySelectorAll('.overlay-automation-info')) {
+      const overlayForm = info.closest('form'), slot = Number(overlayForm.dataset.slot);
+      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: hidden while waiting; appears when a rule detects a person. Save overlay to apply this mode.' : 'Always visible: stays on screen even when automation is idle.';
+      const linked = savedRules.filter(r => r.overlaySlot === slot);
+      info.querySelector('.overlay-rule-links').textContent = linked.length ? 'Linked rules: ' + linked.map(r => r.name + (r.enabled ? '' : ' (disabled)')).join(', ') : 'No automation rules assigned';
+    }
+  }
+  function updateOverlay(camera) {
+    overlays = overlays.filter(c => c.slot !== camera.slot); if (camera.rtspUrl) overlays.push(camera);
+    inventory = inventory.filter(c => c.slot !== camera.slot); if (camera.rtspUrl) inventory.push(camera);
+    refreshOverlayLinks(); refresh();
+  }
+  return {init, load, refresh, decorateOverlay, updateOverlay, refreshOverlayLinks};
 })();

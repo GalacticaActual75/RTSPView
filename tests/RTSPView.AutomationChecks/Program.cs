@@ -114,7 +114,27 @@ await Publish(rule.Sources[1].Topic, DateTimeOffset.UtcNow);
 await Until(() => commands.Last().Automation?.Leases.Length == 1, "Fresh post-reconnect event failed");
 await service.SaveAsync(new(connection with { Enabled = false }, null), CancellationToken.None);
 await Until(() => service.Status.Connection == "Disabled" && commands.Last().Automation?.Leases.Length == 0, "Disable did not clear viewer leases");
+var countBeforeDiscovery = commands.Count;
+await broker.InjectApplicationMessage(new InjectedMqttApplicationMessage(new MqttApplicationMessageBuilder()
+    .WithTopic("homeassistant/binary_sensor/scrypted-test-44/MotionSensor/config")
+    .WithPayload("{\"state_topic\":\"scrypted/44/motionDetected\",\"dev\":{\"name\":\"Front Door\"}}")
+    .WithRetainFlag().Build()));
+await service.StartDiagnosticsAsync(new(new(connection with { Rules = [rule with { Sources = [] }] }, null)), CancellationToken.None);
+JsonElement Diagnostics() => JsonSerializer.SerializeToElement(service.Diagnostics.Snapshot());
+await Until(() => Diagnostics().GetProperty("connection").GetString() == "Listening", "Discovery never subscribed");
+await Publish(rule.Sources[0].Topic, DateTimeOffset.UtcNow);
+await Until(() => Diagnostics().GetProperty("topics").EnumerateArray().Any(t => t.GetProperty("Topic").GetString() == rule.Sources[0].Topic && t.GetProperty("CameraName").GetString() == "Front Door" && t.GetProperty("PersonSeen").GetBoolean()), "Observed person topic was not associated with Scrypted camera metadata");
+Check(commands.Count == countBeforeDiscovery, "Discovery activated the viewer while automation disabled");
+Check(!Diagnostics().GetRawText().Contains("test-secret"), "Discovery exposed connection credentials");
+for (var i = 0; i < 205; i++) await broker.InjectApplicationMessage(new InjectedMqttApplicationMessage(new MqttApplicationMessageBuilder()
+    .WithTopic("scrypted/44/test").WithPayload(i == 204 ? new string('x', 9000) : i.ToString()).Build()));
+await Until(() => Diagnostics().GetProperty("messages").EnumerateArray().Any(m => m.GetProperty("Truncated").GetBoolean()), "Oversized raw payload was not bounded");
+Check(Diagnostics().GetProperty("messages").GetArrayLength() == 200, "Raw feed history not bounded at 200");
+await service.Diagnostics.StopAsync(CancellationToken.None);
+Check(Diagnostics().GetProperty("connection").GetString() == "Stopped", "Discovery did not stop");
+Check(Diagnostics().GetProperty("until").ValueKind == JsonValueKind.Null, "Discovery deadline not cleared");
 await service.StopAsync(CancellationToken.None);
 cancel.Cancel(); await pipeWorker; await broker.StopAsync();
 Console.WriteLine("PASS: person parsing, freshness, duplicate rejection, multi-camera OR renewal, shared overlays, manual override, expiry, validation, encrypted secrets, draft test, real MQTT → named pipe, retained state, broker outage, reconnect, and disable.");
 Console.WriteLine("Test artifacts: " + directory);
+Console.WriteLine("PASS: read-only discovery, Scrypted camera names, incomplete draft rules, person topics, credential privacy, bounded raw feed and stop.");

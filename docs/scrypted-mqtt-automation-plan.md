@@ -1,14 +1,21 @@
 # Scrypted MQTT overlay automation
 
-Implemented for beta 1.0.42-beta.1. See the README for setup and troubleshooting.
+Implemented for beta 1.0.42-beta.1, with GUI discovery and overlay display modes
+added in 1.0.42-beta.2. See the README for setup and troubleshooting.
 
 ## Behavior
 
 Each GUI rule selects one or more source cameras, their exact MQTT ObjectDetector
- topics, a target overlay, and a clear delay. A person detected on any selected
+topics, a target overlay, and a clear delay. A person detected on any selected
 source shows the overlay and renews a shared deadline. No new matching detections
 for the selected interval releases the overlay. Existing manual visibility is
 preserved, and multiple rules may share an overlay.
+
+Automation is a top-level tab. Overlays explicitly choose Always visible or
+Automation only and show linked rule names. Source rows include snapshot previews.
+An independent, read-only five-minute MQTT discovery session offers observed
+ObjectDetector topics and Scrypted-published camera names. A bounded expandable
+raw feed supports pause, clear, and filtering without modifying rule processing.
 
 The Controller owns MQTT, validation, freshness checks, and event processing.
 The Viewer owns temporary overlay leases and expiry so restoration does not

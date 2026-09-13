@@ -25,7 +25,7 @@ The dashboard starts local-only on TCP 5080. After initial setup, use **System �
 
 ## MQTT person-to-overlay automation (beta)
 
-Open **System → Automation** to configure the broker and person-detection rules.
+Open the top-level **Automation** tab to configure the broker and person-detection rules.
 The Controller maintains the MQTT connection even with the browser closed; the
 Viewer must be running to display overlays. Automation is disabled by default.
 
@@ -36,17 +36,40 @@ Viewer must be running to display overlays. Automation is disabled by default.
    settings. These are broker credentials, separate from the Scrypted web login.
    TLS validates the host certificate using Windows trust. Each Controller needs
    a unique **Client ID** under Advanced connection settings.
-3. Configure the target overlay's stream and appearance in **Overlays**. Leave its
-   stream disabled if it should appear only during automation. An overlay that is
-   already enabled remains visible when automation clears.
+3. Configure the target overlay's stream and appearance in **Overlays**. Choose
+   **Display mode → Automation only**, then **Save overlay**. This hides an already
+   visible overlay while waiting for a trigger. **Always visible** keeps it visible
+   when automation clears. Linked rule names and an **Open Automation** button are
+   shown beneath the display mode. Existing enabled overlays stay Always visible
+   after upgrading; previously disabled overlays are shown as Automation only.
 4. Select **Add rule**. Choose the target overlay, then add one or more source
-   cameras. Enter each camera's exact MQTT topic, normally
+   cameras. Click **Discover topics / Start listening** and trigger camera activity.
+   Choose the observed camera/topic from the dropdown; a unique matching camera
+   name or an existing saved mapping can fill it automatically. Verify the selected
+   source using its small snapshot preview and **Refresh snapshot** button.
+   If discovery cannot identify a name, inspect the raw feed while triggering one
+   camera at a time. Manual topic entry remains under **Advanced**, normally
    `scrypted/<scrypted-device-id>/ObjectDetector`. Scrypted IDs are not RTSPView
    stream slots. An example event is
    `{"timestamp":1789318449255,"detections":[{"className":"person","score":0.827}]}`.
 5. Set **Clear delay (minutes)**, enable the rule, and use **Test connection**.
-   Testing checks the draft connection and enabled subscriptions without saving
+   Testing checks the draft broker connection without saving
    or activating actions. Turn on **Enable automation**, then **Save automation**.
+
+**Raw MQTT details** expands a feed grouped by camera and topic, showing received
+time, payload, retained flag, and delivered QoS. Use Pause/Resume, Clear, and the
+camera/topic filter to inspect it. Discovery is a separate read-only connection
+using the fields currently in the GUI; it never sends messages to the broker or
+feeds the rule engine. It stops after five minutes (or **Stop listening**), even if
+the browser closes. Normal automation continues independently. At most 200 messages
+and 256 observed object topics are kept in memory, with raw payloads limited to
+8 KB each; larger payloads are labeled truncated. Clear hides the current feed in
+this browser without changing rule state. Camera names are read from Scrypted's
+own MQTT metadata (including its retained `homeassistant/+/+/+/config` topic format);
+this does not contact or require Home Assistant. Discovery defaults to `scrypted/#`;
+set **Advanced discovery settings → Topic prefix** for a custom publish path. Broker
+permissions must allow these read-only subscriptions. Only observed ObjectDetector
+topics are offered; seeing a topic does not guarantee person detection is configured.
 
 Person detection on **any source camera** shows the selected overlay and renews
 one shared clear timer. Fresh frames of the same person keep it visible. Empty,
@@ -55,7 +78,7 @@ no new matching detections for the configured interval, not proof of an empty
 scene. Multiple rules can share an overlay; it stays until all requests expire.
 Different overlays can be active simultaneously. Saved layouts are not changed.
 
-Manual focus takes priority. Double-click a temporary, otherwise-disabled overlay
+Manual focus takes priority. Double-click a temporary, automation-only overlay
 to dismiss the current detection episode; fresh detections in that same episode
 do not undo the dismissal. New episodes can activate it after the clear interval.
 Hidden/minimized viewers are not brought forward. An overlay's configured host

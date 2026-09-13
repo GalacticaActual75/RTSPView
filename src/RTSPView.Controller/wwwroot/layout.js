@@ -12,7 +12,7 @@ const adminLayout = (() => {
     banner.remove();
     document.querySelector('header .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
-    for (const [id, title] of Object.entries({overview:'Overview', cameras:'Streams', layouts:'Layouts',overlays:'Overlays', system:'System'})) {
+    for (const [id, title] of Object.entries({overview:'Overview', cameras:'Streams', layouts:'Layouts',overlays:'Overlays', automation:'Automation', system:'System'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
       button.dataset.page = id; button.onclick = () => select(id); nav.append(button);
       const page = document.createElement('section'); page.id = 'page-' + id; page.className = 'admin-page'; page.setAttribute('aria-label', title);
@@ -90,7 +90,7 @@ const adminLayout = (() => {
       button.setAttribute('aria-current', button.dataset.page === id ? 'page' : 'false');
     }
     if (id === 'overview' || id === 'cameras') pages[id].append(document.querySelector('#cameras'));
-    document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Streams',layouts:'Layouts',overlays:'Overlays',system:'System'}[id];
+    document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Streams',layouts:'Layouts',overlays:'Overlays',automation:'Automation',system:'System'}[id];
     adminUi.page(id);
     window.dispatchEvent(new Event('resize'));
     window.scrollTo({top:0, behavior:'instant'});
@@ -130,7 +130,7 @@ const adminLayout = (() => {
     }
   }
   function card(form, overlayMode) {
-    form.querySelector('.switch input').setAttribute('aria-label', 'Enable ' + form.elements.name.value);
+    form.querySelector('.switch input')?.setAttribute('aria-label', 'Enable ' + form.elements.name.value);
     const settings = form.querySelector('.camera-settings');
     if (!overlayMode) {
       const open = document.createElement('button'); open.type = 'button'; open.className = 'overview-open';
@@ -214,5 +214,5 @@ const adminLayout = (() => {
     return grid;
   }
   function clearExtraOverlays(){for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))if(!['doorbell','garage'].includes(grid.id))grid.remove();for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))if(!['doorbell','garage'].includes(button.dataset.overlayTarget))button.remove();selectOverlay('doorbell')}
-  return {init, metrics, card, release, overlayGrid, selectOverlay, clearExtraOverlays};
+  return {init, metrics, card, release, overlayGrid, selectOverlay, clearExtraOverlays, select};
 })();

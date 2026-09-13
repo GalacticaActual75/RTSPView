@@ -6,7 +6,8 @@ const adminUi = (() => {
     cameras: 'Configure streams, connection settings, and recovery.',
     layouts: 'Arrange streams in a saved layout, then apply it to the wall.',
     overlays: 'Position, shape, and frame picture-in-picture streams. Save to apply changes to the wall.',
-    system: 'Configure RTSPView settings, networking, display behavior, updates, and backups.'
+    system: 'Configure RTSPView settings, networking, display behavior, updates, and backups.',
+    automation: 'Connect camera events to overlay actions, discover MQTT topics, and inspect incoming messages.'
   };
   function init() {
     const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=maintenance2'; document.head.append(css);
