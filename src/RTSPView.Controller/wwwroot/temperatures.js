@@ -9,7 +9,13 @@ const temperatureUi = (() => {
         <p>Turn this off to hide all temperature warnings. Current readings and saved limits remain available.</p>
         <div class="temperature-grid">${['cpu','gpu'].map(kind=>`<section class="temperature-device" aria-label="${kind.toUpperCase()} temperature settings"><h3>${kind.toUpperCase()}</h3><p class="temperature-reading" data-temperature="${kind}">Unavailable</p><label class="toggle-control"><input name="${kind}WarningEnabled" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span>Warn for ${kind.toUpperCase()}</label><label>Maximum ${kind.toUpperCase()} temperature (°C)<input name="${kind}MaxC" type="number" min="1" max="150" step="0.1" value="${kind==='cpu'?90:85}" required></label></section>`).join('')}</div>
         <div class="actions"><span class="temperature-message" role="status"></span><button>Save temperature settings</button></div>
-      </fieldset><p class="information-note">Shows the hottest reported temperature for each device type, including GPU hotspots or memory sensors when exposed. Choose limits appropriate for your hardware. Missing sensors show Unavailable and cannot trigger a warning. Some CPU sensors require administrator access and the PawnIO driver used by LibreHardwareMonitor. RTSPView does not install drivers or change Windows security settings. These settings apply only to this host.</p>`;
+      </fieldset><p class="information-note">Shows the hottest reported temperature for each device type, including GPU hotspots or memory sensors when exposed. Choose limits appropriate for your hardware. Missing sensors show Unavailable and cannot trigger a warning. These settings apply only to this host.</p>
+      <section aria-labelledby="temperature-dependencies-title">
+        <h3 id="temperature-dependencies-title">Sensor requirements</h3>
+        <p>CPU temperature readings may require the PawnIO driver and administrator access. If PawnIO is missing, install its official signed edition on the computer running RTSPView, then fully restart the RTSPView Controller.</p>
+        <p><a href="https://pawnio.eu/" target="_blank" rel="noopener noreferrer">Download PawnIO (official site, opens in a new tab)</a></p>
+        <p>LibreHardwareMonitor is included with RTSPView; no separate download is needed. RTSPView does not install drivers or change Windows security settings.</p>
+      </section>`;
     document.querySelector('#displayForm').after(form);
     form.addEventListener('change',()=>message('Unsaved changes.'));
     form.onsubmit=async event=>{

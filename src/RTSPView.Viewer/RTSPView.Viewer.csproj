@@ -12,6 +12,7 @@
     <ApplicationIcon>Assets\RTSPView.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets\RTSPView.ico" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
     <ProjectReference Include="..\RTSPView.Core\RTSPView.Core.csproj" />
