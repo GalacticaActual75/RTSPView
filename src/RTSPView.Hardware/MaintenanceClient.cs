@@ -26,6 +26,7 @@ public sealed class MaintenanceClient(string helperPath)
         var response = new StringBuilder(); var character = new char[1];
         while (await reader.ReadAsync(character.AsMemory(), token) != 0 && character[0] != '\n')
         { if (response.Length >= 16384) throw new InvalidDataException("Maintenance response too large."); response.Append(character[0]); }
+        if (response.Length == 0) throw new IOException("The maintenance service closed the connection without replying. Check that the helper was updated with the Controller.");
         return JsonSerializer.Deserialize<MaintenanceStatus>(response.ToString()) ?? throw new InvalidDataException("Missing maintenance response.");
     }
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint processId);

@@ -1,5 +1,22 @@
 /* Move existing controls intact: changing tabs never saves or resets a form. */
 const systemTabs = (() => {
+  function addHelp(card, selector, label) {
+    if (!card) return;
+    const notes = [...card.querySelectorAll(selector)].filter(node => !node.matches('[role="status"]'));
+    if (!notes.length) return;
+    const heading = card.querySelector('h2,h3');
+    if (!heading) return;
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'settings-info';
+    button.textContent = 'i'; button.setAttribute('aria-label', 'About ' + label); button.setAttribute('aria-expanded', 'false');
+    const content = document.createElement('div'); content.className = 'settings-help'; content.hidden = true;
+    content.id = 'settings-help-' + label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    button.setAttribute('aria-controls', content.id);
+    content.append(...notes); heading.append(button); heading.after(content);
+    const close = () => { content.hidden = true; button.setAttribute('aria-expanded', 'false'); };
+    button.onclick = () => { content.hidden = !content.hidden; button.setAttribute('aria-expanded', String(!content.hidden)); };
+    content.onkeydown = event => { if (event.key === 'Escape') { close(); button.focus(); event.stopPropagation(); } };
+    button.onkeydown = event => { if (event.key === 'Escape') { close(); event.stopPropagation(); } };
+  }
   function init() {
     const page = document.querySelector('#page-system');
     const groups = [
@@ -37,6 +54,15 @@ const systemTabs = (() => {
       };
     }
     page.prepend(tablist); page.append(...panels); select(0);
+    for (const [selector, notes, label] of [
+      ['#displayForm', ':scope > p, :scope > .information-note', 'viewer behavior'],
+      ['#snapshotForm', ':scope > p:not([id])', 'browser snapshots'],
+      ['#temperatureForm', ':scope > p, :scope > fieldset > p', 'temperature monitoring'],
+      ['#temperatureForm section[aria-labelledby="temperature-dependencies-title"]', ':scope > p:not(:has(a)), .dependency-controls > p:not([role])', 'sensor requirements'],
+      ['#passwordForm', ':scope > div:first-child > p', 'administrator password'],
+      ['#restartScheduleForm', ':scope > p', 'scheduled restarts'],
+      ['#updatePanel', '.update-notifications > p:not([role])', 'update notifications']
+    ]) addHelp(page.querySelector(selector), notes, label);
   }
   return {init};
 })();

@@ -53,3 +53,22 @@ await writer.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(new Mainte
 var response = await reader.ReadLineAsync(timeout.Token);
 Check(response is not null && System.Text.Json.JsonSerializer.Deserialize<MaintenanceStatus>(response)!.Available, "authenticated status request reaches actual service handler");
 await handling;
+
+foreach (var rejected in new[] { "account", "json", "command" })
+{
+    var name = "RTSPView-rejected-" + Guid.NewGuid();
+    using var server = System.IO.Pipes.NamedPipeServerStreamAcl.Create(name, System.IO.Pipes.PipeDirection.InOut, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous, 4096, 4096, security);
+    typeof(MaintenanceService).GetField("_allowedSid", fields)!.SetValue(service, rejected == "account" ? "S-1-5-18" : System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value);
+    using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+    var connected = server.WaitForConnectionAsync(deadline.Token);
+    using var peer = new System.IO.Pipes.NamedPipeClientStream(".", name, System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous, System.Security.Principal.TokenImpersonationLevel.Identification);
+    await peer.ConnectAsync(deadline.Token); await connected;
+    var task = (Task)typeof(MaintenanceService).GetMethod("HandleAsync", fields)!.Invoke(service, new object[] { server })!;
+    using var send = new StreamWriter(peer, leaveOpen: true) { AutoFlush = true };
+    using var receive = new StreamReader(peer, leaveOpen: true);
+    await send.WriteLineAsync(rejected == "json" ? "not-json" : System.Text.Json.JsonSerializer.Serialize(new MaintenanceRequest(rejected == "command" ? "execute" : "status")));
+    var reply = await receive.ReadLineAsync(deadline.Token);
+    var rejectedStatus = System.Text.Json.JsonSerializer.Deserialize<MaintenanceStatus>(reply ?? "")!;
+    Check(!rejectedStatus.Available && rejectedStatus.State == "failed" && !string.IsNullOrWhiteSpace(rejectedStatus.Message) && rejectedStatus.Temperatures is null, rejected + " rejection returns a clear response without sensor data");
+    await task;
+}

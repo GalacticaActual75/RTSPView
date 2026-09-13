@@ -155,8 +155,12 @@ public sealed class MaintenanceService : ServiceBase
                 while (await reader.ReadAsync(character.AsMemory(), timeout.Token) != 0 && character[0] != '\n')
                 { if (text.Length >= 1024) throw new InvalidDataException("Request too long."); text.Append(character[0]); }
                 string? sid = null;
-                pipe.RunAsClient(() => sid = WindowsIdentity.GetCurrent().User?.Value);
-                if (sid != _allowedSid) throw new UnauthorizedAccessException();
+                pipe.RunAsClient(() =>
+                {
+                    using var identity = WindowsIdentity.GetCurrent(true);
+                    sid = identity?.User?.Value;
+                });
+                if (sid != _allowedSid) throw new UnauthorizedAccessException("The connecting Windows account does not match the account authorized during helper setup. Enable the helper from the Controller's Windows account.");
                 var request = JsonSerializer.Deserialize<MaintenanceRequest>(text.ToString()) ?? throw new InvalidDataException();
                 var status = await _engine!.HandleAsync(request);
                 var sample = Volatile.Read(ref _temperatures);
@@ -165,7 +169,20 @@ public sealed class MaintenanceService : ServiceBase
                 using var writeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 await writer.WriteLineAsync(JsonSerializer.Serialize(status).AsMemory(), writeTimeout.Token);
             }
-            catch (Exception error) when (error is IOException or OperationCanceledException or JsonException or ArgumentException or UnauthorizedAccessException) { }
+            catch (Exception error) when (error is IOException or OperationCanceledException or JsonException or ArgumentException or UnauthorizedAccessException)
+            {
+                // Never turn a rejected request into an empty JSON response. No privileged
+                // action is performed here, and unauthorized clients receive no sensor data.
+                var message = error is OperationCanceledException ? "The helper timed out while reading the Controller request."
+                    : "The helper rejected the request: " + error.Message;
+                try
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(new MaintenanceStatus { State = "failed", Message = message }).AsMemory(), timeout.Token);
+                }
+                catch (Exception replyError) when (replyError is IOException or OperationCanceledException or ObjectDisposedException) { }
+            }
         }
     }
     protected override void OnStop()
