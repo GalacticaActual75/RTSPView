@@ -24,10 +24,37 @@ internal static class UpdateBadgeChecks
             var text = ((StackPanel)panel.Child).Children.OfType<TextBlock>().Last();
             if (((SolidColorBrush)panel.Background).Color.A < 210 || !text.Text.Contains("GPU") || text.FontSize < 24) throw new Exception("Thermal warning readability");
             Capture(panel, "temperature-warning.png");
+            thermal.PlaceWithin(new Point(-20000, -20000), new Size(1200, 800));
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            if (Math.Abs(thermal.Left + thermal.ActualWidth / 2 - (-19400)) > 1 ||
+                Math.Abs(thermal.Top + thermal.ActualHeight / 2 - (-19600)) > 1)
+                throw new Exception("Temperature warning is not centered");
+            var initialColor = ((SolidColorBrush)panel.Background).Color;
+            var flashed = false;
+            for (var frame = 0; frame < 12; frame++)
+            {
+                await Task.Delay(100);
+                if (((SolidColorBrush)panel.Background).Color != initialColor) { flashed = true; break; }
+            }
+            if (!flashed) throw new Exception("Temperature warning did not visibly flash");
+            using (var layers = new TestOverlayLayers(owner))
+            {
+                var raise = typeof(MainWindow).GetMethod("RaiseWindow", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+                raise.Invoke(null, [layers.Video]); raise.Invoke(null, [layers.Status]); raise.Invoke(null, [thermal]);
+                var warningHandle = new System.Windows.Interop.WindowInteropHelper(thermal).Handle;
+                foreach (var layer in new[] { layers.Video, layers.Status })
+                {
+                    var current = new System.Windows.Interop.WindowInteropHelper(layer).Handle;
+                    var above = false;
+                    for (var count = 0; count < 1000 && current != IntPtr.Zero; count++)
+                    { current = GetWindow(current, 3); if (current == warningHandle) { above = true; break; } }
+                    if (!above) throw new Exception("Temperature warning remained below an overlay window");
+                }
+            }
             if (thermal.SetStatus(status with { Settings = status.Settings with { ShowWarnings = false } }, now) || thermal.IsVisible)
                 throw new Exception("Master temperature toggle did not hide warning");
             if (thermal.SetStatus(status, now.AddSeconds(21))) throw new Exception("Stale temperature warning remained");
-            Console.WriteLine("PASS smoked temperature warning, master off and stale reading dismissal.");
+            Console.WriteLine("PASS centered, visibly flashing temperature warning, master off and stale reading dismissal.");
         }
         finally { thermal.Close(); }
         // Render the shipped bottom bar without wiring any real browser/stream actions.
@@ -97,5 +124,21 @@ internal static class UpdateBadgeChecks
         bitmap.Render(drawing);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));
         var directory=Path.Combine(Directory.GetCurrentDirectory(),"artifacts","ui-qa");Directory.CreateDirectory(directory);
         using var file=File.Create(Path.Combine(directory,name));encoder.Save(file);
+    }
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr window, uint command);
+
+    private sealed class TestOverlayLayers : IDisposable
+    {
+        public Window Video { get; }
+        public Window Status { get; }
+        public TestOverlayLayers(Window owner)
+        {
+            Video = new Window { Owner = owner, Left = -20000, Top = -20000, Width = 500, Height = 200, ShowActivated = false, ShowInTaskbar = false };
+            Video.Show();
+            Status = new Window { Owner = Video, Left = -20000, Top = -20000, Width = 500, Height = 100, ShowActivated = false, ShowInTaskbar = false };
+            Status.Show();
+        }
+        public void Dispose() { Status.Close(); Video.Close(); }
     }
 }

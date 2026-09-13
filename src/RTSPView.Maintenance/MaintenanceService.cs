@@ -154,13 +154,7 @@ public sealed class MaintenanceService : ServiceBase
                 var text = new System.Text.StringBuilder(); var character = new char[1];
                 while (await reader.ReadAsync(character.AsMemory(), timeout.Token) != 0 && character[0] != '\n')
                 { if (text.Length >= 1024) throw new InvalidDataException("Request too long."); text.Append(character[0]); }
-                string? sid = null;
-                pipe.RunAsClient(() =>
-                {
-                    using var identity = WindowsIdentity.GetCurrent(true);
-                    sid = identity?.User?.Value;
-                });
-                if (sid != _allowedSid) throw new UnauthorizedAccessException("The connecting Windows account does not match the account authorized during helper setup. Enable the helper from the Controller's Windows account.");
+                MaintenanceClientIdentity.Verify(pipe, _allowedSid);
                 var request = JsonSerializer.Deserialize<MaintenanceRequest>(text.ToString()) ?? throw new InvalidDataException();
                 var status = await _engine!.HandleAsync(request);
                 var sample = Volatile.Read(ref _temperatures);
@@ -174,7 +168,8 @@ public sealed class MaintenanceService : ServiceBase
                 // Never turn a rejected request into an empty JSON response. No privileged
                 // action is performed here, and unauthorized clients receive no sensor data.
                 var message = error is OperationCanceledException ? "The helper timed out while reading the Controller request."
-                    : "The helper rejected the request: " + error.Message;
+                    : $"The helper rejected the request ({error.GetType().Name}, 0x{error.HResult:X8}): " +
+                        (string.IsNullOrWhiteSpace(error.Message) ? "Windows supplied no error description." : error.Message);
                 try
                 {
                     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));

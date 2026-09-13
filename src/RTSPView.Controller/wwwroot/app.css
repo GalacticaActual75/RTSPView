@@ -7,3 +7,9 @@
 #page-system .settings-help{max-width:76ch;margin:10px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:#0e1620;overflow-wrap:anywhere}
 #page-system .settings-help[hidden]{display:none}
 #page-system .settings-help p:last-child{margin-bottom:0}
+
+/* Simple toggle rows: descriptions appear only in their individual tooltips. */
+#page-system .viewer-setting{position:relative;display:flex;align-items:center;gap:6px;min-width:0;padding:8px 0}
+#page-system .viewer-setting .toggle-control{flex:1;align-items:center;min-height:0;padding:0;background:transparent;border:0;border-radius:0}
+#page-system .viewer-setting .settings-info{flex-shrink:0;margin-left:0;width:24px;height:24px;min-width:24px;min-height:24px}
+#page-system .setting-tooltip{position:absolute;z-index:20;top:100%;left:0;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:#0b1119;color:var(--text);font-size:12px;font-weight:400;line-height:1.5;overflow-wrap:anywhere}

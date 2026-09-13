@@ -1,6 +1,20 @@
 using RTSPView.Core;
 using RTSPView.Maintenance;
 
+if (args.Length == 2 && args[0] == "--pipe-probe")
+{
+    using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+    using var peer = new System.IO.Pipes.NamedPipeClientStream(".", args[1], System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous, System.Security.Principal.TokenImpersonationLevel.None);
+    await peer.ConnectAsync(limit.Token);
+    using var send = new StreamWriter(peer, leaveOpen: true) { AutoFlush = true };
+    using var receive = new StreamReader(peer, leaveOpen: true);
+    await send.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(new MaintenanceRequest("status")));
+    var reply = await receive.ReadLineAsync(limit.Token);
+    if (System.Text.Json.JsonSerializer.Deserialize<MaintenanceStatus>(reply ?? "")?.Available != true)
+        throw new Exception("Separate process could not get helper status: " + reply);
+    return;
+}
+
 static void Check(bool value, string message) { if (!value) throw new Exception(message); Console.WriteLine("PASS " + message); }
 static async Task Reject(Func<Task> action) { try { await action(); } catch (ArgumentException) { return; } throw new Exception("Unsafe request accepted"); }
 var installed = false; var installs = 0; var states = new List<MaintenanceStatus>();
@@ -72,3 +86,15 @@ foreach (var rejected in new[] { "account", "json", "command" })
     Check(!rejectedStatus.Available && rejectedStatus.State == "failed" && !string.IsNullOrWhiteSpace(rejectedStatus.Message) && rejectedStatus.Temperatures is null, rejected + " rejection returns a clear response without sensor data");
     await task;
 }
+
+var childPipeName = "RTSPView-process-" + Guid.NewGuid();
+using var childPipe = System.IO.Pipes.NamedPipeServerStreamAcl.Create(childPipeName, System.IO.Pipes.PipeDirection.InOut, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous, 4096, 4096, security);
+using var childLimit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+var childConnected = childPipe.WaitForConnectionAsync(childLimit.Token);
+var childStart = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+childStart.ArgumentList.Add("--pipe-probe"); childStart.ArgumentList.Add(childPipeName);
+using var child = System.Diagnostics.Process.Start(childStart)!;
+await childConnected;
+await (Task)typeof(MaintenanceService).GetMethod("HandleAsync", fields)!.Invoke(service, new object[] { childPipe })!;
+await child.WaitForExitAsync(childLimit.Token);
+Check(child.ExitCode == 0, "separate Controller process authenticates without impersonation");

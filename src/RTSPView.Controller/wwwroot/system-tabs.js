@@ -1,5 +1,28 @@
 /* Move existing controls intact: changing tabs never saves or resets a form. */
 const systemTabs = (() => {
+  function compactViewerOptions() {
+    for (const label of document.querySelectorAll('#displayForm .display-toggle-grid > label')) {
+      const hint = label.querySelector('.setting-copy small');
+      if (!hint) continue;
+      const row = document.createElement('div'); row.className = 'viewer-setting';
+      label.before(row); row.append(label);
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'settings-info'; button.textContent = 'i';
+      button.setAttribute('aria-label', 'About ' + label.querySelector('.setting-copy > span').textContent);
+      button.setAttribute('aria-describedby', hint.id);
+      button.setAttribute('aria-expanded', 'false');
+      hint.className = 'setting-tooltip'; hint.setAttribute('role', 'tooltip'); hint.hidden = true;
+      row.append(button, hint);
+      let pinned = false;
+      const open = () => { hint.hidden = false; button.setAttribute('aria-expanded', 'true'); };
+      const close = () => { pinned = false; hint.hidden = true; button.setAttribute('aria-expanded', 'false'); };
+      button.onmouseenter = open; button.onfocus = open;
+      row.onmouseleave = () => { if (!pinned && document.activeElement !== button) close(); };
+      button.onblur = () => { if (!pinned) close(); };
+      button.onclick = () => { pinned = !pinned; if (pinned) open(); else close(); };
+      button.onkeydown = event => { if (event.key === 'Escape') { close(); event.stopPropagation(); } };
+      document.addEventListener('pointerdown', event => { if (!row.contains(event.target)) close(); });
+    }
+  }
   function addHelp(card, selector, label) {
     if (!card) return;
     const notes = [...card.querySelectorAll(selector)].filter(node => !node.matches('[role="status"]'));
@@ -54,6 +77,7 @@ const systemTabs = (() => {
       };
     }
     page.prepend(tablist); page.append(...panels); select(0);
+    compactViewerOptions();
     for (const [selector, notes, label] of [
       ['#displayForm', ':scope > p, :scope > .information-note', 'viewer behavior'],
       ['#snapshotForm', ':scope > p:not([id])', 'browser snapshots'],

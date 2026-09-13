@@ -136,6 +136,7 @@ public partial class MainWindow : Window
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick();
+            RaiseWarningWindows();
             _telemetryPublisher.Publish(new ViewerTelemetry
             {
                 ViewerUptimeSeconds = (long)_viewerUptime.Elapsed.TotalSeconds,
@@ -180,9 +181,8 @@ public partial class MainWindow : Window
         if (!_temperatureWarning.SetStatus(_temperatureStatus, now)) return;
         var origin = WallViewport.PointToScreen(new System.Windows.Point());
         var dpi = VisualTreeHelper.GetDpi(WallViewport);
-        _temperatureWarning.Width = Math.Min(520, Math.Max(1, WallViewport.ActualWidth - 32));
-        _temperatureWarning.Left = origin.X / dpi.DpiScaleX + 16;
-        _temperatureWarning.Top = origin.Y / dpi.DpiScaleY + 16;
+        _temperatureWarning.PlaceWithin(new System.Windows.Point(origin.X / dpi.DpiScaleX, origin.Y / dpi.DpiScaleY),
+            new System.Windows.Size(WallViewport.ActualWidth, WallViewport.ActualHeight));
         if (!_temperatureWarning.IsVisible) _temperatureWarning.Show();
         BringOverlayWindowToFront(_temperatureWarning);
     }
@@ -526,6 +526,7 @@ public partial class MainWindow : Window
             if (_additionalOverlays.TryGetValue(overlay.Camera.Slot, out var entry))
                 UpdateOverlayWindowLayout(entry.Window, entry.Tile, overlay);
         PlaceHostRestartButtons();
+        RaiseWarningWindows();
     }
 
     private void UpdateOverlayWindowLayout(
@@ -770,6 +771,19 @@ public partial class MainWindow : Window
 
     private void BringOverlayWindowToFront(Window? overlayWindow)
     {
+        RaiseWindow(overlayWindow);
+        RaiseWarningWindows();
+    }
+
+    private void RaiseWarningWindows()
+    {
+        if (!CanDisplayOverlayWindows()) return;
+        RaiseWindow(_updateBadge);
+        RaiseWindow(_temperatureWarning);
+    }
+
+    private static void RaiseWindow(Window? overlayWindow)
+    {
         if (overlayWindow?.IsVisible != true) return;
         var handle = new WindowInteropHelper(overlayWindow).Handle;
         if (handle == IntPtr.Zero) return;
@@ -902,7 +916,7 @@ public partial class MainWindow : Window
         _logger.Write("INFO", $"Appliance escape corner click {++_cornerClickCount}/5");
         if (_cornerClickCount < 5) return;
         _cornerClickCount = 0;
-        if (System.Windows.MessageBox.Show(this, "Leave RTSPView full-screen appliance mode?", "RTSPView", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        if (WithOverlaysSuppressed(() => System.Windows.MessageBox.Show(this, "Leave RTSPView full-screen appliance mode?", "RTSPView", MessageBoxButton.YesNo, MessageBoxImage.Question)) == MessageBoxResult.Yes)
             SetFullScreen(false);
     }
 
@@ -978,8 +992,8 @@ public partial class MainWindow : Window
         catch (Exception error) when (error is Win32Exception or InvalidOperationException)
         {
             _logger.Write("ERROR", "Unable to open the web configuration browser: " + error.GetType().Name);
-            System.Windows.MessageBox.Show(this, "Open http://127.0.0.1:5080 in your browser. Make sure the RTSPView Controller is running.",
-                "Web configuration", MessageBoxButton.OK, MessageBoxImage.Information);
+            WithOverlaysSuppressed(() => System.Windows.MessageBox.Show(this, "Open http://127.0.0.1:5080 in your browser. Make sure the RTSPView Controller is running.",
+                "Web configuration", MessageBoxButton.OK, MessageBoxImage.Information));
         }
     }
 
