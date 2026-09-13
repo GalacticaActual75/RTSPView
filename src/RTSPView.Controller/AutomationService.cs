@@ -206,7 +206,12 @@ public sealed class AutomationService : BackgroundService
                     _status = _status with { Connection = "Error", LastResult = e is InvalidDataException ? e.Message : "MQTT unavailable. Check connection settings, credentials and TLS trust." };
                     engine.Expire(DateTimeOffset.UtcNow);
                 }
-                await Task.Delay(500, stoppingToken);
+                // Wake immediately for detections; retain the periodic timeout
+                // for expiry, configuration changes and reconnect attempts.
+                using var wake = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                wake.CancelAfter(500);
+                try { await channel.Reader.WaitToReadAsync(wake.Token); }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested) { }
             }
         }
         finally { client?.Dispose(); }

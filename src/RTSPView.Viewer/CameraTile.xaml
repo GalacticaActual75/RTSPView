@@ -19,6 +19,7 @@
         <Border x:Name="StaleBanner" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="8" Padding="10,6" Background="#EE842D19" CornerRadius="3" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30">
           <TextBlock x:Name="StaleText" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" TextAlignment="Center"/>
         </Border>
+        <Button x:Name="DiagnosticBadge" Content="!" Width="28" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#EE842D19" Foreground="White" FontWeight="Bold" ToolTip="Show this camera's diagnostics" Visibility="Collapsed" Click="DiagnosticBadge_Click" Panel.ZIndex="40"/>
         <Ellipse x:Name="EllipticalViewportEdge" Margin="-1.5" Stroke="#E6000000" StrokeThickness="3" Fill="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
         <Border x:Name="RoundedViewportEdge" Margin="-1.5" BorderBrush="#E6000000" BorderThickness="3" Background="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
         <Path x:Name="CustomViewportEdge" Margin="-1.5" Stretch="Fill" Stroke="#E6000000" StrokeThickness="3" Fill="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>

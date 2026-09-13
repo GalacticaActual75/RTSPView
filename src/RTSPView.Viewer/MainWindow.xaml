@@ -1,9 +1,13 @@
 <Window x:Class="RTSPView.Viewer.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:RTSPView.Viewer" Title="RTSPView — Stream Wall" Icon="/Assets/RTSPView.ico" Width="1600" Height="950" MinWidth="900" MinHeight="600" Background="#050505" Foreground="White" WindowStartupLocation="Manual" MouseMove="Window_MouseMove">
   <Grid>
     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
     <Grid x:Name="WallViewport" Background="Black">
     <Grid x:Name="WallGrid" Background="Black" HorizontalAlignment="Center" VerticalAlignment="Center">
     </Grid>
+    </Grid>
+    <local:WallDiagnosticsPanel x:Name="DiagnosticsPanel" Grid.Column="1"/>
     </Grid>
     <Border x:Name="ControlBar" Grid.Row="1" Background="#15171A" Padding="12">
       <WrapPanel VerticalAlignment="Center" ItemHeight="40">

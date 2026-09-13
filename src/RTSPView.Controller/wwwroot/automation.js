@@ -44,6 +44,10 @@ const automationUi = (() => {
     document.querySelector('#page-automation').append(form);
     const markDirty = e => { if (!e.target.closest('.mqtt-tools')) { dirty = true; form.dataset.dirty = 'true'; } };
     form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);
+    form.addEventListener('invalid', e => {
+      for (let parent = e.target.parentElement; parent && parent !== form; parent = parent.parentElement)
+        if (parent.tagName === 'DETAILS') parent.open = true;
+    }, true);
     form.querySelector('.mqtt-start').onclick = () => diagnostics(true);
     form.querySelector('.mqtt-stop').onclick = () => diagnostics(false);
     form.querySelector('.mqtt-pause').onclick = e => { paused = !paused; e.target.textContent = paused ? 'Resume feed' : 'Pause feed'; if (!paused) renderFeed(); };
@@ -80,7 +84,7 @@ const automationUi = (() => {
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Remove source'; remove.onclick = () => { row.remove(); dirty = true; };
     row.append(cameraColumn, topicLabel, remove); container.append(row); updateSourceChoices(row, true);
   }
-  function addRule(rule = {id: uuid(), name: 'Person overlay', enabled: true, clearMinutes: 2, sources: []}) {
+  function addRule(rule = {id: uuid(), name: 'Person overlay', enabled: true, clearMinutes: 2, sources: []}, collapsed = false) {
     const card = document.createElement('fieldset'); card.className = 'automation-rule'; card.dataset.id = rule.id;
     card.innerHTML = `<legend>Person detection action</legend><div class="automation-grid">
       <label>Rule name<input class="rule-name" maxlength="100" required></label>
@@ -90,6 +94,11 @@ const automationUi = (() => {
       <div class="automation-target-grid"><label class="target-label"></label><p class="target-help"></p></div>
       <div class="rule-sources"></div><div class="control-buttons"><button type="button" class="secondary source-add">Add source camera</button>
       <button type="button" class="secondary rule-remove">Delete rule</button></div><p class="rule-status" role="status">Not saved</p>`;
+    const editor = document.createElement('details'); editor.className = 'rule-editor'; editor.open = !collapsed;
+    const summary = document.createElement('summary'); summary.className = 'rule-summary'; editor.append(summary);
+    for (const child of [...card.children]) if (child.tagName !== 'LEGEND' && !child.classList.contains('rule-status')) editor.append(child);
+    card.querySelector('.rule-status').before(editor);
+    if (collapsed) card.querySelector('.rule-status').textContent = 'Saved';
     card.querySelector('.rule-name').value = rule.name; card.querySelector('.rule-enabled').checked = rule.enabled;
     card.querySelector('.rule-delay').value = rule.clearMinutes;
     card.dataset.overlayTarget = rule.overlaySlot || ''; card.dataset.cameraTarget = rule.cameraSlot || 0;
@@ -99,6 +108,11 @@ const automationUi = (() => {
     for (const source of rule.sources.length ? rule.sources : [{}]) addSource(card.querySelector('.rule-sources'), source);
     card.querySelector('.source-add').onclick = () => { if (card.querySelector('.rule-sources').children.length < 32) addSource(card.querySelector('.rule-sources')); dirty = true; };
     card.querySelector('.rule-remove').onclick = () => { card.remove(); dirty = true; };
+    const updateSummary = () => {
+      const action = card.querySelector('.rule-action'), target = card.querySelector('.rule-target');
+      summary.textContent = `${card.querySelector('.rule-name').value.trim() || 'Unnamed rule'} · ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'} · ${card.querySelector('.rule-delay').value} min${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
+    };
+    card.addEventListener('input', updateSummary); card.addEventListener('change', updateSummary); updateSummary();
     rules.append(card);
   }
   function renderActionTarget(card) {
@@ -130,7 +144,7 @@ const automationUi = (() => {
     f.tls.value = String(settings.tls); f.authenticate.value = String(settings.authenticate); f.username.value = settings.username; f.clientId.value = settings.clientId;
     f.password.value = ''; f.password.placeholder = data.hasPassword ? 'Saved — leave blank to keep' : 'Not set'; f.clearPassword.checked = false;
     savedRules = settings.rules;
-    rules.replaceChildren(); settings.rules.forEach(addRule); dirty = false; form.dataset.dirty = 'false'; loaded = true; refreshOverlayLinks();
+    rules.replaceChildren(); settings.rules.forEach(rule => addRule(rule, true)); dirty = false; form.dataset.dirty = 'false'; loaded = true; refreshOverlayLinks();
   }
   async function load(config) {
     try {

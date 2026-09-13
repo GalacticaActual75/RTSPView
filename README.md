@@ -23,9 +23,26 @@ Use Windows 10/11 x64 with a current graphics driver. Download the installer and
 
 The dashboard starts local-only on TCP 5080. After initial setup, use **System → LAN access** to enable HTTP access on your trusted private LAN. HTTPS is optional; see the LAN instructions below.
 
+## Shared camera diagnostics (beta)
+
+The Viewer reserves a diagnostics strip beside the video wall. Main-feed and
+overlay errors stack in this panel, labeled by camera name, feed type and slot;
+custom overlay shapes do not clip their text. Hover over a camera, select it in
+the panel, or click its small warning badge to inspect statistics. **Restart
+selected stream** restarts only that feed. Alerts clear individually on recovery.
+
+Use the panel's header to collapse it to a narrow strip with an alert count.
+A newly affected camera opens it automatically. The wall fits the remaining space,
+including in full screen, without changing the saved layout. Detailed statistics
+and errors now appear here instead of over the video; main-camera name labels
+still follow the name-display preference. Hidden, configured overlay feeds can
+also report connection problems while being kept ready for automation.
+
 ## MQTT person-detection automation (beta)
 
 Open the top-level **Automation** tab to configure the broker and person-detection rules.
+Saved rules collapse to a summary; click a rule to expand and edit it. New rules
+stay open, and validation expands any rule that needs attention.
 The Controller maintains the MQTT connection even with the browser closed; the
 Viewer must be running to display overlays. Automation is disabled by default.
 

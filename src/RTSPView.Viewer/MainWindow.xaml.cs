@@ -53,6 +53,8 @@ public partial class MainWindow : Window
             if (!_additionalOverlays.TryGetValue(camera.Slot, out var entry))
             {
                 var tile = new CameraTile();
+                tile.SharedDiagnostics = true;
+                tile.DiagnosticsRequested += Tile_DiagnosticsRequested;
                 tile.PointerActivity += Tile_PointerActivity;
                 tile.FocusRequested += Tile_FocusRequested;
                 var window = CreateOverlayWindow(camera.Name, tile);
@@ -137,6 +139,7 @@ public partial class MainWindow : Window
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick();
+            DiagnosticsPanel.Refresh(_allTiles);
             RaiseWarningWindows();
             _telemetryPublisher.Publish(new ViewerTelemetry
             {
@@ -221,6 +224,8 @@ public partial class MainWindow : Window
         _allTiles = [.. _tiles, DoorbellTile, GarageTile];
         foreach (var tile in _allTiles)
         {
+            tile.SharedDiagnostics = true;
+            tile.DiagnosticsRequested += Tile_DiagnosticsRequested;
             tile.PointerActivity += Tile_PointerActivity;
             tile.FocusRequested += Tile_FocusRequested;
         }
@@ -874,7 +879,17 @@ public partial class MainWindow : Window
 
     private void Window_MouseMove(object sender, System.Windows.Input.MouseEventArgs e) => RegisterPointerActivity();
 
-    private void Tile_PointerActivity(object? sender, EventArgs e) => RegisterPointerActivity();
+    private void Tile_PointerActivity(object? sender, EventArgs e)
+    {
+        RegisterPointerActivity();
+        if (sender is CameraTile tile) DiagnosticsPanel.SelectCamera(tile.Slot);
+    }
+
+    private void Tile_DiagnosticsRequested(object? sender, EventArgs e)
+    {
+        RegisterPointerActivity();
+        if (sender is CameraTile tile) DiagnosticsPanel.SelectCamera(tile.Slot, true);
+    }
 
     private void Tile_FocusRequested(object? sender, EventArgs e)
     {

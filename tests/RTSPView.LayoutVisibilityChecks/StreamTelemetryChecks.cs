@@ -68,6 +68,7 @@ internal static class StreamTelemetryChecks
                     var settingsField = typeof(CameraTile).GetField("_settings", flags)!;
                     var warmSettings = new CameraSettings { Enabled = true, RtspUrl = "rtsp://example.test/warm-overlay" };
                     settingsField.SetValue(tile, warmSettings);
+                    tile.ApplyOverlayPreferences(false, false);
                     var image = (System.Windows.Controls.Image)tile.FindName("CompositedImage");
                     var frameSource = image.Source;
                     for (var cycle = 0; cycle < 2; cycle++)
@@ -82,11 +83,24 @@ internal static class StreamTelemetryChecks
                             throw new Exception("Hidden overlay stopped decoding frames");
                         tile.Apply(warmSettings); tile.SetWallVisibility(true); window.Show();
                         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+                        tile.Tick();
+                        if (((UIElement)tile.FindName("OverlayPanel")).Visibility != Visibility.Collapsed)
+                            throw new Exception("Healthy warm overlay forced connection statistics on reveal");
                         if (!ReferenceEquals(player, typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)) ||
                             !ReferenceEquals(media, typeof(CameraTile).GetField("_media", flags)!.GetValue(tile)) ||
                             !ReferenceEquals(frameSource, image.Source) || tile.GetTelemetry().State != CameraConnectionState.Live.ToString())
                             throw new Exception("Revealing a warm overlay restarted playback or discarded its decoded frame");
                     }
+                    tile.ApplyOverlayPreferences(false, true);
+                    if (((UIElement)tile.FindName("OverlayPanel")).Visibility != Visibility.Visible)
+                        throw new Exception("Overlay ignored the user's statistics preference");
+                    tile.ApplyOverlayPreferences(false, false);
+                    var liveStatus = (CameraRuntimeStatus)statusField.GetValue(tile)!;
+                    statusField.SetValue(tile, liveStatus with { State = CameraConnectionState.Buffering });
+                    tile.Tick();
+                    if (((UIElement)tile.FindName("OverlayPanel")).Visibility != Visibility.Visible)
+                        throw new Exception("Overlay hid a connection problem");
+                    statusField.SetValue(tile, liveStatus);
                     tile.Apply(warmSettings with { Enabled = false, RtspUrl = "" });
                     for (var wait = 0; wait < 20 && player.IsPlaying; wait++) await Task.Delay(100);
                     if (player.IsPlaying) throw new Exception("Clearing overlay URL left background playback running");

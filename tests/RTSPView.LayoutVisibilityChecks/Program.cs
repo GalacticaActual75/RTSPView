@@ -34,6 +34,7 @@ internal static class Program
                 await NativeStartupChecks.Run();
                 await FocusChecks.Run(wall, tiles);
                 await StreamTelemetryChecks.Run();
+                WallDiagnosticsChecks.Run();
                 await UpdateBadgeChecks.Run(window);
                 result = 0;
             }

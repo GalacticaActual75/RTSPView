@@ -67,7 +67,29 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public CameraRuntimeStatus Status => _status;
     public event EventHandler? PointerActivity;
     public event EventHandler? FocusRequested;
+    public event EventHandler? DiagnosticsRequested;
+    public bool SharedDiagnostics { get; set; }
+    public bool DiagnosticsAvailable => _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);
+    public string DiagnosticLabel => $"{_settings.Name} ({(_useCompositedOutput ? "Overlay" : "Main feed")} · {Slot})";
+    public string? DiagnosticWarning
+    {
+        get
+        {
+            if (!DiagnosticsAvailable) return null;
+            var frame = FrameWarning(DateTimeOffset.UtcNow);
+            if (_status.State is CameraConnectionState.Live or CameraConnectionState.Disabled or CameraConnectionState.NotConfigured) return frame;
+            return StateLabel(_status.State) +
+                (string.IsNullOrWhiteSpace(_status.LastError) ? "" : " — " + RollingFileLogger.RedactCredentials(_status.LastError)) +
+                (frame is null ? "" : "\n" + frame);
+        }
+    }
     public bool Focused { get; set; }
+
+    private void DiagnosticBadge_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        DiagnosticsRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OverlayRoot_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
@@ -322,7 +344,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void OverlayRoot_MouseEnter(object sender, MouseEventArgs e)
     {
-        RestartStreamButton.Visibility = Visibility.Visible;
+        RestartStreamButton.Visibility = SharedDiagnostics ? Visibility.Collapsed : Visibility.Visible;
         PointerActivity?.Invoke(this, EventArgs.Empty);
     }
 
@@ -455,7 +477,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         StaleBanner.Visibility = warning is null ? Visibility.Collapsed : Visibility.Visible;
         StaleText.Text = warning is null ? string.Empty : "STALE VIDEO — " + warning;
         var connectionNeedsAttention = _settings.Enabled && _status.State is not CameraConnectionState.Live and not CameraConnectionState.Disabled and not CameraConnectionState.NotConfigured;
-        var recentlyRecovered = _status.State == CameraConnectionState.Live && _healthySince is not null && now - _healthySince < TimeSpan.FromSeconds(15);
+        // Background overlays can be revealed during this recovery window. A
+        // healthy feed should honor the user's display preferences on reveal.
+        var recentlyRecovered = !_useCompositedOutput && _status.State == CameraConnectionState.Live && _healthySince is not null && now - _healthySince < TimeSpan.FromSeconds(15);
         FocusText.Visibility = Focused ? Visibility.Visible : Visibility.Collapsed;
         var forceVisible = connectionNeedsAttention || recentlyRecovered || Focused;
         var showName = _showCameraNames || forceVisible;
@@ -481,6 +505,15 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             DetailsText.Visibility = Visibility.Collapsed;
         }
         OverlayPanel.Visibility = showName || showStats ? Visibility.Visible : Visibility.Collapsed;
+        if (SharedDiagnostics)
+        {
+            // Only the compact badge remains inside the clipped video surface.
+            DetailsText.Visibility = FocusText.Visibility = Visibility.Collapsed;
+            NameText.Visibility = _showCameraNames ? Visibility.Visible : Visibility.Collapsed;
+            OverlayPanel.Visibility = _showCameraNames && !_useCompositedOutput ? Visibility.Visible : Visibility.Collapsed;
+            StateText.Visibility = SlotText.Visibility = StaleBanner.Visibility = Visibility.Collapsed;
+            DiagnosticBadge.Visibility = DiagnosticWarning is null ? Visibility.Collapsed : Visibility.Visible;
+        }
     }
 
     private void ObserveFrameProgress(DateTimeOffset now)
@@ -787,8 +820,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         DetailsText.Text = text;
         StateText.Text = text;
-        StateText.Visibility = showCenter ? Visibility.Visible : Visibility.Collapsed;
-        SlotText.Visibility = showCenter ? Visibility.Visible : Visibility.Collapsed;
+        StateText.Visibility = showCenter && !SharedDiagnostics ? Visibility.Visible : Visibility.Collapsed;
+        SlotText.Visibility = showCenter && !SharedDiagnostics ? Visibility.Visible : Visibility.Collapsed;
     });
 
     private void QueuePlayerOperation(Action operation)
