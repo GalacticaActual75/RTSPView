@@ -52,14 +52,16 @@ checked with a two-source rule, draft connection test, save, and reload.
 A source-camera walk test confirmed motion and person messages in Scrypted MQTT.
 Live playback validation with the beta installed remains a separate step.
 
-## Future actions
+## Fullscreen and focused-layout actions
 
-These are recorded requests, not implemented options:
+The beta working tree now includes both actions in the rule editor. Targets can
+be a fixed camera or each triggering camera. Dynamic targets have independent
+clear timers; fixed targets retain multi-source OR renewal. Fullscreen takes
+priority, then the earliest active episode wins without reordering on renewal.
+Manual dismissal suppresses active and waiting episodes. Viewer-local expiry
+returns to the saved layout without changing configuration, even during outages.
 
-1. Make a selected camera full screen until person detection has been clear for
-   a configurable time.
-2. Switch to a layout that enlarges the camera with an active person while
-   keeping all streams visible.
-
-Both should eventually be action choices in Automation. Simultaneous detections
-and restoration of manual layout state need explicit behavior when implemented.
+Focused layout enlarges one main camera while preserving all enabled, configured
+main streams, with generated landscape/portrait geometry for up to 16 streams.
+Fullscreen fills the viewer, preserving its existing window mode. Overlay feeds
+remain connected and decoding while hidden so reveal does not restart playback.

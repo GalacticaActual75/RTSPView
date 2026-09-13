@@ -62,6 +62,35 @@ internal static class StreamTelemetryChecks
                     if (tile.GetTelemetry().LastError is not null || tile.GetTelemetry().ReconnectCount != 2)
                         throw new Exception("Real frame recovery did not clear the active error while preserving reconnect history");
                     Console.WriteLine("PASS recovered stream clears active error without restarting or losing reconnect history");
+                    // Keep the deterministic media but give the tile the same configuration
+                    // shape as a configured automation-only overlay. Applying its display
+                    // mode must not replace this already-decoding player or media.
+                    var settingsField = typeof(CameraTile).GetField("_settings", flags)!;
+                    var warmSettings = new CameraSettings { Enabled = true, RtspUrl = "rtsp://example.test/warm-overlay" };
+                    settingsField.SetValue(tile, warmSettings);
+                    var image = (System.Windows.Controls.Image)tile.FindName("CompositedImage");
+                    var frameSource = image.Source;
+                    for (var cycle = 0; cycle < 2; cycle++)
+                    {
+                        var before = tile.GetTelemetry().LastFrameAt;
+                        window.Hide(); tile.SetWallVisibility(false);
+                        tile.Apply(warmSettings with { Enabled = false });
+                        await Task.Delay(400); tile.Tick();
+                        if (tile.IsVisible || window.IsVisible || ((UIElement)tile.FindName("OverlayRoot")).IsVisible)
+                            throw new Exception("Hidden warm overlay exposed a window or connection stats");
+                        if (tile.GetTelemetry().LastFrameAt <= before || !player.IsPlaying)
+                            throw new Exception("Hidden overlay stopped decoding frames");
+                        tile.Apply(warmSettings); tile.SetWallVisibility(true); window.Show();
+                        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+                        if (!ReferenceEquals(player, typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)) ||
+                            !ReferenceEquals(media, typeof(CameraTile).GetField("_media", flags)!.GetValue(tile)) ||
+                            !ReferenceEquals(frameSource, image.Source) || tile.GetTelemetry().State != CameraConnectionState.Live.ToString())
+                            throw new Exception("Revealing a warm overlay restarted playback or discarded its decoded frame");
+                    }
+                    tile.Apply(warmSettings with { Enabled = false, RtspUrl = "" });
+                    for (var wait = 0; wait < 20 && player.IsPlaying; wait++) await Task.Delay(100);
+                    if (player.IsPlaying) throw new Exception("Clearing overlay URL left background playback running");
+                    Console.WriteLine("PASS hidden overlay keeps decoding, reveal retains player/media/frame, mode changes do not restart, and clearing URL stops playback");
                     return;
                 }
             }

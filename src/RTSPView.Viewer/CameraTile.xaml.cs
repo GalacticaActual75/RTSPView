@@ -155,6 +155,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public void Initialize(LibVLC libVlc, RollingFileLogger logger, CameraSettings settings, bool requestHardwareDecoding, bool compositedVideo = false)
     {
         _useCompositedOutput = compositedVideo;
+        settings = PlaybackSettings(settings);
         if (compositedVideo)
         {
             VideoView.Content = null;
@@ -184,6 +185,10 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void Apply(CameraSettings settings)
     {
+        settings = PlaybackSettings(settings);
+        // Overlay display-mode changes only affect MainWindow's visibility gate.
+        // Keep the existing player, decoded frame and recovery state intact.
+        if (_useCompositedOutput && _settings == settings) return;
         if (_settings.RtspUrl != settings.RtspUrl)
         {
             _activity = new StreamActivity();
@@ -196,6 +201,11 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         if (settings.Enabled && !string.IsNullOrWhiteSpace(settings.RtspUrl)) Start(manual: true);
         else Stop(settings.Enabled ? CameraConnectionState.NotConfigured : CameraConnectionState.Disabled);
     }
+
+    private CameraSettings PlaybackSettings(CameraSettings settings) =>
+        _useCompositedOutput && !string.IsNullOrWhiteSpace(settings.RtspUrl)
+            ? settings with { Enabled = true }
+            : settings;
 
     public void ApplyOverlayPreferences(bool showCameraNames, bool showCameraStats)
     {

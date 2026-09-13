@@ -13,5 +13,8 @@ public sealed class OverlayAutomationState
     }
     public void Dismiss() { foreach (var lease in _leases) _dismissed.Add(lease.Id); }
     public void Clear() { _leases = []; _dismissed.Clear(); }
-    public HashSet<int> ActiveSlots(DateTimeOffset now) => _leases.Where(l => l.ExpiresAt > now && !_dismissed.Contains(l.Id)).Select(l => l.Slot).ToHashSet();
+    private IEnumerable<AutomationOverlayLease> Active(DateTimeOffset now) => _leases.Where(l => l.ExpiresAt > now && !_dismissed.Contains(l.Id));
+    public HashSet<int> ActiveSlots(DateTimeOffset now) => Active(now).Where(l => l.Action == AutomationAction.Overlay).Select(l => l.Slot).ToHashSet();
+    public AutomationOverlayLease? Focus(DateTimeOffset now) => Active(now).Where(l => l.Action != AutomationAction.Overlay)
+        .OrderBy(l => l.Action == AutomationAction.FullScreen ? 0 : 1).ThenBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).FirstOrDefault();
 }

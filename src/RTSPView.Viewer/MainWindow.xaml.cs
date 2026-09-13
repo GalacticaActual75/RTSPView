@@ -133,7 +133,7 @@ public partial class MainWindow : Window
             RefreshNativeVideoBackgrounds();
             RefreshUpdateBadge();
             RefreshTemperatureWarning();
-            if (_settings.AllOverlays().Any(overlay => overlay.Camera.Enabled))
+            if (_settings.AllOverlays().Any(OverlayEnabled))
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick();
@@ -261,18 +261,18 @@ public partial class MainWindow : Window
 
     private void ApplyWallLayout()
     {
-        var layout = _settings.Layouts.Single(item => item.Id == _settings.ActiveLayoutId);
+        var layout = EffectiveLayout;
         if (_focusedSlot.HasValue && !_allTiles.Any(tile => tile.Slot == _focusedSlot)) _focusedSlot = null;
-        foreach (var tile in _allTiles) tile.Focused = tile.Slot == _focusedSlot;
+        foreach (var tile in _allTiles) tile.Focused = tile.Slot == EffectiveFocusedSlot;
         SizeWall();
-        CameraWallPresentation.Apply(WallGrid, _tiles, layout, _focusedSlot);
+        CameraWallPresentation.Apply(WallGrid, _tiles, layout, EffectiveFocusedSlot);
         QueueOverlayLayouts();
     }
 
     private void SizeWall()
     {
-        var layout = _settings.Layouts.Single(item => item.Id == _settings.ActiveLayoutId);
-        if (_focusedSlot.HasValue)
+        var layout = EffectiveLayout;
+        if (EffectiveFocusedSlot.HasValue)
         {
             WallGrid.Width = Math.Max(0, WallViewport.ActualWidth);
             WallGrid.Height = Math.Max(0, WallViewport.ActualHeight);
@@ -536,9 +536,9 @@ public partial class MainWindow : Window
         DoorbellOverlaySettings overlay)
     {
         if (overlayWindow is null || _tiles.Length == 0) return;
-        if (_focusedSlot.HasValue)
+        if (EffectiveFocusedSlot.HasValue)
         {
-            if (_focusedSlot != overlay.Camera.Slot || !CanDisplayOverlayWindows())
+            if (EffectiveFocusedSlot != overlay.Camera.Slot || !CanDisplayOverlayWindows())
             {
                 HideOverlayWindowHierarchy(overlayWindow, overlayTile);
                 return;
@@ -892,7 +892,7 @@ public partial class MainWindow : Window
             RegisterPointerActivity();
             return;
         }
-        _focusedSlot = _focusedSlot == tile.Slot ? null : tile.Slot;
+        _focusedSlot = EffectiveFocusedSlot == tile.Slot ? null : tile.Slot;
         DismissAutomation();
         RegisterPointerActivity();
         ApplyWallLayout();

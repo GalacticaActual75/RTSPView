@@ -23,7 +23,7 @@ Use Windows 10/11 x64 with a current graphics driver. Download the installer and
 
 The dashboard starts local-only on TCP 5080. After initial setup, use **System → LAN access** to enable HTTP access on your trusted private LAN. HTTPS is optional; see the LAN instructions below.
 
-## MQTT person-to-overlay automation (beta)
+## MQTT person-detection automation (beta)
 
 Open the top-level **Automation** tab to configure the broker and person-detection rules.
 The Controller maintains the MQTT connection even with the browser closed; the
@@ -36,13 +36,14 @@ Viewer must be running to display overlays. Automation is disabled by default.
    settings. These are broker credentials, separate from the Scrypted web login.
    TLS validates the host certificate using Windows trust. Each Controller needs
    a unique **Client ID** under Advanced connection settings.
-3. Configure the target overlay's stream and appearance in **Overlays**. Choose
+3. For **Show overlay**, configure the target stream and appearance in **Overlays**. Choose
    **Display mode → Automation only**, then **Save overlay**. This hides an already
    visible overlay while waiting for a trigger. **Always visible** keeps it visible
    when automation clears. Linked rule names and an **Open Automation** button are
    shown beneath the display mode. Existing enabled overlays stay Always visible
    after upgrading; previously disabled overlays are shown as Automation only.
-4. Select **Add rule**. Choose the target overlay, then add one or more source
+4. Select **Add rule**. Choose **Show overlay**, **Fullscreen camera**, or
+   **Focused layout**, then choose the target and add one or more source
    cameras. Click **Discover topics / Start listening** and trigger camera activity.
    Choose the observed camera/topic from the dropdown; a unique matching camera
    name or an existing saved mapping can fill it automatically. Verify the selected
@@ -78,6 +79,13 @@ no new matching detections for the configured interval, not proof of an empty
 scene. Multiple rules can share an overlay; it stays until all requests expire.
 Different overlays can be active simultaneously. Saved layouts are not changed.
 
+Configured overlay feeds stay connected and decode in the background, including
+**Automation only** feeds while hidden. Detections reveal the already-playing
+video; expiry and dismissal hide it without reconnecting. This uses continuous
+stream bandwidth and decoding resources. Clearing an overlay's RTSP URL or
+removing the overlay stops its background feed. Real connection/recovery warnings
+still appear if the stream is unavailable when triggered.
+
 Manual focus takes priority. Double-click a temporary, automation-only overlay
 to dismiss the current detection episode; fresh detections in that same episode
 do not undo the dismissal. New episodes can activate it after the clear interval.
@@ -102,9 +110,25 @@ identity and never returned to the GUI. Leave the password blank to keep it;
 use **Clear saved password** to remove it. Re-enter credentials when moving to a
 different Windows account/host. RTSPView does not modify the Scrypted broker.
 
-The first beta supports person-triggered overlays. Full-screen camera focus and
-layouts that enlarge an active camera while keeping all streams visible are
-planned follow-ups, not implemented actions.
+**Fullscreen camera** fills the Viewer with a selected main stream or overlay;
+the Viewer’s window/fullscreen setting is preserved. **Focused layout** gives the
+selected main camera a larger tile and includes every enabled, configured main
+stream (up to 16), using the saved layout’s landscape or portrait orientation.
+Both restore the saved layout when their timers expire, without editing it.
+
+Choose **Camera that detected the person** to follow sources automatically. Each
+source then has its own clear timer; one camera’s detections do not keep another
+camera active. For a fixed target, all sources renew one shared timer. Fullscreen
+rules take priority over focused-layout rules. Within the same action, the earliest
+active episode keeps focus until it clears; pending cameras only take over if their
+detection timers are still active. Renewals do not reorder them. Overlay actions can
+coexist with focused layouts when their host tiles are visible; fullscreen hides
+other overlays. Manual double-clicks dismiss active and pending automation episodes
+and retain the usual focus/restore control. Expiry still restores the wall if the
+Controller or broker goes offline.
+
+Focused-layout targets must be enabled main streams. Fullscreen can also target a
+configured overlay. Old rules without an action field remain **Show overlay** rules.
 
 ## Temperature monitoring and optional maintenance helper
 

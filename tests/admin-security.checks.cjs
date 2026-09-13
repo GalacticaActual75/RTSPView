@@ -52,6 +52,15 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/doorbell','PUT',{...automaticOverlay,camera:{...automaticOverlay.camera,enabled:true}})).status,200,'always-visible overlay saves');
   assert.equal((await request(a,'/api/config')).json.doorbellOverlay.camera.enabled,true,'always-visible mode persists');
   await request(a,'/api/doorbell','PUT',config.doorbellOverlay);
+  await request(a,'/api/cameras/1','PUT',{...config.cameras[0],enabled:true,rtspUrl:'rtsp://example.test/front'});
+  const focusRule={id:crypto.randomUUID(),name:'Person focus',enabled:true,action:1,cameraSlot:0,overlaySlot:0,clearMinutes:2,sources:[{cameraSlot:1,topic:'scrypted/44/ObjectDetector'}]};
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[focusRule]}})).status,200,'fullscreen triggering-camera rule saves');
+  assert.equal((await request(a,'/api/automation')).json.settings.rules[0].action,1,'fullscreen action persists');
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:1}]}})).status,200,'focused-layout fixed-camera rule saves');
+  assert.equal((await request(a,'/api/automation')).json.settings.rules[0].cameraSlot,1,'fixed focus target persists');
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:10}]}})).status,400,'focused layout rejects overlay target');
+  await request(a,'/api/automation','PUT',{settings:automation.settings});
+  await request(a,'/api/cameras/1','PUT',config.cameras[0]);
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:false})).status,400,'dependency install requires confirmation');
   assert.equal((await request(a,'/api/dependencies/pawnio/arbitrary','POST',{confirmed:true})).status,404,'arbitrary maintenance actions rejected');
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:true})).status,409,'test environment cannot install host dependencies');

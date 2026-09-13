@@ -7,7 +7,7 @@ const automationUi = (() => {
   function init() {
     form = document.createElement('form'); form.id = 'automationForm'; form.className = 'panel control-panel';
     form.innerHTML = `<h2>Automation</h2>
-      <p>When any selected camera detects a person, show an overlay until no person has been detected for your clear delay. Runs while the browser is closed.</p>
+      <p>When selected cameras detect a person, show an overlay, fill the viewer with a camera, or enlarge a camera while keeping the other streams visible. Runs while the browser is closed.</p>
       <p class="automation-connection" role="status">Loading connection status…</p>
       <fieldset class="automation-fields"><legend>MQTT connection</legend>
       <label><input name="enabled" type="checkbox"> Enable automation</label>
@@ -22,10 +22,11 @@ const automationUi = (() => {
       <details><summary>Advanced connection settings</summary><label>Client ID<input name="clientId" maxlength="64" required pattern="[A-Za-z0-9_-]+"></label>
       <p>Use a unique client ID for each RTSPView Controller. TLS uses the Windows trusted certificate store.</p></details>
       </fieldset><fieldset class="automation-fields"><legend>Person detection rules</legend>
-      <p>Use Discover topics below, then choose each source camera and its observed event topic. Any selected source can keep the overlay visible. Manual topics remain available under Advanced.</p>
+      <p>Choose an action and one or more source cameras. Use Discover topics below to select each camera’s event topic. Manual topics remain available under Advanced.</p>
       <div class="automation-rules"></div><button type="button" class="secondary automation-add">Add rule</button>
       <p>Choose <b>Automation only</b> as the target’s Display mode in Overlays to hide it while waiting. Always visible overlays remain on screen after a rule clears.</p>
       <p>Clear means no new person detections; it does not prove the scene is empty. During a broker outage, the existing clear timer still expires.</p>
+      <p>Fullscreen takes priority over focused layout. Competing cameras wait in detection order until earlier detections clear. Manual double-clicks override active automation; saved layouts are restored when focus clears.</p>
       </fieldset><section class="mqtt-tools" aria-label="MQTT discovery and details">
       <h3>MQTT discovery and details</h3><p>Listen using the connection fields above, even before saving a rule. Discovery does not trigger overlays. A listening session lasts five minutes.</p>
       <details><summary>Advanced discovery settings</summary><label>Topic prefix<input class="mqtt-prefix" value="scrypted" maxlength="400" spellcheck="false"></label></details>
@@ -81,27 +82,44 @@ const automationUi = (() => {
   }
   function addRule(rule = {id: uuid(), name: 'Person overlay', enabled: true, clearMinutes: 2, sources: []}) {
     const card = document.createElement('fieldset'); card.className = 'automation-rule'; card.dataset.id = rule.id;
-    card.innerHTML = `<legend>Person → overlay</legend><div class="automation-grid">
+    card.innerHTML = `<legend>Person detection action</legend><div class="automation-grid">
       <label>Rule name<input class="rule-name" maxlength="100" required></label>
       <label><input class="rule-enabled" type="checkbox"> Enabled</label>
-      <label class="overlay-label">Show overlay</label>
+      <label>Action<select class="rule-action"><option value="0">Show overlay</option><option value="1">Fullscreen camera</option><option value="2">Focused layout</option></select></label>
       <label>Clear delay (minutes)<input class="rule-delay" type="number" min="0.1" max="120" step="0.1" required></label></div>
+      <div class="automation-target-grid"><label class="target-label"></label><p class="target-help"></p></div>
       <div class="rule-sources"></div><div class="control-buttons"><button type="button" class="secondary source-add">Add source camera</button>
       <button type="button" class="secondary rule-remove">Delete rule</button></div><p class="rule-status" role="status">Not saved</p>`;
     card.querySelector('.rule-name').value = rule.name; card.querySelector('.rule-enabled').checked = rule.enabled;
     card.querySelector('.rule-delay').value = rule.clearMinutes;
-    const select = optionSelect(overlays, rule.overlaySlot, 'Overlay'); select.className = 'rule-overlay'; card.querySelector('.overlay-label').append(select);
+    card.dataset.overlayTarget = rule.overlaySlot || ''; card.dataset.cameraTarget = rule.cameraSlot || 0;
+    card.querySelector('.rule-action').value = rule.action || 0;
+    renderActionTarget(card);
+    card.querySelector('.rule-action').onchange = () => { renderActionTarget(card); dirty = true; };
     for (const source of rule.sources.length ? rule.sources : [{}]) addSource(card.querySelector('.rule-sources'), source);
     card.querySelector('.source-add').onclick = () => { if (card.querySelector('.rule-sources').children.length < 32) addSource(card.querySelector('.rule-sources')); dirty = true; };
     card.querySelector('.rule-remove').onclick = () => { card.remove(); dirty = true; };
     rules.append(card);
+  }
+  function renderActionTarget(card) {
+    const action = Number(card.querySelector('.rule-action').value), label = card.querySelector('.target-label');
+    const items = action === 0 ? overlays : inventory.filter(c =>
+      (c.enabled && !overlays.some(o => o.slot === c.slot)) || (action === 1 && overlays.some(o => o.slot === c.slot)));
+    const selected = action === 0 ? Number(card.dataset.overlayTarget) : Number(card.dataset.cameraTarget);
+    const select = optionSelect(items, selected, action === 0 ? 'Overlay' : 'Camera to focus'); select.className = 'rule-target';
+    if (action !== 0) { select.add(new Option('Camera that detected the person', '0'), 1); select.value = String(selected); }
+    label.textContent = action === 0 ? 'Show overlay' : 'Camera to focus'; label.append(select);
+    select.onchange = () => { card.dataset[action === 0 ? 'overlayTarget' : 'cameraTarget'] = select.value; };
+    card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Enlarge this main camera and show all enabled, configured main streams around it. Restore the previous layout after the clear delay.';
   }
   function draft() {
     const f = form.elements;
     return { settings: {enabled: f.enabled.checked, host: f.host.value.trim(), port: Number(f.port.value), tls: f.tls.value === 'true',
       authenticate: f.authenticate.value === 'true', username: f.username.value, clientId: f.clientId.value,
       rules: [...rules.children].map(card => ({id: card.dataset.id, name: card.querySelector('.rule-name').value,
-        enabled: card.querySelector('.rule-enabled').checked, overlaySlot: Number(card.querySelector('.rule-overlay').value),
+        enabled: card.querySelector('.rule-enabled').checked, action: Number(card.querySelector('.rule-action').value),
+        overlaySlot: Number(card.querySelector('.rule-action').value) === 0 ? Number(card.querySelector('.rule-target').value) : 0,
+        cameraSlot: Number(card.querySelector('.rule-action').value) !== 0 ? Number(card.querySelector('.rule-target').value) : 0,
         clearMinutes: Number(card.querySelector('.rule-delay').value), sources: [...card.querySelectorAll('.automation-source')].map(row => ({
           cameraSlot: Number(row.querySelector('.source-camera').value), topic: row.querySelector('.source-topic').value.trim()}))}))},
       password: f.password.value || null, clearPassword: f.clearPassword.checked};
@@ -145,8 +163,9 @@ const automationUi = (() => {
       connection.textContent = `${status.connection} · ${status.lastResult}${status.lastPerson ? ' · Last person: ' + new Date(status.lastPerson).toLocaleTimeString() : ''}`;
       for (const card of rules.children) {
         const state = status.rules.find(r => r.id === card.dataset.id), remaining = state?.expiresAt ? Math.max(0, Math.ceil((new Date(state.expiresAt) - Date.now()) / 1000)) : 0;
-        const target = overlays.find(o => o.slot === Number(card.querySelector('.rule-overlay').value));
-        card.querySelector('.rule-status').textContent = (dirty ? 'Unsaved changes · ' : '') + (status.connection === 'Disabled' ? 'Automation disabled' : !state ? 'Not saved' : !state.enabled ? 'Disabled' : remaining ? `Detection active · clear in ${remaining}s` : 'Waiting for person') + (target?.enabled ? ' · Target is Always visible; choose Automation only in Overlays to hide it while waiting.' : '');
+        const target = Number(card.querySelector('.rule-action').value) === 0 ? overlays.find(o => o.slot === Number(card.querySelector('.rule-target').value)) : null;
+        const activeNames = (state?.activeCameraSlots || []).map(slot => inventory.find(c => c.slot === slot)?.name || `Stream ${slot}`);
+        card.querySelector('.rule-status').textContent = (dirty ? 'Unsaved changes · ' : '') + (status.connection === 'Disabled' ? 'Automation disabled' : !state ? 'Not saved' : !state.enabled ? 'Disabled' : remaining ? `Detection active${activeNames.length ? ' · ' + activeNames.join(', ') : ''} · clear in ${remaining}s` : 'Waiting for person') + (target?.enabled ? ' · Target is Always visible; choose Automation only in Overlays to hide it while waiting.' : '');
       }
       if (!document.querySelector('#page-automation').hidden) await refreshDiagnostics();
     } catch { connection.textContent = 'Controller unavailable'; }
@@ -253,8 +272,8 @@ const automationUi = (() => {
   function refreshOverlayLinks() {
     for (const info of document.querySelectorAll('.overlay-automation-info')) {
       const overlayForm = info.closest('form'), slot = Number(overlayForm.dataset.slot);
-      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: hidden while waiting; appears when a rule detects a person. Save overlay to apply this mode.' : 'Always visible: stays on screen even when automation is idle.';
-      const linked = savedRules.filter(r => r.overlaySlot === slot);
+      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Save overlay to apply this mode.' : 'Always visible: stays on screen even when automation is idle.';
+      const linked = savedRules.filter(r => (r.action || 0) === 0 && r.overlaySlot === slot);
       info.querySelector('.overlay-rule-links').textContent = linked.length ? 'Linked rules: ' + linked.map(r => r.name + (r.enabled ? '' : ' (disabled)')).join(', ') : 'No automation rules assigned';
     }
   }

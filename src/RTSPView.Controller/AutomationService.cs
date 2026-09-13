@@ -195,7 +195,8 @@ public sealed class AutomationService : BackgroundService
                         if (!result.Success) _status = _status with { LastResult = result.Message };
                     }
                     _status = _status with { Rules = settings.Rules.Select(r => (object)new { r.Id, r.Name, r.Enabled,
-                        expiresAt = engine.Leases.TryGetValue(r.Id, out var lease) ? (DateTimeOffset?)lease.ExpiresAt : null }).ToArray() };
+                        expiresAt = engine.Leases.Values.Where(l => l.RuleId == r.Id).Select(l => (DateTimeOffset?)l.ExpiresAt).Max(),
+                        activeCameraSlots = engine.Leases.Values.Where(l => l.RuleId == r.Id).Select(l => l.Slot).Distinct().ToArray() }).ToArray() };
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
                 catch (Exception e)

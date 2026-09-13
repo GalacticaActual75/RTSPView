@@ -5,6 +5,7 @@ using System.Text.Json;
 namespace RTSPView.Core;
 
 public sealed record AutomationSource(int CameraSlot, string Topic);
+public enum AutomationAction { Overlay, FullScreen, FocusedLayout }
 public sealed record AutomationRule
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
@@ -12,6 +13,9 @@ public sealed record AutomationRule
     public bool Enabled { get; init; } = true;
     public AutomationSource[] Sources { get; init; } = [];
     public int OverlaySlot { get; init; }
+    public AutomationAction Action { get; init; }
+    // Zero follows each triggering source; positive values select a fixed camera.
+    public int CameraSlot { get; init; }
     public double ClearMinutes { get; init; } = 2;
 }
 
@@ -36,6 +40,7 @@ public sealed record AutomationSettings
         if (Rules is null || Rules.Length > 32 || Rules.Any(r => r is null) || Rules.Select(r => r.Id).Distinct().Count() != Rules.Length) throw new InvalidDataException("Use at most 32 rules with unique IDs.");
         foreach (var rule in Rules)
         {
+            if (!Enum.IsDefined(rule.Action)) throw new InvalidDataException("Select a supported automation action.");
             if (!Guid.TryParse(rule.Id, out _) || string.IsNullOrWhiteSpace(rule.Name) || rule.Name.Length > 100) throw new InvalidDataException("Each rule needs an ID and a name of up to 100 characters.");
             if (!double.IsFinite(rule.ClearMinutes) || rule.ClearMinutes is < 0.1 or > 120) throw new InvalidDataException("Clear delay must be 0.1–120 minutes.");
             if (rule.Sources is null || rule.Sources.Length is < 1 or > 32 || rule.Sources.Any(s => s is null) || rule.Sources.Select(s => s.CameraSlot).Distinct().Count() != rule.Sources.Length) throw new InvalidDataException("Select one or more distinct source cameras.");
@@ -44,17 +49,52 @@ public sealed record AutomationSettings
                 if (string.IsNullOrWhiteSpace(source.Topic) || source.Topic.Length > 512 || source.Topic.IndexOfAny(['#', '+', '\0']) >= 0) throw new InvalidDataException("Enter an exact MQTT event topic without wildcards.");
                 if (!cameras.Cameras.Concat(cameras.AllOverlays().Select(o => o.Camera)).Any(c => c.Slot == source.CameraSlot && !string.IsNullOrWhiteSpace(c.RtspUrl))) throw new InvalidDataException("Select a configured source camera.");
             }
-            if (!cameras.AllOverlays().Any(o => o.Camera.Slot == rule.OverlaySlot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl))) throw new InvalidDataException("Select an overlay with a configured RTSP stream.");
+            if (rule.Action == AutomationAction.Overlay)
+            {
+                if (!cameras.AllOverlays().Any(o => o.Camera.Slot == rule.OverlaySlot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl))) throw new InvalidDataException("Select an overlay with a configured RTSP stream.");
+            }
+            else
+            {
+                var targets = rule.CameraSlot == 0 ? rule.Sources.Select(s => s.CameraSlot) : [rule.CameraSlot];
+                if (targets.Any(slot => !AutomationConfiguration.CanFocus(cameras, rule.Action, slot)))
+                    throw new InvalidDataException(rule.Action == AutomationAction.FocusedLayout
+                        ? "Focused layout requires enabled, configured main streams for its target cameras."
+                        : "Fullscreen requires an enabled main stream or a configured overlay for its target cameras.");
+                if (rule.CameraSlot == 0 && rule.Sources.Select(s => s.Topic).Distinct().Count() != rule.Sources.Length)
+                    throw new InvalidDataException("Use a different topic for each triggering camera.");
+            }
         }
     }
 }
 
-public sealed record AutomationOverlayLease(string Id, int Slot, DateTimeOffset ExpiresAt);
+public sealed record AutomationOverlayLease(string Id, int Slot, DateTimeOffset ExpiresAt,
+    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "");
 public sealed record AutomationPresentation(string ConfigurationHash, AutomationOverlayLease[] Leases);
 
 public static class AutomationConfiguration
 {
     public static string Hash(AppSettings settings) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(settings.Normalize()))));
+    public static bool CanFocus(AppSettings settings, AutomationAction action, int slot) =>
+        settings.Cameras.Take(settings.CameraCount).Any(c => c.Slot == slot && c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl)) ||
+        (action == AutomationAction.FullScreen && settings.AllOverlays().Any(o => o.Camera.Slot == slot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl)));
+
+    public static WallLayout FocusedLayout(AppSettings settings, int slot)
+    {
+        var saved = settings.Layouts.Single(l => l.Id == settings.ActiveLayoutId);
+        var others = settings.Cameras.Take(settings.CameraCount).Where(c => c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl) && c.Slot != slot).Select(c => c.Slot).ToArray();
+        if (others.Length == 0) return saved with { Rows = 1, Columns = 1, Tiles = [new() { CameraSlot = slot }] };
+        var columns = (int)Math.Ceiling(Math.Sqrt(others.Length + 4));
+        var rows = (int)Math.Ceiling((others.Length + 4d) / columns);
+        if (saved.AspectRatio == "9:16") (rows, columns) = (columns, rows);
+        var tiles = new List<WallTile> { new() { CameraSlot = slot, RowSpan = 2, ColumnSpan = 2 } };
+        var index = 0;
+        for (var row = 0; row < rows && index < others.Length; row++)
+            for (var column = 0; column < columns && index < others.Length; column++)
+                if (row >= 2 || column >= 2) tiles.Add(new() { CameraSlot = others[index++], Row = row, Column = column });
+        // Runtime-only geometry supports up to 16 streams plus the larger focus tile.
+        // It is never written into the user's saved layout collection.
+        return saved with { Rows = rows, Columns = columns, Tiles = tiles };
+    }
 }
 
 // Called by a single worker. Event timestamps, rather than arrival times, control renewal.
@@ -88,10 +128,12 @@ public sealed class PersonOverlayEngine
                 !detections.EnumerateArray().Any(d => d.ValueKind == JsonValueKind.Object && d.TryGetProperty("className", out var c) && c.ValueKind == JsonValueKind.String && c.GetString() == "person")) return "No person";
             foreach (var rule in rules)
             {
-                var id = _leases.TryGetValue(rule.Id, out var existing) ? existing.Id : Guid.NewGuid().ToString("N");
+                var target = rule.Action == AutomationAction.Overlay ? rule.OverlaySlot : rule.CameraSlot != 0 ? rule.CameraSlot : rule.Sources.First(s => s.Topic == topic).CameraSlot;
+                var key = rule.Action != AutomationAction.Overlay && rule.CameraSlot == 0 ? rule.Id + ":" + target : rule.Id;
+                var id = _leases.TryGetValue(key, out var existing) ? existing.Id : Guid.NewGuid().ToString("N");
                 var expiry = (sourceTime > now ? now : sourceTime).AddMinutes(rule.ClearMinutes);
                 if (existing is not null && existing.ExpiresAt > expiry) expiry = existing.ExpiresAt;
-                _leases[rule.Id] = new(id, rule.OverlaySlot, expiry);
+                _leases[key] = new(id, target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id);
             }
             return "Person detected";
         }
