@@ -23,6 +23,21 @@ Use Windows 10/11 x64 with a current graphics driver. Download the installer and
 
 The dashboard starts local-only on TCP 5080. After initial setup, use **System → LAN access** to enable HTTP access on your trusted private LAN. HTTPS is optional; see the LAN instructions below.
 
+## Temperature monitoring and optional maintenance helper
+
+Under **System → Viewer → Temperature reporting**, enable CPU/GPU warnings and choose a maximum for each sensor. The master warning switch turns all temperature warnings off. Above the selected maximum, the live wall shows a large red warning on a smoked background. Unavailable or stale readings do not trigger an alarm.
+
+CPU temperatures may require [PawnIO](https://pawnio.eu/). LibreHardwareMonitor is bundled with RTSPView; sensor support still depends on the hardware and drivers. Error 1060 for the PawnIO service means that dependency is missing.
+
+1. Install this beta under the default, administrator-protected **Program Files** folder.
+2. In Temperature reporting, select **Enable maintenance helper** and approve the Windows administrator prompt on the host once. Keep UAC enabled; no UAC bypass is needed.
+3. Select **Install PawnIO on host** and confirm. The helper downloads the pinned official PawnIO 2.2.0 installer and verifies its SHA-256 before running it. The viewer stays open; temperature readings pause during installation and resume afterward.
+4. Follow the progress message. If Windows requires a restart, restart the host when convenient; RTSPView does not reboot it automatically. A successful driver installation does not guarantee that every CPU/GPU exposes a temperature sensor.
+
+The optional **RTSPViewMaintenance** Windows service runs as LocalSystem and uses the RTSPView product icon. It accepts only dependency status, preparation and installation commands, and reads temperature sensors. It has no network listener: a local named pipe allows the Windows user who enabled it, with authenticated web administration providing remote access through the Controller. It cannot execute arbitrary commands, paths or download URLs. The Controller and Viewer continue running as the signed-in user. Enabling it for a different Windows account requires administrator approval again.
+
+The helper is bundled but is not enabled automatically. To disable it, stop **RTSPView Maintenance** in Windows Services and set its startup type to Disabled after any installation finishes. Uninstalling RTSPView removes the helper service; PawnIO is retained because other applications may use it. The manual dependency download remains available if you prefer to manage it yourself.
+
 ## Access the admin panel from the LAN
 
 **Version 1.0.34 adds a built-in LAN switch. No certificates, environment variables or manual firewall commands are needed for normal trusted-LAN use.**

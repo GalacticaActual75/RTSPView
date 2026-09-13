@@ -50,6 +50,8 @@ jobs:
           dotnet run --project tests/RTSPView.LanAccessChecks -c Release
           dotnet run --project tests/RTSPView.RestartScheduleChecks -c Release
           if ($LASTEXITCODE -ne 0) { throw "Restart scheduling checks failed." }
+          dotnet run --project tests/RTSPView.MaintenanceChecks -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Maintenance checks failed." }
           node tests/lan-firewall.checks.cjs
           node tests/branding.checks.cjs
 
@@ -75,6 +77,7 @@ jobs:
         run: |
           dotnet publish src/RTSPView.Viewer/RTSPView.Viewer.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Viewer /p:Version=${{ steps.version.outputs.value }}
           dotnet publish src/RTSPView.Controller/RTSPView.Controller.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Controller /p:Version=${{ steps.version.outputs.value }}
+          dotnet publish src/RTSPView.Maintenance/RTSPView.Maintenance.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Maintenance /p:Version=${{ steps.version.outputs.value }}
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y

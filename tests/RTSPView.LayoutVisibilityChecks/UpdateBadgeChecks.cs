@@ -21,7 +21,8 @@ internal static class UpdateBadgeChecks
             if (!thermal.SetStatus(status, now)) throw new Exception("Hot sensors did not warn");
             thermal.Show(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             var panel = (Border)thermal.Content;
-            if (((SolidColorBrush)panel.Background).Color.A < 210 || !((TextBlock)panel.Child).Text.Contains("GPU")) throw new Exception("Thermal warning readability");
+            var text = ((StackPanel)panel.Child).Children.OfType<TextBlock>().Last();
+            if (((SolidColorBrush)panel.Background).Color.A < 210 || !text.Text.Contains("GPU") || text.FontSize < 24) throw new Exception("Thermal warning readability");
             Capture(panel, "temperature-warning.png");
             if (thermal.SetStatus(status with { Settings = status.Settings with { ShowWarnings = false } }, now) || thermal.IsVisible)
                 throw new Exception("Master temperature toggle did not hide warning");

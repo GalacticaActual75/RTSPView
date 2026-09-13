@@ -164,7 +164,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         }
         // LibVLC logs have no reliable media-player identity. A camera-owned engine
         // lets decoder evidence describe this stream rather than another camera.
-        _libVlc = compositedVideo ? libVlc : new LibVLC("--no-video-title-show", "--no-osd");
+        _libVlc = compositedVideo ? libVlc : new LibVLC("--no-video-title-show", "--no-osd", "--no-snapshot-preview");
         _ownsEngine = !compositedVideo;
         if (_ownsEngine) _libVlc.Log += OnDecoderLog;
         _logger = logger;

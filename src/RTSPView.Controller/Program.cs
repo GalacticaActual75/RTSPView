@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.DataProtection;
 using RTSPView.Core;
 using RTSPView.Infrastructure;
 using RTSPView.Controller;
+using RTSPView.Hardware;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -52,13 +53,16 @@ builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.C
 builder.Services.AddSingleton<ViewerTelemetryClient>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<ViewerTelemetryClient>());
 builder.Services.AddSingleton<SystemMetricsCollector>();
-builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, new HardwareTemperatureSensors(),
+builder.Services.AddSingleton(new MaintenanceClient(Path.Combine(AppContext.BaseDirectory, "..", "Maintenance", "RTSPView.Maintenance.exe")));
+builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, new ServiceTemperatureSensors(provider.GetRequiredService<MaintenanceClient>()),
     message => provider.GetRequiredService<RollingFileLogger>().Write("TEMPERATURE", message)));
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
 builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>()));
+builder.Services.AddSingleton(provider => new PawnIoInstaller(provider.GetRequiredService<MaintenanceClient>(), provider.GetRequiredService<TemperatureMonitor>(),
+    provider.GetRequiredService<UpdateService>(), !builder.Environment.IsEnvironment("Testing")));
 builder.Services.AddSingleton(provider =>
 {
     var service = provider.GetRequiredService<UpdateService>();
@@ -97,9 +101,11 @@ var configGate = new SemaphoreSlim(1, 1);
 var viewerTelemetry = app.Services.GetRequiredService<ViewerTelemetryClient>();
 var systemMetrics = app.Services.GetRequiredService<SystemMetricsCollector>();
 var temperatures = app.Services.GetRequiredService<TemperatureMonitor>();
+var pawnIo = app.Services.GetRequiredService<PawnIoInstaller>();
 var viewerCommands = app.Services.GetRequiredService<ViewerCommandClient>();
 var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
 var updates = app.Services.GetRequiredService<UpdateService>();
+updates.ExternalMaintenanceActive = async () => (await pawnIo.RemoteStatusAsync()).State is "installing" or "downloading";
 var updateMonitor = app.Services.GetRequiredService<UpdateMonitor>();
 var restartScheduler = app.Services.GetRequiredService<RestartScheduler>();
 var scheduleTimeZoneId = TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaZone) ? ianaZone : TimeZoneInfo.Local.Id;
@@ -233,6 +239,15 @@ app.MapGet("/api/telemetry", () =>
         System = systemMetrics.GetSnapshot() with { CpuTemperatureC = temperature.CpuC, GpuTemperatureC = temperature.GpuC } });
 }).RequireAuthorization();
 app.MapGet("/api/temperatures", () => Results.Ok(temperatures.Status(DateTimeOffset.UtcNow))).RequireAuthorization();
+app.MapGet("/api/dependencies/pawnio", async () => Results.Ok(await pawnIo.StatusAsync())).RequireAuthorization();
+app.MapPost("/api/dependencies/pawnio/{action}", async (string action, ConfirmedAction request) =>
+{
+    if (action is not ("enable-helper" or "install")) return Results.NotFound();
+    if (!request.Confirmed) return Results.BadRequest(new { error = "Explicit confirmation is required." });
+    if (!await pawnIo.StartAsync(action == "enable-helper")) return Results.Conflict(new { error = "Maintenance is already active or unavailable in this environment." });
+    auditLog.Write("AUDIT", "Administrator requested PawnIO " + action + ".");
+    return Results.Accepted(value: new { message = action == "enable-helper" ? "Approve Windows maintenance setup on the host." : "PawnIO installation requested. Follow progress below." });
+}).RequireAuthorization();
 app.MapPut("/api/temperatures", async (TemperatureSettings settings) =>
 {
     try { await temperatures.ConfigureAsync(settings); }

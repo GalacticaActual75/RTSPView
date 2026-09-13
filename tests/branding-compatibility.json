@@ -86,6 +86,9 @@
     ],
     "tests/admin-security.checks.cjs": [
       "SpotMonitor.Controller.dll"
+    ],
+    "src/RTSPView.Controller/PawnIoInstaller.cs": [
+      "SpotMonitor.Viewer"
     ]
   }
 }

@@ -113,7 +113,7 @@ public partial class MainWindow : Window
         _settingsPath = Path.Combine(_dataDirectory, "settings.json");
         _settingsStore = new JsonSettingsStore(_settingsPath);
         _logger = new RollingFileLogger(Path.Combine(_dataDirectory, "logs"));
-        _libVlc = new LibVLC("--no-video-title-show", "--no-osd");
+        _libVlc = new LibVLC("--no-video-title-show", "--no-osd", "--no-snapshot-preview");
         _libVlc.Log += (_, eventArgs) =>
         {
             if (eventArgs.Level >= LogLevel.Warning)
@@ -180,7 +180,7 @@ public partial class MainWindow : Window
         if (!_temperatureWarning.SetStatus(_temperatureStatus, now)) return;
         var origin = WallViewport.PointToScreen(new System.Windows.Point());
         var dpi = VisualTreeHelper.GetDpi(WallViewport);
-        _temperatureWarning.Width = Math.Min(340, Math.Max(1, WallViewport.ActualWidth - 32));
+        _temperatureWarning.Width = Math.Min(520, Math.Max(1, WallViewport.ActualWidth - 32));
         _temperatureWarning.Left = origin.X / dpi.DpiScaleX + 16;
         _temperatureWarning.Top = origin.Y / dpi.DpiScaleY + 16;
         if (!_temperatureWarning.IsVisible) _temperatureWarning.Show();

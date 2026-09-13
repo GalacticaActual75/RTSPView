@@ -31,6 +31,10 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:false})).status,400,'dependency install requires confirmation');
+  assert.equal((await request(a,'/api/dependencies/pawnio/arbitrary','POST',{confirmed:true})).status,404,'arbitrary maintenance actions rejected');
+  assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:true})).status,409,'test environment cannot install host dependencies');
+  a.csrf='';assert.equal((await request(a,'/api/dependencies/pawnio/enable-helper','POST',{confirmed:true})).status,400,'helper setup requires CSRF');await session(a);
   const thermal=(await request(a,'/api/temperatures')).json;
   assert.equal(thermal.settings.showWarnings,false,'all temperature warnings initially off');
   const thermalSettings={...thermal.settings,showWarnings:true,cpuWarningEnabled:true,gpuWarningEnabled:true,cpuMaxC:82,gpuMaxC:77};

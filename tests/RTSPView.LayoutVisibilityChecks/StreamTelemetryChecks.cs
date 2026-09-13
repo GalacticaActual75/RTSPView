@@ -25,7 +25,7 @@ internal static class StreamTelemetryChecks
                 output.Write(Enumerable.Repeat((byte)128, 160 * 120 / 2).ToArray());
             }
         }
-        using var engine = new LibVLC("--no-video-title-show", "--no-osd");
+        using var engine = new LibVLC("--no-video-title-show", "--no-osd", "--no-snapshot-preview");
         var tile = new CameraTile();
         var window = new Window { Content = tile, Width = 400, Height = 300, Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false };
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;

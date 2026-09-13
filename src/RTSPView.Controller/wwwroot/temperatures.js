@@ -12,9 +12,9 @@ const temperatureUi = (() => {
       </fieldset><p class="information-note">Shows the hottest reported temperature for each device type, including GPU hotspots or memory sensors when exposed. Choose limits appropriate for your hardware. Missing sensors show Unavailable and cannot trigger a warning. These settings apply only to this host.</p>
       <section aria-labelledby="temperature-dependencies-title">
         <h3 id="temperature-dependencies-title">Sensor requirements</h3>
-        <p>CPU temperature readings may require the PawnIO driver and administrator access. If PawnIO is missing, install its official signed edition on the computer running RTSPView, then fully restart the RTSPView Controller.</p>
+        <p>CPU temperature readings may require the PawnIO driver and administrator access. Use the host installation controls above, or install its official signed edition manually on the computer running RTSPView and restart the Controller.</p>
         <p><a href="https://pawnio.eu/" target="_blank" rel="noopener noreferrer">Download PawnIO (official site, opens in a new tab)</a></p>
-        <p>LibreHardwareMonitor is included with RTSPView; no separate download is needed. RTSPView does not install drivers or change Windows security settings.</p>
+        <p>LibreHardwareMonitor is included with RTSPView; no separate download is needed. The optional maintenance helper installs only the verified PawnIO package and reads sensors. UAC stays enabled.</p>
       </section>`;
     document.querySelector('#displayForm').after(form);
     form.addEventListener('change',()=>message('Unsaved changes.'));

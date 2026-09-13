@@ -15,6 +15,7 @@ public sealed class UpdateService : IDisposable
     private bool _launched;
     private string? _activeProgressPath;
     private readonly UpdateChannelStore _channels;
+    public Func<Task<bool>>? ExternalMaintenanceActive { get; set; }
 
     public UpdateService(string dataDirectory, RollingFileLogger logger)
     {
@@ -76,6 +77,7 @@ public sealed class UpdateService : IDisposable
         try
         {
             var directory = Path.Combine(_dataDirectory, "updates");
+            if (ExternalMaintenanceActive is not null && await ExternalMaintenanceActive()) return false;
             if (Directory.Exists(directory))
             {
                 foreach (var path in Directory.EnumerateFiles(directory, "progress-*.json"))
@@ -103,6 +105,8 @@ public sealed class UpdateService : IDisposable
         try
         {
             var installed = InstalledRelease();
+            if (ExternalMaintenanceActive is not null && await ExternalMaintenanceActive())
+                return new(false, "Wait for PawnIO maintenance to finish before installing an RTSPView update.");
             var channel = _channels.Read(installed.Channel);
             if (channel != UpdateRelease.ValidateChannel(expectedChannel)) throw new InvalidOperationException("The selected channel changed. Check for updates again.");
             if (_launched && _activeProgressPath is not null)

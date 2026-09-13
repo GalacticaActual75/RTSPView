@@ -1,51 +1,8 @@
 using System.Text.Json;
-using LibreHardwareMonitor.Hardware;
 using RTSPView.Core;
+using RTSPView.Hardware;
 
 namespace RTSPView.Controller;
-
-public interface ITemperatureSensors : IDisposable
-{
-    (double? Cpu, double? Gpu) Read();
-}
-
-public sealed class HardwareTemperatureSensors : ITemperatureSensors
-{
-    private Computer? _computer;
-    public (double? Cpu, double? Gpu) Read()
-    {
-        if (_computer is null)
-        {
-            var computer = new Computer { IsCpuEnabled = true, IsGpuEnabled = true };
-            try { computer.Open(); _computer = computer; }
-            catch { computer.Close(); throw; }
-        }
-        var cpu = new List<double>();
-        var gpu = new List<double>();
-        foreach (var hardware in _computer.Hardware)
-        {
-            try
-            {
-                var values = new List<double>();
-                ReadHardware(hardware, values);
-                if (hardware.HardwareType == HardwareType.Cpu) cpu.AddRange(values);
-                else if (hardware.HardwareType is HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel) gpu.AddRange(values);
-            }
-            catch { /* One unavailable device must not hide the other device's readings. */ }
-        }
-        return (cpu.Count == 0 ? null : Math.Round(cpu.Max(), 1), gpu.Count == 0 ? null : Math.Round(gpu.Max(), 1));
-    }
-
-    private static void ReadHardware(IHardware hardware, List<double> values)
-    {
-        hardware.Update();
-        foreach (var sensor in hardware.Sensors)
-            if (sensor.SensorType == SensorType.Temperature && sensor.Value is { } value && TemperatureStatus.Valid(value)) values.Add(value);
-        foreach (var child in hardware.SubHardware) ReadHardware(child, values);
-    }
-
-    public void Dispose() => _computer?.Close();
-}
 
 // Independent of browser polling. Settings are host-specific, like restart schedules.
 public sealed class TemperatureMonitor : BackgroundService
@@ -54,6 +11,8 @@ public sealed class TemperatureMonitor : BackgroundService
     private readonly ITemperatureSensors _sensors;
     private readonly Action<string> _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _sensorGate = new(1, 1);
+    private bool _suspended;
     private TemperatureStatus _latest = new();
 
     public TemperatureMonitor(string directory, ITemperatureSensors sensors, Action<string> log)
@@ -96,7 +55,9 @@ public sealed class TemperatureMonitor : BackgroundService
     public async Task SampleAsync(DateTimeOffset now)
     {
         (double? Cpu, double? Gpu) reading;
-        try { reading = _sensors.Read(); } catch { reading = (null, null); }
+        await _sensorGate.WaitAsync();
+        try { reading = _suspended ? (null, null) : _sensors.Read(); } catch { reading = (null, null); }
+        finally { _sensorGate.Release(); }
         await _gate.WaitAsync();
         try
         {
@@ -107,6 +68,14 @@ public sealed class TemperatureMonitor : BackgroundService
             Write(_statusPath, status);
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task SuspendAsync(bool suspended)
+    {
+        await _sensorGate.WaitAsync();
+        try { _suspended = suspended; _sensors.Reset(); }
+        finally { _sensorGate.Release(); }
+        if (suspended) await SampleAsync(DateTimeOffset.UtcNow);
     }
 
     private static void Write<T>(string path, T value)

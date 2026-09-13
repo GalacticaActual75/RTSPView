@@ -3,7 +3,7 @@ using RTSPView.Infrastructure;
 
 namespace RTSPView.Controller;
 
-public sealed class ViewerSupervisor(ViewerTelemetryClient telemetry, ViewerCommandClient commands, RollingFileLogger logger) : BackgroundService
+public sealed class ViewerSupervisor(ViewerTelemetryClient telemetry, ViewerCommandClient commands, RollingFileLogger logger, PawnIoInstaller dependencies) : BackgroundService
 {
     private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
     private DateTimeOffset _lastRecoveryAttempt = DateTimeOffset.MinValue;
@@ -13,6 +13,7 @@ public sealed class ViewerSupervisor(ViewerTelemetryClient telemetry, ViewerComm
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            if (dependencies.Busy || (await dependencies.StatusAsync()).State is "installing" or "downloading") continue;
             var now = DateTimeOffset.UtcNow;
             if (now - _startedAt < TimeSpan.FromSeconds(45) || now - _lastRecoveryAttempt < TimeSpan.FromMinutes(1)) continue;
             var lastSeen = telemetry.LastReceivedAt ?? _startedAt;
