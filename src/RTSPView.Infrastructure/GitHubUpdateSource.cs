@@ -16,16 +16,21 @@ public sealed class GitHubUpdateSource : IDisposable
     private readonly string _repository;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, (DateTimeOffset At, GitHubUpdate? Release)> _cache = new();
+    private readonly string? _cooldownPath;
+    private DateTimeOffset _notBefore;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public GitHubUpdateSource() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
-        Environment.GetEnvironmentVariable("RTSPVIEW_GITHUB_REPOSITORY") ?? DefaultRepository) { }
+    public GitHubUpdateSource(string? cooldownPath = null) : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
+        Environment.GetEnvironmentVariable("RTSPVIEW_GITHUB_REPOSITORY") ?? DefaultRepository, cooldownPath) { }
 
-    public GitHubUpdateSource(HttpClient http, string repository)
+    public GitHubUpdateSource(HttpClient http, string repository, string? cooldownPath = null)
     {
         if (!Regex.IsMatch(repository, @"^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$"))
             throw new InvalidDataException("Configure a GitHub repository as owner/repository.");
         (_http, _repository) = (http, repository);
+        _cooldownPath = cooldownPath;
+        try { if (cooldownPath is not null && File.Exists(cooldownPath)) _notBefore = JsonSerializer.Deserialize<DateTimeOffset>(File.ReadAllText(cooldownPath)); }
+        catch (Exception error) when (error is IOException or JsonException) { _notBefore = DateTimeOffset.UtcNow.AddHours(1); }
     }
 
     public string ChannelLocation(string channel) => $"https://github.com/{_repository}/releases" + (UpdateRelease.ValidateChannel(channel) == "stable" ? "/latest" : "");
@@ -132,6 +137,7 @@ public sealed class GitHubUpdateSource : IDisposable
     {
         for (var redirects = 0; redirects <= 5; redirects++)
         {
+            if (DateTimeOffset.UtcNow < _notBefore) throw new GitHubRateLimitException(_notBefore);
             if (uri.Scheme != "https" || uri.Port != 443 || uri.UserInfo.Length != 0 ||
                 uri.Host is not ("api.github.com" or "github.com" or "release-assets.githubusercontent.com" or "objects.githubusercontent.com"))
                 throw new InvalidDataException("Untrusted GitHub download destination.");
@@ -143,6 +149,27 @@ public sealed class GitHubUpdateSource : IDisposable
                 request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
             }
             var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
+            if ((int)response.StatusCode is 403 or 429)
+            {
+                var retry = DateTimeOffset.UtcNow.AddHours(1);
+                if (response.Headers.RetryAfter?.Delta is { } delta) retry = DateTimeOffset.UtcNow.Add(delta);
+                else if (response.Headers.RetryAfter?.Date is { } date) retry = date;
+                if (response.Headers.TryGetValues("X-RateLimit-Reset", out var values) &&
+                    long.TryParse(values.FirstOrDefault(), out var epoch) && epoch is > 0 and < 253402300799)
+                {
+                    var reset = DateTimeOffset.FromUnixTimeSeconds(epoch);
+                    if (reset > retry) retry = reset;
+                }
+                _notBefore = retry > DateTimeOffset.UtcNow.AddMinutes(1) ? retry.AddSeconds(5) : DateTimeOffset.UtcNow.AddMinutes(1);
+                response.Dispose();
+                if (_cooldownPath is not null)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(_cooldownPath)!);
+                    File.WriteAllText(_cooldownPath + ".tmp", JsonSerializer.Serialize(_notBefore));
+                    File.Move(_cooldownPath + ".tmp", _cooldownPath, true);
+                }
+                throw new GitHubRateLimitException(_notBefore);
+            }
             if ((int)response.StatusCode is 301 or 302 or 303 or 307 or 308)
             {
                 var location = response.Headers.Location; response.Dispose();
@@ -166,6 +193,11 @@ public sealed class GitHubUpdateSource : IDisposable
     public void Dispose() { _http.Dispose(); _gate.Dispose(); }
     private sealed record Release([property: JsonPropertyName("tag_name")] string Tag, bool Draft, bool Prerelease, Asset[] Assets);
     private sealed record Asset(long Id, string Name, string State, long Size, string? Digest);
+}
+
+public sealed class GitHubRateLimitException(DateTimeOffset retryAt) : HttpRequestException("GitHub requested a cooldown.")
+{
+    public DateTimeOffset RetryAt { get; } = retryAt;
 }
 
 public sealed record UpdateManifest(string Version, string Installer, string Sha256, DateTimeOffset PublishedAt);

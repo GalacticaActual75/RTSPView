@@ -55,6 +55,23 @@ internal static class GitHubUpdateChecks
         await Reject(() => source.DownloadAsync(stable, destination), "truncated download");
         Check(File.ReadAllBytes(destination).SequenceEqual(bytes), "failed download preserves prior verified installer");
         Check(!Directory.EnumerateFiles(root, "*.partial").Any(), "partial download removed");
+        var cooldown = Path.Combine(root,"cooldown.json"); var limitedCalls=0;
+        HttpResponseMessage Limited(HttpRequestMessage request)
+        {
+            limitedCalls++;var response=new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+            response.Headers.RetryAfter=new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromHours(3));
+            response.Headers.Add("X-RateLimit-Reset",DateTimeOffset.UtcNow.AddHours(4).ToUnixTimeSeconds().ToString());
+            return response;
+        }
+        using(var limited=new GitHubUpdateSource(new HttpClient(new Handler(Limited)),"example/RTSPView",cooldown))
+        {
+            try{await limited.FindAsync("stable");throw new Exception("Rate limit accepted");}
+            catch(GitHubRateLimitException error){Check(error.RetryAt>DateTimeOffset.UtcNow.AddHours(3),"respects later reset header");}
+            try{await limited.FindAsync("stable",true);throw new Exception("Cooldown bypassed");}catch(GitHubRateLimitException){}
+        }
+        using(var restarted=new GitHubUpdateSource(new HttpClient(new Handler(Limited)),"example/RTSPView",cooldown))
+        {try{await restarted.FindAsync("beta",true);throw new Exception("Restart bypassed cooldown");}catch(GitHubRateLimitException){}}
+        Check(limitedCalls==1,"rate limit persists across requests, channels and process restarts");
         Console.WriteLine("GitHub update checks passed: channels, beta ordering, caching, manifests, digest, redirects, no credentials and failed downloads.");
     }
     private static HttpResponseMessage Json(object value) => new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json") };

@@ -82,6 +82,10 @@ public partial class MainWindow : Window
     private int? _focusedSlot;
     private readonly SnapshotRefreshSchedule _snapshotSchedule = new();
     private bool _refreshingSnapshots;
+    private UpdateBadgeWindow? _updateBadge;
+    private WallUpdateNotice? _updateNotice;
+    private DateTime _lastUpdateNoticeRead;
+    private bool _dialogOpen;
 
     public MainWindow()
     {
@@ -96,7 +100,7 @@ public partial class MainWindow : Window
         _cursorTimer.Tick += (_, _) =>
         {
             CheckCornerGesture();
-            if (_isFullScreen && _settings.HideMouseCursor &&
+            if (!_dialogOpen && _updateBadge?.Busy != true && _isFullScreen && _settings.HideMouseCursor &&
                 DateTime.UtcNow - _lastMouseMovement >= TimeSpan.FromSeconds(_settings.MouseCursorHideSeconds))
             {
                 if (Mouse.OverrideCursor is null) Mouse.OverrideCursor = System.Windows.Input.Cursors.None;
@@ -123,6 +127,7 @@ public partial class MainWindow : Window
         {
             if (_settings.KeepViewerAlwaysOnTop) ApplyAlwaysOnTop();
             RefreshNativeVideoBackgrounds();
+            RefreshUpdateBadge();
             if (_settings.AllOverlays().Any(overlay => overlay.Camera.Enabled))
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
@@ -154,6 +159,29 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) { _logger.Write("WARNING", $"Scheduled snapshot refresh failed: {exception.Message}"); }
         finally { _refreshingSnapshots = false; }
+    }
+
+    private void RefreshUpdateBadge()
+    {
+        if (DateTime.UtcNow - _lastUpdateNoticeRead > TimeSpan.FromSeconds(5))
+        {
+            _lastUpdateNoticeRead=DateTime.UtcNow;
+            try { _updateNotice=System.Text.Json.JsonSerializer.Deserialize<WallUpdateNotice>(File.ReadAllText(Path.Combine(_dataDirectory,"update-notice.json"))); }
+            catch(Exception error) when(error is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { _updateNotice=null; }
+        }
+        if (_updateNotice?.Visible != true || !CanDisplayOverlayWindows()) { if(_updateBadge?.Busy!=true)_updateBadge?.Hide(); return; }
+        if(_updateBadge is null)
+        {
+            _updateBadge=new UpdateBadgeWindow(this, showDialog: show => WithOverlaysSuppressed(show));
+            _updateBadge.PointerActivity+=(_,_)=>RegisterPointerActivity();
+        }
+        _updateBadge.SetNotice(_updateNotice);
+        var origin=WallViewport.PointToScreen(new System.Windows.Point());
+        var dpi=VisualTreeHelper.GetDpi(WallViewport);
+        _updateBadge.Left=origin.X/dpi.DpiScaleX+Math.Max(0,WallViewport.ActualWidth-_updateBadge.Width-16);
+        _updateBadge.Top=origin.Y/dpi.DpiScaleY+Math.Max(0,WallViewport.ActualHeight-_updateBadge.Height-16);
+        if(!_updateBadge.IsVisible && !_updateBadge.Busy)_updateBadge.Show();
+        if(!_updateBadge.Busy)BringOverlayWindowToFront(_updateBadge);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -436,6 +464,7 @@ public partial class MainWindow : Window
 
     private void HideOverlayWindows()
     {
+        _updateBadge?.Hide();
         HideOverlayWindowHierarchy(_doorbellWindow, DoorbellTile);
         HideOverlayWindowHierarchy(_garageWindow, GarageTile);
         foreach (var entry in _additionalOverlays.Values) HideOverlayWindowHierarchy(entry.Window, entry.Tile);
@@ -455,7 +484,7 @@ public partial class MainWindow : Window
 
     private bool CanDisplayOverlayWindows()
     {
-        if (!IsVisible || WindowState == WindowState.Minimized) return false;
+        if (_dialogOpen || !IsVisible || WindowState == WindowState.Minimized) return false;
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return true;
         if (!IsWindowVisible(handle) || IsIconic(handle)) return false;
@@ -723,6 +752,7 @@ public partial class MainWindow : Window
 
     private void ApplyAlwaysOnTop()
     {
+        if (_dialogOpen) return;
         Topmost = _settings.KeepViewerAlwaysOnTop;
         if (_doorbellWindow is not null) _doorbellWindow.Topmost = false;
         if (_garageWindow is not null) _garageWindow.Topmost = false;
@@ -901,7 +931,7 @@ public partial class MainWindow : Window
     private void ConfigureButton_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new ConfigurationWindow(_settings, _settingsStore) { Owner = this };
-        if (dialog.ShowDialog() != true) return;
+        if (WithOverlaysSuppressed(() => dialog.ShowDialog()) != true) return;
         _settings = dialog.Settings.Normalize();
         SyncAdditionalOverlays();
         ApplyWallLayout();
@@ -915,9 +945,36 @@ public partial class MainWindow : Window
         _logger.Write("INFO", "Configuration saved and applied to all changed camera slots");
     }
 
+    private void OpenWebConfig_Click(object sender, RoutedEventArgs e)
+    {
+        try { Process.Start(new ProcessStartInfo("http://127.0.0.1:5080") { UseShellExecute = true }); }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException)
+        {
+            _logger.Write("ERROR", "Unable to open the web configuration browser: " + error.GetType().Name);
+            System.Windows.MessageBox.Show(this, "Open http://127.0.0.1:5080 in your browser. Make sure the RTSPView Controller is running.",
+                "Web configuration", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private T WithOverlaysSuppressed<T>(Func<T> show)
+    {
+        var previous = _dialogOpen;
+        _dialogOpen = true;
+        RegisterPointerActivity();
+        foreach (var tile in _allTiles) tile.SetOverlaySuppressed(true);
+        HideOverlayWindows();
+        try { return show(); }
+        finally
+        {
+            _dialogOpen = previous;
+            foreach (var tile in _allTiles) tile.SetOverlaySuppressed(previous);
+            if (!previous) { QueueOverlayLayouts(); RefreshUpdateBadge(); }
+        }
+    }
+
     private async Task ReloadExternalConfigurationAsync()
     {
-        if (_reloadInProgress || !File.Exists(_settingsPath)) return;
+        if (_dialogOpen || _reloadInProgress || !File.Exists(_settingsPath)) return;
         var writeTime = File.GetLastWriteTimeUtc(_settingsPath);
         if (writeTime <= _settingsLastWriteUtc) return;
         _reloadInProgress = true;
@@ -959,6 +1016,7 @@ public partial class MainWindow : Window
     {
         _diagnosticsTimer.Stop();
         _cursorTimer.Stop();
+        _updateBadge?.Close();
         Mouse.OverrideCursor = null;
         foreach (var tile in _allTiles) tile.Dispose();
         foreach (var entry in _additionalOverlays.Values)

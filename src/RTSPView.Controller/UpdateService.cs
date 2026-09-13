@@ -8,7 +8,7 @@ namespace RTSPView.Controller;
 
 public sealed class UpdateService : IDisposable
 {
-    private readonly GitHubUpdateSource _source = new();
+    private readonly GitHubUpdateSource _source;
     private readonly string _dataDirectory;
     private readonly RollingFileLogger _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -21,6 +21,14 @@ public sealed class UpdateService : IDisposable
         _dataDirectory = dataDirectory;
         _logger = logger;
         _channels = new UpdateChannelStore(dataDirectory);
+        _source = new GitHubUpdateSource(Path.Combine(dataDirectory, "github-cooldown.json"));
+    }
+
+    public UpdateStatus InitialStatus()
+    {
+        var installed = InstalledRelease();
+        var channel = _channels.Read(installed.Channel);
+        return new(installed.Label, null, false, false, "Waiting for the daily update check.", _source.ChannelLocation(channel), installed.Channel, channel);
     }
 
     public async Task<UpdateStatus> CheckAsync(CancellationToken cancellationToken = default)
@@ -38,9 +46,13 @@ public sealed class UpdateService : IDisposable
             return new(installed.Label, latest.Label, true, updateAvailable,
                 updateAvailable ? $"RTSPView {manifest.Version} is ready to install." : "RTSPView is up to date on this channel.", channelPath, installed.Channel, channel);
         }
+        catch (GitHubRateLimitException error)
+        {
+            return new(installed.Label, null, false, false, "GitHub requested a pause. Update checks will resume automatically.", channelPath, installed.Channel, channel, RetryAt: error.RetryAt, CheckFailed: true);
+        }
         catch (Exception)
         {
-            return new(installed.Label, null, false, false, "GitHub updates unavailable. Check the Internet connection and public repository access.", channelPath, installed.Channel, channel);
+            return new(installed.Label, null, false, false, "GitHub updates unavailable. Check the Internet connection and public repository access.", channelPath, installed.Channel, channel, CheckFailed: true);
         }
     }
 
@@ -171,5 +183,4 @@ public sealed class UpdateService : IDisposable
     public void Dispose() { _source.Dispose(); _gate.Dispose(); }
 }
 
-public sealed record UpdateStatus(string InstalledVersion, string? LatestVersion, bool ChannelAvailable, bool UpdateAvailable, string Message, string ChannelPath, string InstalledChannel, string SelectedChannel);
 public sealed record UpdateLaunchResult(bool Started, string Message);

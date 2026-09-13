@@ -55,6 +55,17 @@ builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(new RollingFileLogger(Path.Combine(dataDirectory, "logs")));
 builder.Services.AddSingleton(provider => new UpdateService(dataDirectory, provider.GetRequiredService<RollingFileLogger>()));
+builder.Services.AddSingleton(provider =>
+{
+    var service = provider.GetRequiredService<UpdateService>();
+    return new UpdateMonitor(dataDirectory, service.InitialStatus, service.CheckAsync, service.StageAndLaunchAsync,
+        message => provider.GetRequiredService<RollingFileLogger>().Write("UPDATE", message));
+});
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateMonitor>());
+    builder.Services.AddHostedService<WallUpdateServer>();
+}
 builder.Services.AddSingleton(provider => new RestartScheduler(dataDirectory, async (action, token) =>
 {
     if (action == "viewer")
@@ -84,6 +95,7 @@ var systemMetrics = app.Services.GetRequiredService<SystemMetricsCollector>();
 var viewerCommands = app.Services.GetRequiredService<ViewerCommandClient>();
 var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
 var updates = app.Services.GetRequiredService<UpdateService>();
+var updateMonitor = app.Services.GetRequiredService<UpdateMonitor>();
 var restartScheduler = app.Services.GetRequiredService<RestartScheduler>();
 var scheduleTimeZoneId = TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaZone) ? ianaZone : TimeZoneInfo.Local.Id;
 var loginLimiter = new LoginAttemptLimiter();
@@ -227,13 +239,17 @@ app.MapPut("/api/network", async (HttpContext context, LanAccessRequest request)
     catch (Exception) { return Results.Problem("Unable to save LAN access settings. Check local permissions.", statusCode: 500); }
 }).RequireAuthorization();
 
-app.MapGet("/api/update", async (CancellationToken cancellationToken) => Results.Ok(await updates.CheckAsync(cancellationToken))).RequireAuthorization();
+app.MapGet("/api/update", async () => Results.Ok(await updateMonitor.StatusAsync())).RequireAuthorization();
+app.MapPost("/api/update/check", async (CancellationToken cancellationToken) =>
+    Results.Ok(await updateMonitor.CheckAsync(true, DateTimeOffset.UtcNow, cancellationToken))).RequireAuthorization();
+app.MapPut("/api/update/notifications", async (WallNotificationSettings request) =>
+    Results.Ok(await updateMonitor.NotificationsAsync(request.Enabled))).RequireAuthorization();
 app.MapPut("/api/update/channel", async (UpdateChannelRequest request, CancellationToken cancellationToken) =>
 {
     try
     {
         await updates.SelectChannelAsync(request.Channel, cancellationToken);
-        return Results.Ok(await updates.CheckAsync(cancellationToken));
+        return Results.Ok(await updateMonitor.CheckAsync(true, DateTimeOffset.UtcNow, cancellationToken));
     }
     catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
     {
@@ -632,3 +648,4 @@ sealed class LoginAttemptLimiter
         return queue;
     }
 }
+public sealed record WallNotificationSettings(bool Enabled);

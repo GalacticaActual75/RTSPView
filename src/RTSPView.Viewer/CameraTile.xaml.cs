@@ -127,14 +127,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         SynchronizeStatusWindowVisibility();
     }
 
+    private bool _overlaySuppressed;
+    public void SetOverlaySuppressed(bool suppressed)
+    {
+        _overlaySuppressed = suppressed;
+        SynchronizeStatusWindowVisibility();
+    }
+
     private void SynchronizeStatusWindowVisibility()
     {
-        OverlayRoot.Visibility = IsVisible ? Visibility.Visible : Visibility.Collapsed;
+        OverlayRoot.Visibility = IsVisible && !_overlaySuppressed ? Visibility.Visible : Visibility.Collapsed;
         if (_useCompositedOutput) return;
         var statusWindow = Window.GetWindow(OverlayRoot);
         // Composited overlays use their actual owner, which MainWindow manages.
         if (statusWindow is null || statusWindow == Window.GetWindow(this)) return;
-        if (!IsVisible)
+        if (!IsVisible || _overlaySuppressed)
         {
             if (statusWindow.IsVisible) statusWindow.Hide();
             HideHoverControls();

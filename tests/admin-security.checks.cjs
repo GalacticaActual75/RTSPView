@@ -31,6 +31,11 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  assert.equal((await request(a,'/api/update')).json.showWallNotifications,true,'wall notices enabled by default');
+  assert.equal((await request(a,'/api/update/notifications','PUT',{enabled:false})).status,200);
+  assert.equal((await request(a,'/api/update')).json.showWallNotifications,false,'notification toggle saved');
+  a.csrf='';assert.equal((await request(a,'/api/update/notifications','PUT',{enabled:true})).status,400,'notification CSRF required');
+  assert.equal((await request(a,'/api/update/check','POST')).status,400,'manual update check CSRF required');await session(a);
   for(const camera of [config.camera,...config.cameras,config.doorbellOverlay.camera,config.garageOverlay.camera,...config.additionalOverlays.map(o=>o.camera)])assert.equal(camera.rtspUrl,'','fresh camera URL empty');
   assert.equal(config.snapshots.enabled,false,'snapshot schedule off by default');
   const schedule=(await request(a,'/api/restart-schedule')).json;

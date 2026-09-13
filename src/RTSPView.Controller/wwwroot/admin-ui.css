@@ -132,3 +132,4 @@ label{line-height:1.5}a{color:#8ec2ff}.secondary[href]{display:inline-flex;align
 .restart-countdown{position:fixed;bottom:16px;left:16px;right:16px;z-index:1000;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;background:#30291e;border:1px solid #a77c40;border-radius:8px;color:#ffe0ac}
 .restart-countdown[hidden],#restartScheduleForm [hidden]{display:none!important}
 @media(max-width:700px){.restart-form-grid,.restart-status{grid-template-columns:1fr}.restart-countdown{flex-wrap:wrap}}
+.update-notifications{border-top:1px solid var(--line);margin-top:16px;padding-top:16px}.update-notifications p{margin:8px 0 0}.update-check-times{color:var(--muted);overflow-wrap:anywhere}

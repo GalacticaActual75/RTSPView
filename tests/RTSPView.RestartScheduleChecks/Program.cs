@@ -13,6 +13,7 @@ RestartScheduler Scheduler(string name = "normal", DateTimeOffset? start = null)
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 try
 {
+    await UpdateMonitorChecks.Run(root);
     var s = Scheduler();
     Check(!(await s.ReadAsync()).Settings.Enabled,"default disabled");
     var interval = new RestartScheduleSettings { Enabled=true,Mode="interval",IntervalHours=1 };

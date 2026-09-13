@@ -24,6 +24,10 @@ internal static class FocusChecks
         Check(Grid.GetColumnSpan(tiles[0]) == 2 && Grid.GetRowSpan(tiles[0]) == 2 && Grid.GetColumn(tiles[2]) == 2, "restore custom geometry");
         Check(layout.Rows == 2 && layout.Tiles.Count == 3, "saved layout is unchanged");
         var overlay = (UIElement)tiles[0].FindName("OverlayRoot");
+        tiles[0].SetOverlaySuppressed(true);tiles[0].Tick();
+        if(overlay.Visibility!=Visibility.Collapsed)throw new Exception("Stream status overlay appeared over a modal dialog");
+        tiles[0].SetOverlaySuppressed(false);
+        if(overlay.Visibility!=Visibility.Visible)throw new Exception("Stream status overlay did not return after closing a dialog");
         var clicks = 0; tiles[0].FocusRequested += (_,_)=>clicks++;
         var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent };
         typeof(MouseButtonEventArgs).GetProperty("ClickCount")!.SetValue(args, 2);
