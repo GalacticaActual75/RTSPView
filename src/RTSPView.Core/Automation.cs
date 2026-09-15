@@ -17,6 +17,7 @@ public sealed record AutomationRule
     public string LayoutId { get; init; } = "";
     // Zero follows each triggering source; positive values select a fixed camera.
     public int CameraSlot { get; init; }
+    public int SecondCameraSlot { get; init; }
     public double ClearMinutes { get; init; } = 2;
 }
 
@@ -44,6 +45,11 @@ public sealed record AutomationSettings
             if (!Enum.IsDefined(rule.Action)) throw new InvalidDataException("Select a supported automation action.");
             if (rule.LayoutId is null || (rule.Action == AutomationAction.FocusedLayout && rule.LayoutId.Length > 0 && !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId)))
                 throw new InvalidDataException("Select an available automation layout.");
+            if (rule.SecondCameraSlot != 0 && (rule.Action != AutomationAction.FocusedLayout ||
+                !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId && l.FocusSlots.Length == 2) ||
+                !AutomationConfiguration.CanFocus(cameras, AutomationAction.FocusedLayout, rule.SecondCameraSlot) ||
+                rule.CameraSlot == rule.SecondCameraSlot))
+                throw new InvalidDataException("Focus 2 requires a two-focus layout and a different, enabled camera.");
             if (!Guid.TryParse(rule.Id, out _) || string.IsNullOrWhiteSpace(rule.Name) || rule.Name.Length > 100) throw new InvalidDataException("Each rule needs an ID and a name of up to 100 characters.");
             if (!double.IsFinite(rule.ClearMinutes) || rule.ClearMinutes is < 0.1 or > 120) throw new InvalidDataException("Clear delay must be 0.1–120 minutes.");
             if (rule.Sources is null || rule.Sources.Length is < 1 or > 32 || rule.Sources.Any(s => s is null) || rule.Sources.Select(s => s.CameraSlot).Distinct().Count() != rule.Sources.Length) throw new InvalidDataException("Select one or more distinct source cameras.");
@@ -51,7 +57,7 @@ public sealed record AutomationSettings
             {
                 if (source.RequiredZone is null || source.RequiredZone.Length > 100 || source.RequiredZone.Any(char.IsControl)) throw new InvalidDataException("Zone names must be at most 100 characters without control characters.");
                 if (string.IsNullOrWhiteSpace(source.Topic) || source.Topic.Length > 512 || source.Topic.IndexOfAny(['#', '+', '\0']) >= 0) throw new InvalidDataException("Enter an exact MQTT event topic without wildcards.");
-                if (!cameras.Cameras.Concat(cameras.AllOverlays().Select(o => o.Camera)).Any(c => c.Slot == source.CameraSlot && !string.IsNullOrWhiteSpace(c.RtspUrl))) throw new InvalidDataException("Select a configured source camera.");
+                if (!StreamCatalog.LayoutCameras(cameras).Concat(cameras.AllOverlays().Select(o => o.Camera)).Any(c => c.Slot == source.CameraSlot && !string.IsNullOrWhiteSpace(c.RtspUrl))) throw new InvalidDataException("Select a configured source camera.");
             }
             if (rule.Action == AutomationAction.Overlay)
             {
@@ -72,14 +78,14 @@ public sealed record AutomationSettings
 }
 
 public sealed record AutomationOverlayLease(string Id, int Slot, DateTimeOffset ExpiresAt,
-    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "", string LayoutId = "");
+    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "", string LayoutId = "", int SecondCameraSlot = 0);
 public sealed record AutomationPresentation(string ConfigurationHash, AutomationOverlayLease[] Leases);
 
 public static class AutomationConfiguration
 {
     public static string Hash(AppSettings settings) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(settings.Normalize()))));
     public static bool CanFocus(AppSettings settings, AutomationAction action, int slot) =>
-        settings.Cameras.Take(settings.CameraCount).Any(c => c.Slot == slot && c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl)) ||
+        StreamCatalog.LayoutCameras(settings).Any(c => c.Slot == slot && c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl)) ||
         (action == AutomationAction.FullScreen && settings.AllOverlays().Any(o => o.Camera.Slot == slot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl)));
 
     public static WallLayout FocusedLayout(AppSettings settings, int slot)
@@ -119,7 +125,7 @@ public sealed class PersonOverlayEngine
         var sourceTime = eventTime ?? now;
         var expiry = (sourceTime > now ? now : sourceTime).AddMinutes(rule.ClearMinutes);
         if (existing is not null && existing.ExpiresAt > expiry) expiry = existing.ExpiresAt;
-        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id, rule.LayoutId);
+        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id, rule.LayoutId, rule.SecondCameraSlot);
     }
     public void Expire(DateTimeOffset now)
     {

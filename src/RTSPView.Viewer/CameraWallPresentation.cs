@@ -16,7 +16,7 @@ public static class CameraWallPresentation
             grid.ColumnDefinitions.Add(new() { Width = new System.Windows.GridLength(focusedSlot.HasValue ? 1 : proportions.Columns[column], System.Windows.GridUnitType.Star) });
         for (var index = 0; index < tiles.Count; index++)
         {
-            var slot = AppSettings.MainCameraSlots[index];
+            var slot = index < AppSettings.MainCameraSlots.Length ? AppSettings.MainCameraSlots[index] : tiles[index].Slot;
             var placement = focusedSlot.HasValue
                 ? (focusedSlot == slot ? new WallTile { CameraSlot = slot } : null)
                 : layout.Tiles.FirstOrDefault(item => item.CameraSlot == slot);

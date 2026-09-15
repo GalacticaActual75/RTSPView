@@ -14,6 +14,7 @@ public sealed record AppSettings
     public IReadOnlyList<CameraSettings> Cameras { get; init; } = CreateCameraSlots();
     // Player capacity is separate from camera entries the user has added.
     public int CameraCount { get; init; } = 9;
+    public int[] DeletedCameraSlots { get; init; } = [];
     public DoorbellOverlaySettings DoorbellOverlay { get; init; } = new();
     public DoorbellOverlaySettings GarageOverlay { get; init; } = CreateGarageOverlay();
     public const int MaximumAdditionalOverlays = 14;
@@ -67,6 +68,11 @@ public sealed record AppSettings
         for (var index = 0; index < normalized.Length; index++)
             normalized[index] = NormalizeCamera(normalized[index], MainCameraSlots[index], $"Camera {index + 1}");
 
+        foreach (var slot in DeletedCameraSlots ?? [])
+        {
+            var index = Array.IndexOf(MainCameraSlots, slot);
+            if (index >= 0) normalized[index] = normalized[index] with { Enabled = false, RtspUrl = "" };
+        }
         var overlay = NormalizeOverlay(DoorbellOverlay ?? new DoorbellOverlaySettings(), 10, "Doorbell");
         var garageOverlay = NormalizeOverlay(GarageOverlay ?? CreateGarageOverlay(), 11, "Garage");
         var layouts = SchemaVersion < 15 ? new WallLayout[] { new() } : Layouts;
@@ -84,7 +90,8 @@ public sealed record AppSettings
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
-            DiagnosticsAutoOpenExcludedSlots = (DiagnosticsAutoOpenExcludedSlots ?? []).Where(slot => slot >= 1 && slot <= MaximumStreamSlot).Distinct().Order().ToArray(),
+            DeletedCameraSlots = (DeletedCameraSlots ?? []).Where(MainCameraSlots.Contains).Distinct().ToArray(),
+            DiagnosticsAutoOpenExcludedSlots = (DiagnosticsAutoOpenExcludedSlots ?? []).Where(slot => slot >= 1 && slot <= StreamCatalog.MaximumSlot).Distinct().Order().ToArray(),
             Snapshots = (Snapshots ?? new()).Normalize(),
             Cameras = normalized,
             CameraCount = cameraCount,

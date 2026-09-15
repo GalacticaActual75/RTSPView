@@ -9,6 +9,7 @@ try
     StreamActivityChecks.Run();
     OverlayGeometryChecks.Run();
     WallProportionsChecks.Run();
+    StreamCatalogChecks.Run();
     AutomationLayoutChecks.Run();
     await SnapshotChecks.RunAsync(root);
     await GitHubUpdateChecks.RunAsync(root);
@@ -87,7 +88,7 @@ try
         sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 1, Column = 1 }] },
         sixteen with { Tiles = [new() { CameraSlot = 1, Row = int.MaxValue }] },
         sixteen with { Tiles = [new() { CameraSlot = 1, ColumnSpan = 5 }] },
-        sixteen with { Tiles = [] }, sixteen with { Tiles = null! } })
+        sixteen with { Rows = 0 }, sixteen with { Tiles = null! } })
     {
         var rejectedLayout = false;
         try { WallLayout.Validate([invalidLayout], invalidLayout.Id); } catch (InvalidDataException) { rejectedLayout = true; }

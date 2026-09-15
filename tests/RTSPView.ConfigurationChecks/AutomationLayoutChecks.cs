@@ -33,6 +33,16 @@ internal static class AutomationLayoutChecks
         Check(state.FocusSlots(now,template.Id).SequenceEqual(new[]{5,6}), "Active focus ordering or layout isolation failed");
         Check(state.FocusSlots(now.AddSeconds(11),template.Id).SequenceEqual(new[]{6}), "Expired focus did not release position");
         state.Dismiss();Check(state.FocusSlots(now,template.Id).Length==0,"Manual dismissal left a focus position active");
+        var rule = new AutomationRule { Action=AutomationAction.FocusedLayout, LayoutId=template.Id, CameraSlot=1, SecondCameraSlot=2, Sources=[new(3,"scrypted/3/ObjectDetector")] };
+        new AutomationSettings { Rules=[rule] }.Validate(settings);
+        var engine=new PersonOverlayEngine();engine.Trigger(rule,3,now);
+        state.Clear();state.Update(engine.Leases.Values.ToArray(),now);
+        Check(state.FocusSlots(now,template.Id).SequenceEqual(new[]{1,2}), "Single trigger did not fill both selected focus cameras");
+        Check(state.FocusSlots(now.AddMinutes(3),template.Id).Length==0,"Paired cameras did not expire together");
+        state.Dismiss();Check(state.FocusSlots(now,template.Id).Length==0,"Manual override left second focus camera active");
+        try { new AutomationSettings {Rules=[rule with {SecondCameraSlot=1}]}.Validate(settings);throw new Exception("Duplicate fixed focus camera accepted"); }catch(InvalidDataException){}
+        try { new AutomationSettings {Rules=[rule with {LayoutId=settings.AutomationViewLayouts[0].Id}]}.Validate(settings);throw new Exception("Second focus on one-tile layout accepted"); }catch(InvalidDataException){}
+        Console.WriteLine("PASS paired focus assignment, expiry, manual override and validation");
         Console.WriteLine("PASS saved automation layouts, dynamic focus tiles, empty second position, isolation, expiry, validation and no mutation");
     }
     private static void Check(bool condition,string message){if(!condition)throw new Exception(message);}

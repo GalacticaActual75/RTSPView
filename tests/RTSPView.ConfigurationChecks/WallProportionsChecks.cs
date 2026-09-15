@@ -21,7 +21,7 @@ internal static class WallProportionsChecks
             foreach(var axis in new[]{result.Rows,result.Columns})
                 if(Math.Abs(axis.Sum()-1)>1e-10 || axis.Any(v=>!double.IsFinite(v)||v<=0)) throw new Exception("Invalid track bounds");
         }
-        var normalized = (new AppSettings { DiagnosticsAutoOpenExcludedSlots = [1,17,17,-1,33] }).Normalize();
+        var normalized = (new AppSettings { DiagnosticsAutoOpenExcludedSlots = [1,17,17,-1,49] }).Normalize();
         if (!normalized.DiagnosticsAutoOpenExcludedSlots.SequenceEqual(new[]{1,17})) throw new Exception("Invalid diagnostics exclusions normalization");
         Console.WriteLine("PASS balanced tile proportions, unchanged 3x3, browser parity and diagnostics exclusions");
     }

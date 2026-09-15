@@ -33,6 +33,11 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
   assert.equal((await request(a,'/api/display','PUT',{...config,diagnosticsAutoOpenExcludedSlots:[1,17]})).status,200);
   assert.deepEqual((await request(a,'/api/config')).json.diagnosticsAutoOpenExcludedSlots,[1,17],'diagnostics exclusions persist');
+  const addedStream=(await request(a,'/api/cameras','POST')).json;
+  assert.equal((await request(a,'/api/cameras/'+addedStream.slot,'DELETE')).status,200,'stream deletes');
+  const afterDeletion=(await request(a,'/api/config')).json;assert(afterDeletion.deletedCameraSlots.includes(addedStream.slot));
+  assert.equal((await request(a,'/api/cameras/'+addedStream.slot,'DELETE')).status,400,'repeat deletion rejected');
+  assert.equal((await request(a,'/api/cameras','POST')).json.slot,addedStream.slot,'deleted slot reused without renumbering');
   const automationLayouts=(await request(a,'/api/automation/layouts')).json.layouts;
   assert.equal(automationLayouts.length,2,'one and two focus templates provided');
   assert.equal(automationLayouts[1].focusSlots.length,2,'dual focus template has two positions');
@@ -61,6 +66,7 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const automaticOverlay={...config.doorbellOverlay,camera:{...config.doorbellOverlay.camera,enabled:false,rtspUrl:'rtsp://example.test/doorbell'}};
   assert.equal((await request(a,'/api/doorbell','PUT',automaticOverlay)).status,200,'automation-only overlay saves');
   assert.equal((await request(a,'/api/config')).json.doorbellOverlay.camera.enabled,false,'automation-only overlay stays hidden after reload');
+  assert.equal((await request(a,'/api/cameras/'+automaticOverlay.hostCameraSlot,'DELETE')).status,400,'configured overlay host cannot be deleted');
   assert.equal((await request(a,'/api/doorbell','PUT',{...automaticOverlay,camera:{...automaticOverlay.camera,enabled:true}})).status,200,'always-visible overlay saves');
   assert.equal((await request(a,'/api/config')).json.doorbellOverlay.camera.enabled,true,'always-visible mode persists');
   await request(a,'/api/doorbell','PUT',config.doorbellOverlay);
@@ -72,9 +78,16 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/automation')).json.settings.rules[0].cameraSlot,1,'fixed focus target persists');
   assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:1,layoutId:editedLayouts[1].id}]}})).status,200,'rule selects saved automation layout');
   assert.equal((await request(a,'/api/automation/layouts','PUT',{layouts:[editedLayouts[0]]})).status,400,'in-use automation layout cannot be deleted');
+  await request(a,'/api/cameras/2','PUT',{...config.cameras[1],enabled:true,rtspUrl:'rtsp://example.test/second'});
+  const paired={...focusRule,action:2,cameraSlot:1,secondCameraSlot:2,layoutId:editedLayouts[1].id};
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[paired]}})).status,200,'paired focus saves');
+  assert.equal((await request(a,'/api/automation')).json.settings.rules[0].secondCameraSlot,2,'second camera persists');
+  assert.equal((await request(a,'/api/cameras/2','DELETE')).status,400,'second focus camera deletion guarded');
+  assert.equal((await request(a,'/api/automation/layouts','PUT',{layouts:[editedLayouts[0],{...editedLayouts[1],focusSlots:[editedLayouts[1].focusSlots[0]],tiles:editedLayouts[1].tiles.filter(t=>t.cameraSlot!==editedLayouts[1].focusSlots[1])}]})).status,400,'second focus position removal guarded');
+
   assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:10}]}})).status,400,'focused layout rejects overlay target');
   await request(a,'/api/automation','PUT',{settings:automation.settings});
-  await request(a,'/api/cameras/1','PUT',config.cameras[0]);
+  await request(a,'/api/cameras/1','PUT',config.cameras[0]);await request(a,'/api/cameras/2','PUT',config.cameras[1]);
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:false})).status,400,'dependency install requires confirmation');
   assert.equal((await request(a,'/api/dependencies/pawnio/arbitrary','POST',{confirmed:true})).status,404,'arbitrary maintenance actions rejected');
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:true})).status,409,'test environment cannot install host dependencies');

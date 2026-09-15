@@ -152,7 +152,10 @@ Saving a template does not select it as the standard wall layout.
 Each automation template has one or two **Focus tiles**, with no camera assigned
 in the layout editor. The rule chooses the camera, either a fixed target or
 **Camera that detected the person**. Active cameras fill the focus tiles in
-activation order; a second focus tile stays empty until another camera is active.
+activation order. Two-focus layouts expose **Focus 1 camera** and **Focus 2 camera**
+in the rule editor. Assign a second camera to show both on one trigger, sharing
+the clear timer, or select **Next camera with an active detection** to fill the
+second position dynamically (empty until another camera is active).
 If a focused camera also has a regular tile, that regular position stays empty
 while the camera is focused, so it is not displayed twice. Existing saved focus
 positions migrate to unassigned Focus tiles without moving their geometry.
@@ -393,3 +396,16 @@ Docker is not supported: WPF requires an interactive Windows desktop and graphic
 See the [bridge release report](docs/bridge-release.md) for publication status and remaining validation limits. The [initial release audit](docs/release-readiness.md) and [history cleanup procedure](docs/history-cleanup.md) retain the detailed audit record.
 
 See the [branding audit](docs/branding-audit.md) for the cleanup and the compatibility identifiers retained for existing installations.
+
+
+Streams can be removed with **Delete stream**. Deletion clears its connection and
+layout placements without renumbering other streams; Add stream reuses removed
+slots. Remove automation references or change a configured overlay's host first
+if deletion reports a dependency.
+
+Configured overlay feeds also appear in Streams as **(overlay source)** entries
+and in both layout editors. These share their source connection settings with
+Overlays, but layout playback uses the complete original frame, with no overlay
+crop, shape, zoom or opacity. Edit the shared connection through **Edit source in
+Overlays**. Overlay presentation and layout playback can coexist; the additional
+normal player connects only while that source is displayed in the wall.

@@ -1,0 +1,38 @@
+using System.Windows;
+using RTSPView.Core;
+
+namespace RTSPView.Viewer;
+
+public partial class MainWindow
+{
+    private readonly Dictionary<int, (CameraTile Tile, CameraSettings Camera)> _rawOverlaySources = new();
+
+    private void SyncRawOverlaySources(WallLayout layout)
+    {
+        var sources = StreamCatalog.LayoutCameras(_settings).Where(c => StreamCatalog.IsOverlaySource(c.Slot)).ToArray();
+        foreach (var slot in _rawOverlaySources.Keys.Where(slot => !sources.Any(c => c.Slot == slot)).ToArray())
+        {
+            var tile = _rawOverlaySources[slot].Tile;
+            WallGrid.Children.Remove(tile); tile.Dispose(); _rawOverlaySources.Remove(slot);
+        }
+        foreach (var source in sources)
+        {
+            var camera = source with { Enabled = EffectiveFocusedSlot == source.Slot || (!EffectiveFocusedSlot.HasValue && layout.Tiles.Any(t => t.CameraSlot == source.Slot)) };
+            if (!_rawOverlaySources.TryGetValue(source.Slot, out var entry))
+            {
+                var tile = new CameraTile { SharedDiagnostics = true, Visibility = Visibility.Collapsed };
+                tile.DiagnosticsRequested += Tile_DiagnosticsRequested;
+                tile.PointerActivity += Tile_PointerActivity;
+                tile.FocusRequested += Tile_FocusRequested;
+                WallGrid.Children.Add(tile);
+                // A separate normal renderer: no overlay mask, zoom, crop or opacity.
+                tile.Initialize(_libVlc, _logger, camera, _settings.RequestHardwareDecoding);
+                tile.ApplyOverlayPreferences(_settings.ShowCameraNames, _settings.ShowCameraStats);
+                entry = (tile, camera);
+            }
+            else if (entry.Camera != camera) entry.Tile.Apply(camera);
+            _rawOverlaySources[source.Slot] = (entry.Tile, camera);
+        }
+        _allTiles = [.._tiles, DoorbellTile, GarageTile, .._additionalOverlays.Values.Select(e => e.Tile), .._rawOverlaySources.Values.Select(e => e.Tile)];
+    }
+}

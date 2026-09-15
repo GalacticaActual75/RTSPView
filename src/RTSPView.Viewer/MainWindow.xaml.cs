@@ -268,10 +268,11 @@ public partial class MainWindow : Window
     private void ApplyWallLayout()
     {
         var layout = EffectiveLayout;
+        SyncRawOverlaySources(layout);
         if (_focusedSlot.HasValue && !_allTiles.Any(tile => tile.Slot == _focusedSlot)) _focusedSlot = null;
         foreach (var tile in _allTiles) tile.Focused = tile.Slot == EffectiveFocusedSlot;
         SizeWall();
-        CameraWallPresentation.Apply(WallGrid, _tiles, layout, EffectiveFocusedSlot);
+        CameraWallPresentation.Apply(WallGrid, [.._tiles, .._rawOverlaySources.Values.Select(e => e.Tile)], layout, EffectiveFocusedSlot);
         QueueOverlayLayouts();
     }
 

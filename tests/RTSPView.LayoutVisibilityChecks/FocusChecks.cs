@@ -42,6 +42,16 @@ internal static class FocusChecks
         if(overlay.Visibility!=Visibility.Collapsed)throw new Exception("Stream status overlay appeared over a modal dialog");
         tiles[0].SetOverlaySuppressed(false);
         if(overlay.Visibility!=Visibility.Visible)throw new Exception("Stream status overlay did not return after closing a dialog");
+        using (var raw = new CameraTile())
+        {
+            typeof(CameraTile).GetField("_settings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(raw, new CameraSettings { Slot=33, Name="Doorbell original", RtspUrl="rtsp://example.test/raw", Enabled=false });
+            wall.Children.Add(raw);
+            CameraWallPresentation.Apply(wall, [..tiles,raw], new WallLayout { Tiles=[new(){CameraSlot=33}] }, null);
+            if(raw.Visibility!=Visibility.Visible || tiles.Any(t=>t.Visibility==Visibility.Visible))throw new Exception("Raw overlay source did not occupy its own normal layout tile");
+            CameraWallPresentation.Apply(wall, [..tiles,raw], new WallLayout(), null);
+            if(raw.Visibility!=Visibility.Collapsed)throw new Exception("Unassigned raw source remained visible");
+            wall.Children.Remove(raw);
+        }
         var clicks = 0; tiles[0].FocusRequested += (_,_)=>clicks++;
         var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent };
         typeof(MouseButtonEventArgs).GetProperty("ClickCount")!.SetValue(args, 2);

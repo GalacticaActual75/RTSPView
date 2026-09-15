@@ -19,5 +19,5 @@ public sealed class OverlayAutomationState
         .OrderBy(l => l.Action == AutomationAction.FullScreen ? 0 : 1).ThenBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).FirstOrDefault();
     public int[] FocusSlots(DateTimeOffset now, string layoutId) => Active(now)
         .Where(l => l.Action == AutomationAction.FocusedLayout && l.LayoutId == layoutId)
-        .OrderBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).Select(l => l.Slot).Distinct().Take(2).ToArray();
+        .OrderBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).SelectMany(l => l.SecondCameraSlot > 0 ? new[] { l.Slot, l.SecondCameraSlot } : new[] { l.Slot }).Distinct().Take(2).ToArray();
 }

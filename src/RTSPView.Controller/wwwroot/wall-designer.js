@@ -44,11 +44,13 @@ function createWallDesigner(isAutomation = false) {
   }
   function preset(id) {
     const layout=current();
-    Object.assign(layout,wallLayoutPresets.create(id,layout.aspectRatio||'16:9',config.cameras.map(camera=>camera.slot)));
-    if(isAutomation){layout.focusSlots=layout.tiles.slice(0,id==='dual'?2:1).map((t,i)=>{t.cameraSlot=-i-1;return t.cameraSlot;});}
+    const slots=config.cameras.map(camera=>camera.slot);if(isAutomation)slots.unshift(...(id==='dual'?[-1,-2]:[-1]));
+    Object.assign(layout,wallLayoutPresets.create(id,layout.aspectRatio||'16:9',slots));
+    if(isAutomation)layout.focusSlots=layout.tiles.filter(t=>t.cameraSlot<0).map(t=>t.cameraSlot);
     selectedTile=0;changed();
   }
   function addCamera(slot, row, column) {
+    if(current().tiles.length>=16){message('A layout supports up to 16 tiles. Remove a tile first.');return;}
     const tile = {cameraSlot:slot,row,column,rowSpan:1,columnSpan:1};
     if (!validTile(tile,-1)) { message('Choose an empty cell and a stream not already in this layout.'); return; }
     current().tiles.push(tile); selectedTile = current().tiles.length-1; changed();
@@ -184,7 +186,7 @@ function createWallDesigner(isAutomation = false) {
       side.append(el('p','Position and size in grid cells. Row heights and column widths balance automatically for 16:9 feeds, without cropping or stretching.','designer-help'));
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].filter(o=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(overlays.length){const hosts=el('div',undefined,'designer-hosts');hosts.append(el('span','OVERLAYS','designer-eyebrow'));for(const o of overlays)hosts.append(el('span',o.camera.name,'designer-host'));side.append(hosts);}
-      const remove=button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=0;changed();},side);remove.classList.add('designer-danger');remove.disabled=layout.tiles.length===1||(isAutomation&&layout.focusSlots.includes(tile.cameraSlot));
+      const remove=button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=0;changed();},side);remove.classList.add('designer-danger');remove.disabled=(isAutomation&&layout.focusSlots.includes(tile.cameraSlot));
     }
     const available=config.cameras.filter(camera=>!layout.tiles.some(t=>t.cameraSlot===camera.slot));
     const library=el('section',undefined,'designer-library');side.append(library);

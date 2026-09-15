@@ -34,7 +34,7 @@ public static class AutomationLayouts
     }
     public static WallLayout Resolve(AppSettings settings, WallLayout template, IEnumerable<int> activeSlots)
     {
-        var configured = settings.Cameras.Take(settings.CameraCount).Where(c => c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl)).Select(c => c.Slot).ToHashSet();
+        var configured = StreamCatalog.LayoutCameras(settings).Where(c => c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl)).Select(c => c.Slot).ToHashSet();
         var targets = activeSlots.Where(configured.Contains).Distinct().Take(template.FocusSlots.Length).ToArray();
         var tiles = template.Tiles.Select(tile =>
         {

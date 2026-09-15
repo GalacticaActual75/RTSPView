@@ -34,6 +34,10 @@ public partial class MainWindow
             return new(command.Id, false, "Automation target is unavailable or unconfigured.");
         if (presentation.Leases.Any(l => l.LayoutId is null || (l.Action == AutomationAction.FocusedLayout && l.LayoutId.Length > 0 && !_settings.AutomationViewLayouts.Any(t => t.Id == l.LayoutId))))
             return new(command.Id, false, "Automation layout is unavailable.");
+        if (presentation.Leases.Any(l => l.SecondCameraSlot != 0 && (l.Action != AutomationAction.FocusedLayout ||
+            !AutomationConfiguration.CanFocus(_settings, AutomationAction.FocusedLayout, l.SecondCameraSlot) ||
+            !_settings.AutomationViewLayouts.Any(t => t.Id == l.LayoutId && t.FocusSlots.Length == 2))))
+            return new(command.Id, false, "Second focus camera or layout is unavailable.");
         if (presentation.Leases.Length > 0 && (!CanDisplayOverlayWindows() || _focusedSlot.HasValue))
             return new(command.Id, false, "Manual focus or hidden viewer takes priority.");
         _automationPresentation.Update(presentation.Leases, DateTimeOffset.UtcNow);

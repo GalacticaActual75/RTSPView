@@ -38,15 +38,15 @@ public sealed record WallLayout
             if (layout is null || string.IsNullOrWhiteSpace(layout.Id) || layout.Id.Length > 64 || !ids.Add(layout.Id) ||
                 string.IsNullOrWhiteSpace(layout.Name) || layout.Name.Length > 80)
                 throw new InvalidDataException("Layouts need unique IDs and names of 1–80 characters.");
-            if (layout.Rows < 1 || layout.Rows > maximumDimension || layout.Columns < 1 || layout.Columns > maximumDimension || layout.Tiles is null || layout.Tiles.Count is < 1 or > 16)
-                throw new InvalidDataException($"Layouts support 1–{maximumDimension} rows and columns and 1–16 camera tiles.");
+            if (layout.Rows < 1 || layout.Rows > maximumDimension || layout.Columns < 1 || layout.Columns > maximumDimension || layout.Tiles is null || layout.Tiles.Count > 16)
+                throw new InvalidDataException($"Layouts support 1–{maximumDimension} rows and columns and up to 16 camera tiles.");
             if (layout.AspectRatio is not ("16:9" or "9:16"))
                 throw new InvalidDataException("Choose landscape (16:9) or portrait (9:16).");
             var occupied = new HashSet<(int, int)>();
             var cameras = new HashSet<int>();
             foreach (var tile in layout.Tiles)
             {
-                if (tile is null || !(AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || (allowFocusTiles && tile.CameraSlot is -1 or -2)) || !cameras.Add(tile.CameraSlot))
+                if (tile is null || !(AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || StreamCatalog.IsOverlaySource(tile.CameraSlot) || (allowFocusTiles && tile.CameraSlot is -1 or -2)) || !cameras.Add(tile.CameraSlot))
                     throw new InvalidDataException("Each tile must reference a different main camera.");
                 if (tile.Row < 0 || tile.Column < 0 || tile.RowSpan < 1 || tile.ColumnSpan < 1 ||
                     tile.RowSpan > layout.Rows || tile.ColumnSpan > layout.Columns ||

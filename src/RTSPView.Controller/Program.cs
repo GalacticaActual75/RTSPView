@@ -384,7 +384,8 @@ app.MapPost("/api/config/import", async (HttpContext context) =>
 }).RequireAuthorization();
 app.MapGet("/api/cameras/{slot:int}/thumbnail", (int slot) =>
 {
-    if (slot is < 1 or > AppSettings.MaximumStreamSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
+    if (slot is < 1 or > StreamCatalog.MaximumSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
+    if (StreamCatalog.IsOverlaySource(slot)) slot -= 23;
     var path = Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg");
     if (!File.Exists(path)) return Results.NotFound(new { error = "No thumbnail has been captured yet." });
     var capturedAt = File.GetLastWriteTimeUtc(path);
@@ -392,8 +393,8 @@ app.MapGet("/api/cameras/{slot:int}/thumbnail", (int slot) =>
 }).RequireAuthorization();
 app.MapPost("/api/cameras/{slot:int}/thumbnail/refresh", async (int slot, CancellationToken cancellationToken) =>
 {
-    if (slot is < 1 or > AppSettings.MaximumStreamSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
-    var result = await viewerCommands.SendAsync(ViewerCommandType.CaptureCameraSnapshot, slot, cancellationToken);
+    if (slot is < 1 or > StreamCatalog.MaximumSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
+    var result = await viewerCommands.SendAsync(ViewerCommandType.CaptureCameraSnapshot, StreamCatalog.IsOverlaySource(slot) ? slot - 23 : slot, cancellationToken);
     return CommandResult(result);
 }).RequireAuthorization();
 
@@ -511,13 +512,31 @@ app.MapPost("/api/cameras", async () =>
     try
     {
         var settings = await settingsStore.LoadAsync();
-        if (settings.CameraCount >= AppSettings.MainCameraSlots.Length)
+        var reuse = settings.DeletedCameraSlots.FirstOrDefault();
+        if (reuse == 0 && settings.CameraCount >= AppSettings.MainCameraSlots.Length)
             return Results.BadRequest(new { error = "The maximum of 16 cameras has been reached." });
-        var updated = settings with { CameraCount = settings.CameraCount + 1 };
+        var updated = settings with { CameraCount = reuse == 0 ? settings.CameraCount + 1 : settings.CameraCount, DeletedCameraSlots = settings.DeletedCameraSlots.Where(s => s != reuse).ToArray() };
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", $"Camera {updated.CameraCount} added from web admin");
-        return Results.Ok(updated.Cameras[updated.CameraCount - 1]);
+        return Results.Ok(reuse == 0 ? updated.Cameras[updated.CameraCount - 1] : updated.Cameras.Single(c => c.Slot == reuse));
     }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
+
+app.MapDelete("/api/cameras/{slot:int}", async (int slot, AutomationService automation) =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        if (automation.UsesCamera(slot)) return Results.BadRequest(new { error = "An automation rule uses this stream. Remove it from the rule before deleting it." });
+        var settings = await settingsStore.LoadAsync();
+        var updated = StreamCatalog.DeleteCamera(settings, slot).Normalize();
+        await settingsStore.SaveAsync(updated);
+        try { File.Delete(Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg")); } catch (IOException) { }
+        auditLog.Write("AUDIT", $"Stream {slot} deleted from web admin");
+        return Results.Ok(new { deleted = slot });
+    }
+    catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
@@ -528,6 +547,7 @@ app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
     try
     {
         var settings = await settingsStore.LoadAsync();
+        if (settings.DeletedCameraSlots.Contains(slot)) return Results.BadRequest(new { error = "This stream was deleted. Use Add stream to restore an available slot." });
         var cameras = settings.Cameras.ToArray();
         cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)] = camera with { Slot = slot };
         await settingsStore.SaveAsync(settings with { Cameras = cameras });
@@ -545,6 +565,8 @@ app.MapPut("/api/automation/layouts", async (WallLayoutsRequest request, Automat
     try
     {
         var automationLayouts = AutomationLayouts.Normalize(request.Layouts);
+        if (automationLayouts.Any(l => l.FocusSlots.Length < 2 && automation.RequiresSecondFocus(l.Id)))
+            return Results.BadRequest(new { error = "A rule assigns a Focus 2 camera to this layout. Remove that assignment before removing its second focus tile." });
         var settings = await settingsStore.LoadAsync();
         if (settings.AutomationViewLayouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && automation.UsesLayout(l.Id)))
             return Results.BadRequest(new { error = "A rule uses this layout. Choose another layout in that rule before deleting it." });
@@ -573,7 +595,7 @@ app.MapPut("/api/layouts", async (WallLayoutsRequest request) =>
 
 app.MapPost("/api/control/cameras/{slot:int}/restart", async (int slot, CancellationToken cancellationToken) =>
 {
-    if (slot is < 1 or > AppSettings.MaximumStreamSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
+    if (slot is < 1 or > StreamCatalog.MaximumSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
     var result = await viewerCommands.SendAsync(ViewerCommandType.RestartCamera, slot, cancellationToken);
     auditLog.Write("AUDIT", $"Remote camera {slot} restart requested: {result.Message}");
     return CommandResult(result);
