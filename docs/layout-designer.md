@@ -26,6 +26,12 @@ Export a configuration before installing this version on a host if downgrade tes
 
 ## Verification
 
+### Trying an automation arrangement
+
+In Automation layouts, choose a camera in each **Focus preview only** selector to see its snapshot in the otherwise unassigned focus tile. These selections stay in the browser and are not saved as camera assignments; the automation rule still supplies the actual cameras. Snapshots preserve the whole image without cropping or stretching.
+
+Drag smaller tiles into empty positions before expanding a focus tile with its corner handle, or select a tile and edit its Row, Column, Height, and Width. Overlapping placements are rejected. **Undo edit** reverses up to 50 draft edits in either layout editor. Saving or discarding clears that undo history. Save automation layouts when the preview looks right.
+
 - Release solution build and ConfigurationChecks, including legacy migration, camera identity preservation, disabled added cameras, 4×4 persistence, and invalid layout rejection.
 - JavaScript syntax checks.
 - `node tests/wall-layout-presets.checks.cjs`: all twelve templates, both formats, multiple camera inventories, coverage, identity, collision/bounds checks, and reversible transposition. ConfigurationChecks also validates format persistence, rejection, and viewer fit calculations.
