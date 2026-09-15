@@ -24,7 +24,15 @@ internal static class OverlayGeometryChecks
             Check(OverlayGeometry.Calculate(overlay, 1600, 900) == reference, "Restoring layout drifted");
             Check(overlay.ZoomPercent == 135 && overlay.ViewportWidthPercent == 60, "Runtime sizing edited saved settings");
         }
-        Console.WriteLine("PASS overlay uniform scaling, all shapes, portrait/landscape/narrow hosts, anchors and restoration");
+        var anchored = new DoorbellOverlaySettings { ViewportWidthPercent=40, ViewportHeightPercent=40, ViewportVerticalPositionPercent=100, ViewportHorizontalPositionPercent=0 };
+        var oldBounds=OverlayGeometry.Calculate(anchored,400,400);
+        var pictureBounds=OverlayGeometry.Calculate(anchored,400,400,16d/9);
+        Check(oldBounds.Width==pictureBounds.Width && oldBounds.Height==pictureBounds.Height,"Picture anchoring resized overlay");
+        Check(Math.Abs(pictureBounds.Top+pictureBounds.Height-312.5)<1e-9,"Overlay did not anchor to picture bottom above letterbox bar");
+        var side=OverlayGeometry.Calculate(anchored,800,400,4d/3);
+        Check(Math.Abs(side.Left-(800-400*4d/3)/2)<1e-9,"Overlay did not anchor past pillarbox bar");
+        Check(OverlayGeometry.Calculate(anchored,1600,900,16d/9)==OverlayGeometry.Calculate(anchored,1600,900),"Matching aspect placement changed");
+        Console.WriteLine("PASS overlay uniform scaling, picture anchors without resizing, all shapes, portrait/landscape/narrow hosts and restoration");
     }
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 }

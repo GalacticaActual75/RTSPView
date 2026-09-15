@@ -135,6 +135,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         InitializeComponent();
         VideoView.Loaded += (_, _) => { EnsureNativeVideoBackground(); ResumeNativeStart(); ApplyVideoSizing(_player); };
         VideoView.SizeChanged += (_, _) => ApplyVideoSizing(_player);
+        CompositedCanvas.SizeChanged += (_, _) => { if (_preserveWholeFrame) ApplyVideoSizing(_player); };
         IsVisibleChanged += (_, _) => { SynchronizeStatusWindowVisibility(); ResumeNativeStart(); };
         Loaded += (_, _) => SynchronizeStatusWindowVisibility();
         // VideoView moves OverlayRoot into a separate top-level window. Parent
@@ -585,22 +586,29 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         if (!string.IsNullOrEmpty(player.AspectRatio)) player.AspectRatio = null;
         if (!string.IsNullOrEmpty(player.CropGeometry)) player.CropGeometry = string.Empty;
         var dimensions = GetVideoDimensions();
-        if (dimensions is not { } source || _videoDisplayWidth <= 0 || _videoDisplayHeight <= 0)
+        if (dimensions is not { } source)
             return;
+
+        // Original sources live directly in the wall grid, not in an overlay
+        // viewport. Use their actual WPF size (DIPs), including after reveal.
+        if (_useCompositedOutput && _preserveWholeFrame)
+        {
+            var width = CompositedCanvas.ActualWidth;
+            var height = CompositedCanvas.ActualHeight;
+            if (width <= 0 || height <= 0 || source.Width == 0 || source.Height == 0) return;
+            var scale = Math.Min(width / source.Width, height / source.Height);
+            CompositedImage.Width = source.Width * scale;
+            CompositedImage.Height = source.Height * scale;
+            System.Windows.Controls.Canvas.SetLeft(CompositedImage, (width - CompositedImage.Width) / 2);
+            System.Windows.Controls.Canvas.SetTop(CompositedImage, (height - CompositedImage.Height) / 2);
+            return;
+        }
+        if (_videoDisplayWidth <= 0 || _videoDisplayHeight <= 0) return;
 
         _lastSizingSourceWidth = source.Width;
         _lastSizingSourceHeight = source.Height;
         if (_useCompositedOutput)
         {
-            if (_preserveWholeFrame)
-            {
-                var scale = Math.Min(_videoDisplayWidth / source.Width, _videoDisplayHeight / source.Height);
-                CompositedImage.Width = source.Width * scale;
-                CompositedImage.Height = source.Height * scale;
-                System.Windows.Controls.Canvas.SetLeft(CompositedImage, (_videoDisplayWidth - CompositedImage.Width) / 2);
-                System.Windows.Controls.Canvas.SetTop(CompositedImage, (_videoDisplayHeight - CompositedImage.Height) / 2);
-                return;
-            }
             var layout = DoorbellVideoTransform.CalculateLayout(source.Width, source.Height,
                 _videoDisplayWidth, _videoDisplayHeight, _videoZoomPercent,
                 _imageHorizontalPositionPercent, _imageVerticalPositionPercent);

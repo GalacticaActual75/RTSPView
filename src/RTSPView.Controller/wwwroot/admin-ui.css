@@ -152,3 +152,10 @@ label{line-height:1.5}a{color:#8ec2ff}.secondary[href]{display:inline-flex;align
 #extraStats{grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:600px){#extraStats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .diagnostics-camera-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:10px 0}.diagnostics-camera-list label{display:flex;align-items:center;gap:8px}.diagnostics-camera-list input[type=checkbox]{width:auto;flex:none}
+/* Keep shared controls usable at narrow widths and honor hidden panels. */
+[hidden]{display:none!important}
+.admin-page,.admin-page form,.admin-page fieldset,.admin-page section{min-width:0}
+.admin-page .actions,.admin-page .control-buttons{flex-wrap:wrap;gap:10px}
+.system-tabs{flex-wrap:wrap;gap:6px}
+.system-tabs>button{flex:1 1 130px;min-width:0;white-space:normal}
+.admin-page summary:focus-visible{outline:2px solid #63abff;outline-offset:3px}

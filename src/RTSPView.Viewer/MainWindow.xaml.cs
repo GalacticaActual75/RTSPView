@@ -630,7 +630,9 @@ public partial class MainWindow : Window
 
     private static Rect CalculateOverlayBounds(CameraTile target, DoorbellOverlaySettings overlay)
     {
-        var bounds = OverlayGeometry.Calculate(overlay, target.ActualWidth, target.ActualHeight);
+        var source = target.GetVideoDimensions();
+        var bounds = OverlayGeometry.Calculate(overlay, target.ActualWidth, target.ActualHeight,
+            source is { Width: > 0, Height: > 0 } dimensions ? (double)dimensions.Width / dimensions.Height : null);
         return new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
     }
 

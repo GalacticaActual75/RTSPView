@@ -18,6 +18,21 @@ const adminUi = (() => {
     });
   }
   function init() {
+    // Popovers dismiss like menus; ordinary expandable settings remain open.
+    const closeMenus = (target, restoreFocus = false) => {
+      for (const menu of document.querySelectorAll('details.designer-menu[open]')) {
+        if (target && menu.contains(target)) continue;
+        menu.open = false;
+        if (restoreFocus) menu.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', event => closeMenus(event.target));
+    document.addEventListener('focusin', event => closeMenus(event.target));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.querySelector('details.designer-menu[open]')) {
+        closeMenus(null, true); event.preventDefault();
+      }
+    });
     // One expanded category per level and page. Nested editors retain their
     // open ancestors, including when validation reveals a hidden field.
     const scope = details => details.parentElement?.closest('details') || details.closest('.admin-page') || document;

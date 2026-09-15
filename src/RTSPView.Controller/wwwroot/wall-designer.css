@@ -49,3 +49,34 @@
 @media(max-width:760px){.designer-layout-picker{flex-wrap:wrap;justify-content:flex-start}.designer-layout-tools{flex-wrap:wrap}.designer-canvas-controls{flex-wrap:wrap}.designer-canvas-controls>label{width:100%}.designer-grid-fields{grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.designer-presets{grid-template-columns:repeat(3,minmax(0,1fr))}.designer-board{max-width:min(100%,calc(540px * var(--ratio,1.777778)))}.designer-menu>.designer-popover{left:auto;right:0}}
 
 #page-layouts .system-tabs [role=tab]{min-height:40px;flex:1 1 0;padding:10px 14px}
+/* Keep the wall canvas primary; setup controls expand only when needed. */
+.designer-toolbar,.designer-layout-picker,.designer-layout-tools,.designer-actions,.designer-canvas-controls{flex-wrap:wrap}
+.designer-layout-picker{flex:1;min-width:0}
+.designer-actions{margin-left:auto}
+#page-layouts .designer-settings{margin:0 0 16px;padding:0;border:1px solid var(--designer-border);border-radius:8px;background:var(--designer-surface)}
+#page-layouts .designer-settings>summary{padding:12px 16px;cursor:pointer;font-weight:600}
+.designer-settings>.designer-help{margin:0;padding:0 16px 16px}
+.designer-settings>.designer-canvas-controls{padding:0 16px 16px}
+.designer-preview>.designer-settings{margin:0 16px 12px!important}
+.designer-canvas-controls>label{flex:1 1 180px;max-width:320px;width:auto}
+.designer-popover{box-sizing:border-box;max-width:calc(100vw - 48px)}
+@media(max-width:1100px){.designer-workspace{grid-template-columns:minmax(0,1fr)}.designer-library{max-height:320px;overflow:auto}}
+@media(max-width:600px){.designer-actions{margin-left:0;width:100%}.designer-actions button{flex:1;white-space:normal}.designer-layout-tools{gap:8px}}
+/* Canvas-first editor: one contextual drawer rather than permanent forms. */
+.designer-workspace{grid-template-columns:minmax(0,1fr)}
+.designer-workspace.has-drawer{grid-template-columns:minmax(0,1fr) 290px}
+.designer-board{max-width:calc(max(360px,100dvh - 280px) * var(--ratio,1.777778))}
+.designer-inspector{position:sticky;top:80px;max-height:calc(100dvh - 110px);overflow:auto}
+.designer-close{display:block;margin:0 0 16px auto}
+.designer-inspector .designer-library{margin:0;padding:0;border:0}
+.designer-inspector .designer-settings,.designer-inspector .designer-preset-library{margin:0!important;border:0!important}
+.designer-inspector .designer-canvas-controls{padding:12px 0;gap:16px}
+.designer-inspector .designer-presets{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 0}
+.designer-inspector section>p{font-size:13px;line-height:1.6;color:#a7b3c2}
+.designer-preview-camera{position:absolute;top:36px;left:8px;z-index:4;font-size:11px!important;min-height:28px!important;padding:4px 8px!important}
+.designer-edge{position:absolute;z-index:3}.designer-edge.right{right:0;top:0;bottom:20px;width:8px;cursor:ew-resize}.designer-edge.bottom{bottom:0;left:0;right:20px;height:8px;cursor:ns-resize}
+.designer-tile:hover .designer-edge{background:#63abff55}
+.designer-inspector details>summary{padding:12px 0;cursor:pointer}
+.designer-inspector .designer-camera .snapshot-age{display:none}
+@media(max-width:900px){.designer-workspace.has-drawer{grid-template-columns:minmax(0,1fr)}.designer-inspector{position:static;max-height:none}.designer-board{max-width:100%}}
+.designer-tile .snapshot-age{top:auto!important;left:auto!important;right:8px;bottom:22px;max-width:calc(100% - 16px);font-size:10px}

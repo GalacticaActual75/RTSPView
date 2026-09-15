@@ -75,9 +75,8 @@ internal static class StreamTelemetryChecks
                     {
                         window.Width = 700; window.Height = 300;
                         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-                        typeof(CameraTile).GetMethod("ApplyVideoSizing", flags)!.Invoke(tile, [player]);
                         var canvas = (FrameworkElement)tile.FindName("CompositedCanvas");
-                        if (Math.Abs(image.Width / image.Height - 4d / 3) > .001 || image.Width > canvas.ActualWidth + 1 || image.Height > canvas.ActualHeight + 1)
+                        if (!double.IsFinite(image.Width) || !double.IsFinite(image.Height) || image.Width <= 0 || image.Height <= 0 || Math.Abs(image.Width / image.Height - 4d / 3) > .001 || image.Width > canvas.ActualWidth + 1 || image.Height > canvas.ActualHeight + 1)
                             throw new Exception("Original overlay source cropped or distorted its 4:3 frame in a wide tile");
                         Console.WriteLine("PASS original overlay source preserves full frame in wide focus tile");
                     }
