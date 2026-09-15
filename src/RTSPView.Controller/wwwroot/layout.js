@@ -2,11 +2,11 @@
 const adminLayout = (() => {
   let current = 'overview';
   let fitQueued = false;
-  let fitWall = true;
+  let fitWall = false;
   const pages = {};
   function init() {
     const css = document.createElement('link');
-    css.rel = 'stylesheet'; css.href = 'layout.css?v=channels1'; css.onload = fitOverview; document.head.append(css);
+    css.rel = 'stylesheet'; css.href = 'layout.css?v=dashboard2'; css.onload = fitOverview; document.head.append(css);
     const main = document.querySelector('main');
     const banner = main.previousElementSibling;
     banner.remove();
@@ -32,10 +32,10 @@ const adminLayout = (() => {
     performance.addEventListener('toggle', fitOverview);
     const extra = document.createElement('div'); extra.id = 'extraStats'; extra.className = 'stats'; performance.append(extra);
     const overviewHead = document.createElement('div'); overviewHead.className = 'section-title';
-    overviewHead.title = 'Select a stream snapshot to open its settings.';
+    overviewHead.title = 'Select a snapshot to enlarge it. Configure opens settings.';
     const sizeLabel = document.createElement('label'); sizeLabel.className = 'overview-density';
-    sizeLabel.innerHTML = 'Preview size<select aria-label="Dashboard preview size"><option value="fit">Fit wall</option><option value="large">Larger previews</option></select>';
-    sizeLabel.querySelector('select').onchange = event => {fitWall = event.target.value === 'fit'; fitOverview();};
+    sizeLabel.innerHTML = 'Grid density<select aria-label="Dashboard grid density"><option value="large">Comfortable</option><option value="fit">Compact</option></select>';
+    sizeLabel.querySelector('select').onchange = event => {fitWall = event.target.value === 'fit'; document.querySelector('#cameras').classList.toggle('compact-density',fitWall); fitOverview();};
     overviewHead.append(performance, sizeLabel);
     pages.overview.append(stats, overviewHead);
     const cameraGrid = document.querySelector('#cameras');
@@ -135,7 +135,7 @@ const adminLayout = (() => {
     const settings = form.querySelector('.camera-settings');
     if (!overlayMode) {
       const open = document.createElement('button'); open.type = 'button'; open.className = 'overview-open';
-      const label = () => open.setAttribute('aria-label', `Configure ${form.elements.name.value}`);
+      const label = () => open.setAttribute('aria-label', `Enlarge snapshot of ${form.elements.name.value}`);
       label(); form.addEventListener('change', label);
       open.onclick = () => {
         select('cameras');
@@ -145,7 +145,7 @@ const adminLayout = (() => {
           settings.querySelector('summary').focus({preventScroll:true});
         });
       };
-      form.append(open);
+      const configure=document.createElement('button');configure.type='button';configure.className='overview-configure secondary';configure.textContent='Configure';configure.onclick=open.onclick;open.onclick=()=>dashboardUX.preview(form);form.append(open,configure);
     }
     if (overlayMode) {
       settings.open = false;
@@ -184,9 +184,9 @@ const adminLayout = (() => {
     let saved = snapshot();
     const actions = form.querySelector('.actions'), submit = actions.querySelector('[type=submit]'), state = actions.querySelector('.save-state');
     const discard = document.createElement('button'); discard.type = 'button'; discard.className = 'secondary'; discard.textContent = 'Discard'; actions.insertBefore(discard, submit);
-    state.setAttribute('role','status');
+    submit.textContent='Apply changes';submit.title='Save this stream and apply it to the wall';state.setAttribute('role','status');
     const isDirty = () => saved.some(({el,value,checked}) => el.value !== value || el.checked !== checked);
-    const update = () => {const dirty = isDirty(); submit.hidden = discard.hidden = !dirty; form.dataset.dirty = String(dirty); state.textContent = dirty ? 'Unsaved changes' : '';};
+    const update = () => {const dirty = isDirty(); submit.hidden = discard.hidden = !dirty; form.dataset.dirty = String(dirty); state.textContent = dirty ? 'Unsaved changes' : 'Applied';};
     form.addEventListener('input', update); form.addEventListener('change', update);
     discard.onclick = () => {
       for (const {el,value,checked} of saved) {el.value = value; el.checked = checked;}

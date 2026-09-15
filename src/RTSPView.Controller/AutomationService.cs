@@ -129,6 +129,9 @@ public sealed class AutomationService : BackgroundService
         var revision = -1;
         var hash = "";
         var sent = "";
+        var lastEvents = new Dictionary<string, DateTimeOffset>();
+        var lastTriggered = new Dictionary<string, DateTimeOffset>();
+        var sentRules = new Dictionary<string, string>();
         var connectedAt = DateTimeOffset.MinValue;
         var nextConnect = DateTimeOffset.MinValue;
         var failures = 0;
@@ -146,7 +149,7 @@ public sealed class AutomationService : BackgroundService
                         revision = _revision; hash = currentHash;
                         client?.Dispose(); client = null;
                         while (channel.Reader.TryRead(out _)) { }
-                        engine.Clear(); sent = ""; nextConnect = now; failures = 0;
+                        engine.Clear(); sent = ""; lastEvents.Clear(); lastTriggered.Clear(); sentRules.Clear(); nextConnect = now; failures = 0;
                         await Send(engine, hash, stoppingToken);
                     }
                     var settings = _stored.Settings;
@@ -182,6 +185,7 @@ public sealed class AutomationService : BackgroundService
                     // Drain bounded input; only fresh events can renew deadlines.
                     for (var count = 0; count < 128 && channel.Reader.TryRead(out var message); count++)
                     {
+                        foreach (var rule in settings.Rules.Where(r => r.Enabled && r.Sources.Any(source => source.Topic == message.Topic))) lastEvents[rule.Id] = message.Received;
                         var result = engine.Accept(settings, message.Topic, message.Payload, message.Retain, DateTimeOffset.UtcNow, connectedAt);
                         _status = _status with { LastMessage = message.Received, LastResult = result,
                             LastPerson = result == "Person detected" ? message.Received : _status.LastPerson };
@@ -193,8 +197,21 @@ public sealed class AutomationService : BackgroundService
                         sent = signature; // Do not replay a failed action without another fresh detection.
                         var result = await Send(engine, hash, stoppingToken);
                         if (!result.Success) _status = _status with { LastResult = result.Message };
+                        else
+                        {
+                            foreach (var group in engine.Leases.Values.GroupBy(lease => lease.RuleId))
+                            {
+                                var ruleSignature = JsonSerializer.Serialize(group.ToArray());
+                                if (!sentRules.TryGetValue(group.Key, out var prior) || prior != ruleSignature)
+                                    lastTriggered[group.Key] = DateTimeOffset.UtcNow;
+                                sentRules[group.Key] = ruleSignature;
+                            }
+                            foreach (var id in sentRules.Keys.Where(id => !engine.Leases.Values.Any(lease => lease.RuleId == id)).ToArray()) sentRules.Remove(id);
+                        }
                     }
                     _status = _status with { Rules = settings.Rules.Select(r => (object)new { r.Id, r.Name, r.Enabled,
+                        lastEvent = lastEvents.TryGetValue(r.Id, out var received) ? (DateTimeOffset?)received : null,
+                        lastTriggered = lastTriggered.TryGetValue(r.Id, out var triggered) ? (DateTimeOffset?)triggered : null,
                         expiresAt = engine.Leases.Values.Where(l => l.RuleId == r.Id).Select(l => (DateTimeOffset?)l.ExpiresAt).Max(),
                         activeCameraSlots = engine.Leases.Values.Where(l => l.RuleId == r.Id).Select(l => l.Slot).Distinct().ToArray() }).ToArray() };
                 }

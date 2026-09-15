@@ -1,0 +1,20 @@
+/* Dashboard monitoring hierarchy and full-width previews. */
+main[data-page=overview],main[data-page=layouts]{max-width:none;width:100%}
+.health-summary{padding:16px 20px;font-size:18px;font-weight:600;margin-bottom:12px}
+#page-overview #stats{display:flex;flex-wrap:wrap;gap:8px}
+#page-overview #stats .stat{padding:6px 12px;flex:1}
+#page-overview #stats .stat b{font-size:14px}
+#page-overview .live-details{display:none}
+.snapshot-age{display:block;font-size:12px;color:var(--muted);padding:5px 0}
+.snapshot-age.stale{color:#ffc477}
+.overview-configure{display:none}
+#page-overview .overview-configure{display:block;position:relative;z-index:2;margin-top:8px;padding:6px 12px}
+#page-overview .camera-grid{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+#page-overview .camera-grid.compact-density{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.snapshot-dialog{width:min(1100px,94vw);max-height:94vh;overflow:auto;background:var(--panel,#172333);color:var(--text,#fff);border:1px solid #486582;border-radius:12px;padding:20px}
+.snapshot-dialog::backdrop{background:#000b}
+.snapshot-dialog img{display:block;width:100%;max-height:65vh;object-fit:contain;background:#050505}
+.snapshot-dialog button{margin:12px 12px 0 0}
+@media(max-width:600px){#page-overview .camera-grid{grid-template-columns:minmax(0,1fr)}}
+.designer-tile>.snapshot-age{position:absolute;left:6px;top:6px;background:#07111cdb;padding:3px 6px;z-index:1;pointer-events:none;max-width:calc(100% - 12px)}
+.designer-camera{flex-wrap:wrap}.designer-camera>.snapshot-age{flex-basis:100%;font-size:11px}

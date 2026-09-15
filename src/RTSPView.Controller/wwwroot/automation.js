@@ -36,7 +36,7 @@ const automationUi = (() => {
       <label>Filter camera or topic<input class="mqtt-filter" type="search" placeholder="Camera name or topic"></label>
       <div class="mqtt-messages"></div></details></details>
       <div class="control-buttons automation-savebar"><button type="button" class="secondary automation-test">Test connection</button>
-      <button type="button" class="secondary automation-cancel">Cancel edits</button><button type="submit">Save automation</button></div>
+      <button type="button" class="secondary automation-cancel">Cancel edits</button><button type="submit">Apply changes</button></div>
       <p class="automation-message" role="status"></p>`;
     rules = form.querySelector('.automation-rules'); message = form.querySelector('.automation-message'); connection = form.querySelector('.automation-connection');
     const broker = form.querySelector('.automation-fields');
@@ -122,7 +122,7 @@ const automationUi = (() => {
       const name = document.createElement('span'); name.className = 'rule-summary-name'; name.textContent = card.querySelector('.rule-name').value.trim() || 'Unnamed rule';
       const description = document.createElement('span'); description.className = 'rule-summary-description';
       const sources = [...card.querySelectorAll('.source-camera')].filter(s => s.value).length;
-      description.textContent = `${sources} ${sources === 1 ? 'camera' : 'cameras'} · ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'} · ${card.querySelector('.rule-delay').value} min${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
+      description.textContent = `When any of ${sources} cameras detects a person: ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'}. Clear after ${card.querySelector('.rule-delay').value} minutes without detections${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
       summary.replaceChildren(name, description);
     };
     card.addEventListener('input', updateSummary); card.addEventListener('change', updateSummary); updateSummary();
@@ -180,7 +180,7 @@ const automationUi = (() => {
     try {
       const result = await api(test ? '/api/automation/test' : '/api/automation', {method: test ? 'POST' : 'PUT', body: JSON.stringify(request)});
       if (test) message.textContent = result.message;
-      else { render(result); message.textContent = 'Saved. Controller will apply these settings.'; }
+      else { render(result); message.textContent = 'Applied — controller updating automation.'; }
     } catch (e) { message.textContent = e.message; }
     finally { busy = false; for (const button of form.querySelectorAll('button')) button.disabled = false; for (const fieldset of form.querySelectorAll('fieldset')) fieldset.disabled = false; }
   }
@@ -188,14 +188,14 @@ const automationUi = (() => {
     if (!loaded || refreshing) return; refreshing = true;
     try {
       const status = await api('/api/automation/status');
-      connection.textContent = `${status.connection}${status.lastPerson ? ' · Last person: ' + new Date(status.lastPerson).toLocaleTimeString() : ''}`;
+      connection.textContent = `Broker: ${status.connection} · Last event: ${status.lastMessage ? new Date(status.lastMessage).toLocaleString() : 'None received since controller startup'} · Last person detection: ${status.lastPerson ? new Date(status.lastPerson).toLocaleString() : 'None'}. ${status.lastResult || ''}`;
       connection.title = status.lastResult;
       form.querySelector('.automation-broker > summary').title = status.lastResult;
       for (const card of rules.children) {
         const state = status.rules.find(r => r.id === card.dataset.id), remaining = state?.expiresAt ? Math.max(0, Math.ceil((new Date(state.expiresAt) - Date.now()) / 1000)) : 0;
         const target = Number(card.querySelector('.rule-action').value) === 0 ? overlays.find(o => o.slot === Number(card.querySelector('.rule-target').value)) : null;
         const activeNames = (state?.activeCameraSlots || []).map(slot => inventory.find(c => c.slot === slot)?.name || `Stream ${slot}`);
-        card.querySelector('.rule-status').textContent = (dirty ? 'Unsaved changes · ' : '') + (status.connection === 'Disabled' ? 'Automation disabled' : !state ? 'Not saved' : !state.enabled ? 'Disabled' : remaining ? `Detection active${activeNames.length ? ' · ' + activeNames.join(', ') : ''} · clear in ${remaining}s` : 'Waiting for person') + (target?.enabled ? ' · Target is Always visible; choose Automation only in Overlays to hide it while waiting.' : '');
+        card.querySelector('.rule-status').textContent = (dirty ? 'Unsaved changes · ' : '') + (status.connection === 'Disabled' ? 'Automation disabled' : !state ? 'Not saved' : !state.enabled ? 'Disabled' : remaining ? `Detection active${activeNames.length ? ' · ' + activeNames.join(', ') : ''} · clear in ${remaining}s` : 'Waiting for person') + ` · Last event: ${state?.lastEvent ? new Date(state.lastEvent).toLocaleString() : 'None since settings applied'} · Last triggered: ${state?.lastTriggered ? new Date(state.lastTriggered).toLocaleString() : 'No successful viewer command since settings applied'}` + (target?.enabled ? ' · Target is Always visible; choose Automation only in Overlays to hide it while waiting.' : '');
       }
       if (!document.querySelector('#page-automation').hidden) await refreshDiagnostics();
     } catch { connection.textContent = 'Controller unavailable'; }
@@ -210,7 +210,7 @@ const automationUi = (() => {
       if (known.length === 1 || matches.length === 1) { input.value = known.length === 1 ? known[0] : matches[0].topic; dirty = true; form.dataset.dirty = 'true'; }
     }
     const choices = discovered.map(t => ({value: t.topic, label: `${t.cameraName || 'Camera name unavailable'} · ${t.topic}${t.personSeen ? ' · Person observed' : ''}`}));
-    if (input.value && !choices.some(c => c.value === input.value)) choices.unshift({value:input.value, label:'Entered topic (not observed) · ' + input.value});
+    if (input.value && !choices.some(c => c.value === input.value)) choices.unshift({value:input.value, label:'Configured topic (not seen in this discovery session) · ' + input.value});
     const signature = JSON.stringify(choices);
     if (chooser.dataset.choices !== signature) {
       chooser.replaceChildren(new Option('Choose a discovered topic, or enter one under Advanced', ''));
@@ -304,7 +304,7 @@ const automationUi = (() => {
   function refreshOverlayLinks() {
     for (const info of document.querySelectorAll('.overlay-automation-info')) {
       const overlayForm = info.closest('form'), slot = Number(overlayForm.dataset.slot);
-      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Save overlay to apply this mode.' : 'Always visible: stays on screen even when automation is idle.';
+      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Apply changes in Overlays to use this mode.' : 'Always visible: stays on screen even when automation is idle.';
       const linked = savedRules.filter(r => (r.action || 0) === 0 && r.overlaySlot === slot);
       info.querySelector('.overlay-rule-links').textContent = linked.length ? 'Linked rules: ' + linked.map(r => r.name + (r.enabled ? '' : ' (disabled)')).join(', ') : 'No automation rules assigned';
     }

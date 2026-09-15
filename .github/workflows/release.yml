@@ -74,6 +74,9 @@ jobs:
       - name: Check drawn viewport masks
         run: node tests/shape-editor.checks.cjs
 
+      - name: Check dashboard snapshot freshness
+        run: node tests/dashboard-ux.checks.cjs
+
       - name: Check landscape and portrait presets
         run: node tests/wall-layout-presets.checks.cjs
 

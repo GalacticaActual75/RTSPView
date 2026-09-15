@@ -5,7 +5,7 @@ const adminUi = (() => {
     overview: 'Monitor the stream wall, stream health, and host performance.',
     cameras: 'Configure streams, connection settings, and recovery.',
     layouts: 'Arrange streams in a saved layout, then apply it to the wall.',
-    overlays: 'Position, shape, and frame picture-in-picture streams. Save to apply changes to the wall.',
+    overlays: 'Position, shape, and frame picture-in-picture streams. Apply changes to update the wall.',
     system: 'Configure RTSPView settings, networking, display behavior, updates, and backups.',
     automation: 'Choose what the wall shows when a camera detects a person.'
   };
@@ -47,7 +47,7 @@ const adminUi = (() => {
     }, true);
     collapseSections();
     window.addEventListener('pageshow', () => collapseSections());
-    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=maintenance2'; document.head.append(css);
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=dashboard2'; document.head.append(css);
     const hero = document.querySelector('.hero');
     const description = document.createElement('p'); description.id = 'pageDescription';
     hero.querySelector('h1').after(description);
@@ -102,7 +102,7 @@ const adminUi = (() => {
     const state = camera?.frameWarning ? 'Stale video' : camera?.state || (viewerConnected ? 'Telemetry unavailable' : 'Viewer offline');
     const tone = state === 'Live' ? 'healthy' : ['Disabled','NotConfigured'].includes(state) ? 'neutral' :
       ['Connecting','Buffering','Reconnecting','Stale video'].includes(state) ? 'warning' : 'error';
-    box.dataset.tone = tone; box.querySelector('.state').textContent = ({StreamError:'Stream error',NotConfigured:'Not configured'})[state] || state;
+    box.dataset.tone = tone; box.querySelector('.state').textContent = ({Live:'Stream connected',StreamError:'Stream error',NotConfigured:'Not configured'})[state] || state;
     const details = box.querySelector('.live-details'); details.replaceChildren();
     if (!camera) { details.textContent = 'No current stream telemetry'; return; }
     const values = [`${camera.fps.toFixed(1)} fps`, camera.width && camera.height ? `${camera.width}×${camera.height}` : 'Resolution unknown',

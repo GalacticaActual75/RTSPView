@@ -19,7 +19,7 @@ const restartScheduleUi = (() => {
           </div>
           <fieldset class="restart-days" data-mode="weekly"><legend>Days</legend>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day,i)=>`<label><input type="checkbox" name="days" value="${i}" ${i===0?'checked':''}>${day}</label>`).join('')}</fieldset>
           ${action==='host'?'<label class="restart-host-warning" hidden><input name="hostAcknowledged" type="checkbox">I understand this restarts the entire Windows host and interrupts every application. RTSPView must be configured to launch after Windows sign-in.</label>':''}
-          <div class="actions"><button type="submit">Save ${action} schedule</button><button type="button" class="secondary restart-skip" disabled>Skip next ${action} restart</button></div>
+          <div class="actions"><button type="submit">Apply changes</button><button type="button" class="secondary restart-skip" disabled>Skip next ${action} restart</button></div>
         </fieldset>
         <p class="restart-timezone"></p>
         <dl class="restart-status"><div><dt>Next restart (host time)</dt><dd data-status="next">—</dd></div><div><dt>Last attempt (host time)</dt><dd data-status="last">—</dd></div><div><dt>Last result</dt><dd data-status="last-result">No attempts yet.</dd></div></dl>
@@ -27,12 +27,13 @@ const restartScheduleUi = (() => {
       section.querySelector('.restart-schedules').append(form);
       form.addEventListener('change',()=>{updateFields(action);message(action,'Unsaved changes.');});
       form.querySelector('.restart-skip').onclick=()=>skip(action);
+      form.addEventListener('input',()=>{form.dataset.dirty='true';message(action,'Unsaved changes — Apply changes updates this restart schedule');});
       form.onsubmit=async event=>{
         event.preventDefault(); const e=form.elements;
         const settings={enabled:e.enabled.checked,action,mode:e.mode.value,intervalHours:Number(e.intervalHours.value),time:e.time.value,days:[...form.querySelectorAll('[name=days]:checked')].map(input=>Number(input.value))};
         if(settings.mode==='weekly'&&!settings.days.length){message(action,'Select at least one weekday.');return;}
         const saved=await mutate(action,'/api/restart-schedule','PUT',{settings,hostAcknowledged:!!e.hostAcknowledged?.checked});
-        if(saved&&e.hostAcknowledged)e.hostAcknowledged.checked=false;
+        if(saved){form.dataset.dirty='false';message(action,'Applied — restart schedule updated.');if(e.hostAcknowledged)e.hostAcknowledged.checked=false;}
       };
       updateFields(action);
     }

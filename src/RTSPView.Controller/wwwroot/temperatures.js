@@ -8,7 +8,7 @@ const temperatureUi = (() => {
         <label class="toggle-control"><input name="showWarnings" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span>Show temperature warnings on the live view</label>
         <p>Turn this off to hide all temperature warnings. Current readings and saved limits remain available.</p>
         <div class="temperature-grid">${['cpu','gpu'].map(kind=>`<section class="temperature-device" aria-label="${kind.toUpperCase()} temperature settings"><h3>${kind.toUpperCase()}</h3><p class="temperature-reading" data-temperature="${kind}">Unavailable</p><label class="toggle-control"><input name="${kind}WarningEnabled" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span>Warn for ${kind.toUpperCase()}</label><label>Maximum ${kind.toUpperCase()} temperature (°C)<input name="${kind}MaxC" type="number" min="1" max="150" step="0.1" value="${kind==='cpu'?90:85}" required></label></section>`).join('')}</div>
-        <div class="actions"><span class="temperature-message" role="status"></span><button>Save temperature settings</button></div>
+        <div class="actions"><span class="temperature-message" role="status"></span><button>Apply changes</button></div>
       </fieldset><p class="information-note">Shows the hottest reported temperature for each device type, including GPU hotspots or memory sensors when exposed. Choose limits appropriate for your hardware. Missing sensors show Unavailable and cannot trigger a warning. These settings apply only to this host.</p>
       <section aria-labelledby="temperature-dependencies-title">
         <h3 id="temperature-dependencies-title">Sensor requirements</h3>
@@ -17,12 +17,12 @@ const temperatureUi = (() => {
         <p>LibreHardwareMonitor is included with RTSPView; no separate download is needed. The optional maintenance helper installs verified PawnIO and RTSPView releases and reads sensors. UAC stays enabled.</p>
       </section>`;
     document.querySelector('#displayForm').after(form);
-    form.addEventListener('change',()=>message('Unsaved changes.'));
+    form.addEventListener('change',()=>{form.dataset.dirty='true';message('Unsaved changes.');});
     form.onsubmit=async event=>{
       event.preventDefault();if(busy)return;busy=true;revision++;
       const e=form.elements,settings={showWarnings:e.showWarnings.checked,cpuWarningEnabled:e.cpuWarningEnabled.checked,gpuWarningEnabled:e.gpuWarningEnabled.checked,cpuMaxC:Number(e.cpuMaxC.value),gpuMaxC:Number(e.gpuMaxC.value)};
       form.querySelector('fieldset').disabled=true;
-      try{render(await api('/api/temperatures',{method:'PUT',body:JSON.stringify(settings)}));message('Temperature settings saved.');}
+      try{render(await api('/api/temperatures',{method:'PUT',body:JSON.stringify(settings)}));form.dataset.dirty='false';message('Applied — temperature settings updated.');}
       catch(error){message(error.message);}
       finally{busy=false;form.querySelector('fieldset').disabled=false;}
     };

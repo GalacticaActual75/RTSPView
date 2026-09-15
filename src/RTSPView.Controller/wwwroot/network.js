@@ -1,11 +1,11 @@
 /* LAN access lives in System; all changes use the existing authenticated/CSRF API helper. */
 function createNetworkPanel() {
  const panel=document.createElement('form');panel.id='networkForm';panel.className='panel control-panel';
- panel.innerHTML='<h2>LAN Access</h2><p>Allow devices on your trusted private network to open this admin panel.</p><div class="settings-action-row"><div><label class="toggle-control"><input name="enabled" type="checkbox" role="switch" aria-describedby="lanHelp"><span class="toggle-track" aria-hidden="true"></span>Enable LAN access</label><p id="lanHelp">Windows will ask for administrator approval on the RTSPView host when enabling access. Its network connection must be set to Private.</p></div><button type="submit">Save LAN access</button></div><p id="networkState" role="status"></p><section class="inset-panel" aria-label="Admin URLs (LAN only)"><h3>Admin URLs (LAN only)</h3><div id="networkAddresses"></div><span id="copyAddressState" role="status"></span></section><p class="network-warning">HTTP is unencrypted; no certificate is needed. Use only on a trusted private network.</p>';
+ panel.innerHTML='<h2>LAN Access</h2><p>Allow devices on your trusted private network to open this admin panel.</p><div class="settings-action-row"><div><label class="toggle-control"><input name="enabled" type="checkbox" role="switch" aria-describedby="lanHelp"><span class="toggle-track" aria-hidden="true"></span>Enable LAN access</label><p id="lanHelp">Windows will ask for administrator approval on the RTSPView host when enabling access. Its network connection must be set to Private.</p></div><button type="submit">Apply changes</button></div><p id="networkState" role="status"></p><section class="inset-panel" aria-label="Admin URLs (LAN only)"><h3>Admin URLs (LAN only)</h3><div id="networkAddresses"></div><span id="copyAddressState" role="status"></span></section><p class="network-warning">HTTP is unencrypted; no certificate is needed. Use only on a trusted private network.</p>';
  document.querySelector('#page-system').prepend(panel);
  function render(state) {
   panel.elements.enabled.checked=state.enabled;panel.elements.enabled.disabled=!state.managed;
-  panel.querySelector('button').disabled=!state.managed;
+  panel.querySelector('button').disabled=!state.managed;panel.dataset.dirty='false';panel.dataset.savedEnabled=String(state.enabled);
   panel.querySelector('#networkState').textContent=state.message;
   const addresses=panel.querySelector('#networkAddresses');addresses.replaceChildren();
   if(state.managed && state.enabled)for(const url of state.addresses){
@@ -28,6 +28,7 @@ function createNetworkPanel() {
   }
   if(!addresses.children.length)addresses.textContent=state.enabled?'No LAN addresses available.':'Enable LAN access to see available addresses.';
  }
+ panel.oninput=()=>{panel.dataset.dirty=String(String(panel.elements.enabled.checked)!==panel.dataset.savedEnabled);panel.querySelector('#networkState').textContent=panel.dataset.dirty==='true'?'Unsaved changes — Apply changes updates LAN access':'Applied';};
  panel.onsubmit=async event=>{
   event.preventDefault();const enabled=panel.elements.enabled.checked,button=panel.querySelector('button');button.disabled=true;
   if(!enabled && !['localhost','127.0.0.1','[::1]'].includes(location.hostname) && !confirm('Disable LAN access? This device will lose access. You can re-enable it locally on the RTSPView host.')){panel.elements.enabled.checked=true;button.disabled=false;return}

@@ -65,7 +65,7 @@ const wallDesigner = (() => {
       const result = await api('/api/layouts',{method:'PUT',body:JSON.stringify(payload)});
       previous = copy(saved); saved = copy(result); draft = copy(result); dirty = false;
       if (!draft.layouts.some(layout=>layout.id===selectedId)) selectedId = draft.activeLayoutId;
-      render(); message(revert ? 'Previous saved layouts restored.' : apply ? 'Layout applied. The viewer will update shortly.' : 'Layouts saved.');
+      render(); dashboardUX.sync(); message(revert ? 'Previous saved layouts restored.' : apply ? 'Layout applied. The viewer will update shortly.' : 'Layouts saved.');
     } catch(error) { message(error.message); }
     finally { busy = false; root.inert = false; }
   }
@@ -96,7 +96,7 @@ const wallDesigner = (() => {
     const actions=el('div',undefined,'designer-actions');top.append(actions);
     button('Discard changes',()=>{draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=0;dirty=false;render();message('Draft discarded.');},actions).classList.add('designer-discard');root.querySelector('.designer-discard').disabled=!dirty;
     if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);
-    button('Apply to wall',()=>persist(true),actions,false);
+    button('Apply changes',()=>persist(true),actions,false);
     const workspace=el('div',undefined,'designer-workspace');root.append(workspace);
     const preview=el('section',undefined,'designer-preview');workspace.append(preview);
     const previewHead=el('div',undefined,'designer-preview-head');preview.append(previewHead);
@@ -134,7 +134,7 @@ const wallDesigner = (() => {
       const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
       Object.assign(node.style,{left:tile.column/layout.columns*100+'%',top:tile.row/layout.rows*100+'%',width:tile.columnSpan/layout.columns*100+'%',height:tile.rowSpan/layout.rows*100+'%'});
-      const image=el('img');image.alt='';image.draggable=false;image.src='/api/cameras/'+tile.cameraSlot+'/thumbnail';image.onerror=()=>image.style.visibility='hidden';node.append(image);
+      const image=el('img');image.alt='';image.draggable=false;dashboardUX.snapshot(image,tile.cameraSlot);image.onerror=()=>image.style.visibility='hidden';node.append(image);
       node.append(el('span',camera.name,'designer-caption'));
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].map(overlay=>[overlay.camera.name,overlay]).filter(([,o])=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(overlays.length)node.append(el('span',overlays.map(([name])=>name+' overlay').join(' · '),'designer-overlay'));
@@ -162,7 +162,7 @@ const wallDesigner = (() => {
     if(tile){
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot);
       const selected=el('div',undefined,'designer-selected');selected.append(el('span','SELECTED TILE','designer-eyebrow'),el('h3',camera.name));side.append(selected);
-      const cameraSelect=el('select');for(const camera of config.cameras)cameraSelect.add(new Option(camera.name,camera.slot));cameraSelect.value=tile.cameraSlot;
+      const cameraSelect=el('select');for(const camera of config.cameras)cameraSelect.add(new Option(camera.name+' · #'+camera.slot,camera.slot));cameraSelect.value=tile.cameraSlot;
       cameraSelect.onchange=()=>updateTile({...tile,cameraSlot:Number(cameraSelect.value)},selectedTile);field('Stream',cameraSelect,side);
       const properties=el('div',undefined,'designer-properties');side.append(properties);
       for(const [key,label,offset] of [['row','Row',1],['column','Column',1],['rowSpan','Height',0],['columnSpan','Width',0]]){
@@ -184,7 +184,7 @@ const wallDesigner = (() => {
         for(let row=0;row<layout.rows;row++)for(let column=0;column<layout.columns;column++)if(validTile({cameraSlot:camera.slot,row,column,rowSpan:1,columnSpan:1},-1)){addCamera(camera.slot,row,column);return;}
         message('No empty cell is available. Remove a tile or enlarge the grid.');
       },library);node.classList.add('designer-camera');node.setAttribute('aria-label','Add '+camera.name+' to layout');
-      const thumb=el('img');thumb.alt='';thumb.src='/api/cameras/'+camera.slot+'/thumbnail';thumb.draggable=false;thumb.onerror=()=>thumb.style.visibility='hidden';
+      const thumb=el('img');thumb.alt='';dashboardUX.snapshot(thumb,camera.slot);thumb.draggable=false;thumb.onerror=()=>thumb.style.visibility='hidden';
       node.append(thumb,el('span',camera.name),el('span','+'));node.draggable=true;node.ondragstart=e=>e.dataTransfer.setData('text/plain',String(camera.slot));
     }
     status=el('p',dirty?'Unsaved changes. Apply when you are ready.':'Changes stay in draft until you apply.','designer-status');status.setAttribute('role','status');root.append(status);
@@ -193,7 +193,7 @@ const wallDesigner = (() => {
     if(hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
   }
   window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-  return {updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
+  return {isDirty:()=>dirty,active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
     config=value;root=document.querySelector('#page-layouts');
     if(!root)return;
     saved=copy({layouts:value.layouts,activeLayoutId:value.activeLayoutId});

@@ -374,7 +374,9 @@ app.MapGet("/api/cameras/{slot:int}/thumbnail", (int slot) =>
 {
     if (slot is < 1 or > AppSettings.MaximumStreamSlot) return Results.BadRequest(new { error = "Invalid stream slot." });
     var path = Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg");
-    return File.Exists(path) ? Results.File(path, "image/jpeg") : Results.NotFound(new { error = "No thumbnail has been captured yet." });
+    if (!File.Exists(path)) return Results.NotFound(new { error = "No thumbnail has been captured yet." });
+    var capturedAt = File.GetLastWriteTimeUtc(path);
+    return Results.File(File.ReadAllBytes(path), "image/jpeg", lastModified: capturedAt);
 }).RequireAuthorization();
 app.MapPost("/api/cameras/{slot:int}/thumbnail/refresh", async (int slot, CancellationToken cancellationToken) =>
 {
