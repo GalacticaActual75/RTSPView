@@ -38,7 +38,13 @@ internal static class StreamTelemetryChecks
             var player = (MediaPlayer)typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)!;
             var playbackEngine = (LibVLC)typeof(CameraTile).GetField("_libVlc", flags)!.GetValue(tile)!;
             var media = new Media(playbackEngine, new Uri(file));
-            if (nativeBackground) player.Hwnd = tile.GetNativeVideoHandle();
+            if (nativeBackground)
+            {
+                player.Hwnd = tile.GetNativeVideoHandle();
+                // Hosted CI has no accelerated desktop; exercise the real HWND
+                // with VLC's software Windows output rather than Direct3D.
+                media.AddOption(":vout=wingdi");
+            }
             media.AddOption(":avcodec-hw=none"); media.AddOption(":no-audio");
             typeof(CameraTile).GetField("_media", flags)!.SetValue(tile, media);
             if (!player.Play(media)) throw new Exception("Synthetic video did not start");
@@ -139,7 +145,7 @@ internal static class StreamTelemetryChecks
                     return;
                 }
             }
-            throw new Exception("Decoded fixture telemetry did not report dimensions, codec, progress and bitrate");
+            throw new Exception("Decoded fixture telemetry did not report dimensions, codec, progress and bitrate: " + System.Text.Json.JsonSerializer.Serialize(tile.GetTelemetry()));
         }
         finally { tile.Dispose(); window.Close(); }
     }
