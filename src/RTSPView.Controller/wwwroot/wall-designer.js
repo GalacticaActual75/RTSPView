@@ -45,7 +45,7 @@ function createWallDesigner(isAutomation = false) {
   function preset(id) {
     const layout=current();
     Object.assign(layout,wallLayoutPresets.create(id,layout.aspectRatio||'16:9',config.cameras.map(camera=>camera.slot)));
-    if(isAutomation) layout.focusSlots=layout.tiles.slice(0,id==='dual'?2:1).map(t=>t.cameraSlot);
+    if(isAutomation){layout.focusSlots=layout.tiles.slice(0,id==='dual'?2:1).map((t,i)=>{t.cameraSlot=-i-1;return t.cameraSlot;});}
     selectedTile=0;changed();
   }
   function addCamera(slot, row, column) {
@@ -74,7 +74,7 @@ function createWallDesigner(isAutomation = false) {
   }
   function render() {
     root.replaceChildren();
-    const layout=current();
+    const layout=current(), proportions=wallProportions(layout);
     const top=el('div',undefined,'designer-toolbar');root.append(top);
     const picker=el('div',undefined,'designer-layout-picker');top.append(picker);
     const layouts=el('select');
@@ -101,11 +101,11 @@ function createWallDesigner(isAutomation = false) {
     if(isAutomation)button('Save automation layouts',()=>persist(),actions,false);
     else {if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);button('Apply changes',()=>persist(true),actions,false);}
     if(isAutomation){
-      const help=el('p','Focus positions follow active detections in order. With only one active camera, the second position keeps its assigned fallback camera. Other tiles retain their cameras; a focused camera already on the layout swaps places to avoid duplicates.','designer-help');root.append(help);
+      const help=el('p','Focus tiles have no assigned camera. Your automation rule supplies the camera. An unused focus tile stays empty; a camera shown in a focus tile is hidden in its regular position to avoid duplicates.','designer-help');root.append(help);
       const focusControls=el('div',undefined,'designer-canvas-controls');root.append(focusControls);
       const count=el('select');count.add(new Option('One focus position','1'));count.add(new Option('Two focus positions','2'));count.value=layout.focusSlots.length;
-      count.onchange=()=>{if(Number(count.value)>layout.tiles.length){message('Add a second tile first.');return;}layout.focusSlots=layout.tiles.slice(0,Number(count.value)).map(t=>t.cameraSlot);changed();};field('Focus positions',count,focusControls);
-      layout.focusSlots.forEach((slot,i)=>{const pick=el('select');for(const t of layout.tiles)pick.add(new Option(config.cameras.find(c=>c.slot===t.cameraSlot)?.name||'Camera '+t.cameraSlot,t.cameraSlot));pick.value=slot;pick.onchange=()=>{if(layout.focusSlots.some((s,j)=>j!==i&&s===Number(pick.value))){message('Choose different focus positions.');pick.value=slot;return;}layout.focusSlots[i]=Number(pick.value);changed();};field('Focus '+(i+1)+' position / fallback',pick,focusControls);});
+      count.onchange=()=>{const wanted=Number(count.value);if(wanted>layout.tiles.length){message('Add a second tile first.');return;}if(wanted===1){layout.tiles=layout.tiles.filter(t=>t.cameraSlot!==-2);layout.focusSlots=[-1];}else{const tile=layout.tiles.find(t=>t.cameraSlot>0);if(!tile){message('Add another tile first.');return;}tile.cameraSlot=-2;layout.focusSlots=[-1,-2];}selectedTile=0;changed();};field('Focus tiles',count,focusControls);
+      layout.focusSlots.forEach((slot,i)=>{const pick=el('select');for(const [index,t] of layout.tiles.entries())if(t.cameraSlot>0||t.cameraSlot===slot)pick.add(new Option('Row '+(t.row+1)+', column '+(t.column+1),index));pick.value=layout.tiles.findIndex(t=>t.cameraSlot===slot);pick.onchange=()=>{const old=layout.tiles.find(t=>t.cameraSlot===slot),target=layout.tiles[Number(pick.value)];old.cameraSlot=target.cameraSlot;target.cameraSlot=slot;changed();};field('Focus '+(i+1)+' position',pick,focusControls);});
       button('Open Automation rules',()=>adminLayout.select('automation'),focusControls);
     }
     const workspace=el('div',undefined,'designer-workspace');root.append(workspace);
@@ -138,14 +138,14 @@ function createWallDesigner(isAutomation = false) {
     }
     const stage=el('div',undefined,'designer-stage');preview.append(stage);
     board=el('div',undefined,'designer-board');board.setAttribute('aria-label','Stream wall layout preview');
-    board.style.setProperty('--aspect',(layout.aspectRatio||'16:9').replace(':','/'));board.style.setProperty('--ratio',layout.aspectRatio==='9:16'?9/16:16/9);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
-    board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,Math.floor((e.clientY-bounds.top)/bounds.height*layout.rows),Math.floor((e.clientX-bounds.left)/bounds.width*layout.columns));};
+    board.style.backgroundImage='none';board.style.setProperty('--aspect',(layout.aspectRatio||'16:9').replace(':','/'));board.style.setProperty('--ratio',layout.aspectRatio==='9:16'?9/16:16/9);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
+    board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,proportions.cell(proportions.rows,(e.clientY-bounds.top)/bounds.height),proportions.cell(proportions.columns,(e.clientX-bounds.left)/bounds.width));};
     layout.tiles.forEach((tile,index)=>{
-      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:'Stream',slot:tile.cameraSlot};
+      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
       const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
-      Object.assign(node.style,{left:tile.column/layout.columns*100+'%',top:tile.row/layout.rows*100+'%',width:tile.columnSpan/layout.columns*100+'%',height:tile.rowSpan/layout.rows*100+'%'});
-      const image=el('img');image.alt='';image.draggable=false;dashboardUX.snapshot(image,tile.cameraSlot);image.onerror=()=>image.style.visibility='hidden';node.append(image);
+      const rect=proportions.bounds(tile);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
+      const image=el('img');image.alt='';image.draggable=false;if(tile.cameraSlot>0)dashboardUX.snapshot(image,tile.cameraSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);
       node.append(el('span',camera.name,'designer-caption'));
       if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot))node.append(el('span','Focus '+(layout.focusSlots.indexOf(tile.cameraSlot)+1),'designer-overlay'));
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].map(overlay=>[overlay.camera.name,overlay]).filter(([,o])=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
@@ -157,11 +157,11 @@ function createWallDesigner(isAutomation = false) {
         const resize=e.target===handle,startX=e.clientX,startY=e.clientY,bounds=board.getBoundingClientRect();let candidate=copy(tile);
         node.setPointerCapture(e.pointerId);
         node.onpointermove=move=>{
-          const dx=Math.round((move.clientX-startX)/bounds.width*layout.columns),dy=Math.round((move.clientY-startY)/bounds.height*layout.rows);
+          const x=(move.clientX-bounds.left)/bounds.width,y=(move.clientY-bounds.top)/bounds.height;const dx=proportions.cell(proportions.columns,x)-proportions.cell(proportions.columns,(startX-bounds.left)/bounds.width),dy=proportions.cell(proportions.rows,y)-proportions.cell(proportions.rows,(startY-bounds.top)/bounds.height);
           candidate={...tile,...(resize?{columnSpan:tile.columnSpan+dx,rowSpan:tile.rowSpan+dy}:{column:tile.column+dx,row:tile.row+dy})};
           const swap=layout.tiles.some((other,i)=>i!==index&&other.row===candidate.row&&other.column===candidate.column&&other.rowSpan===tile.rowSpan&&other.columnSpan===tile.columnSpan&&candidate.rowSpan===tile.rowSpan&&candidate.columnSpan===tile.columnSpan);
           node.classList.toggle('invalid',!validTile(candidate,index)&&!swap);
-          Object.assign(node.style,{left:candidate.column/layout.columns*100+'%',top:candidate.row/layout.rows*100+'%',width:Math.max(1,candidate.columnSpan)/layout.columns*100+'%',height:Math.max(1,candidate.rowSpan)/layout.rows*100+'%'});
+          const rect=proportions.bounds(candidate);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
         };
         node.onpointerup=()=>{node.onpointermove=null;if(JSON.stringify(candidate)===JSON.stringify(tile))render();else updateTile(candidate,index);};
         node.onpointercancel=()=>render();
@@ -172,16 +172,16 @@ function createWallDesigner(isAutomation = false) {
     const side=el('aside',undefined,'designer-inspector');workspace.append(side);
     const tile=layout.tiles[selectedTile];
     if(tile){
-      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:'Unavailable camera '+tile.cameraSlot};
+      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Unavailable camera '+tile.cameraSlot};
       const selected=el('div',undefined,'designer-selected');selected.append(el('span','SELECTED TILE','designer-eyebrow'),el('h3',camera.name));side.append(selected);
       const cameraSelect=el('select');for(const camera of config.cameras)cameraSelect.add(new Option(camera.name+' · #'+camera.slot,camera.slot));cameraSelect.value=tile.cameraSlot;
-      cameraSelect.onchange=()=>updateTile({...tile,cameraSlot:Number(cameraSelect.value)},selectedTile);field('Stream',cameraSelect,side);
+      cameraSelect.onchange=()=>updateTile({...tile,cameraSlot:Number(cameraSelect.value)},selectedTile);if(tile.cameraSlot>0)field('Stream',cameraSelect,side);else side.append(el('p','Camera supplied by the automation rule.','designer-help'));
       const properties=el('div',undefined,'designer-properties');side.append(properties);
       for(const [key,label,offset] of [['row','Row',1],['column','Column',1],['rowSpan','Height',0],['columnSpan','Width',0]]){
         const input=el('input');input.type='number';input.min=1;input.max=isAutomation?6:4;input.value=tile[key]+offset;
         input.onchange=()=>updateTile({...tile,[key]:Number(input.value)-offset},selectedTile);field(label,input,properties);
       }
-      side.append(el('p','Position and size in grid cells.','designer-help'));
+      side.append(el('p','Position and size in grid cells. Row heights and column widths balance automatically for 16:9 feeds, without cropping or stretching.','designer-help'));
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].filter(o=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(overlays.length){const hosts=el('div',undefined,'designer-hosts');hosts.append(el('span','OVERLAYS','designer-eyebrow'));for(const o of overlays)hosts.append(el('span',o.camera.name,'designer-host'));side.append(hosts);}
       const remove=button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=0;changed();},side);remove.classList.add('designer-danger');remove.disabled=layout.tiles.length===1||(isAutomation&&layout.focusSlots.includes(tile.cameraSlot));
@@ -216,12 +216,12 @@ function createWallDesigner(isAutomation = false) {
 const standardWallDesigner=createWallDesigner(), automationWallDesigner=createWallDesigner(true);
 const wallDesigner=(()=>{
   let tab='standard';
-  function selectTab(value){tab=value;adminUi.collapseSections();for(const name of ['standard','automation']){document.querySelector('#'+name+'-layout-editor').hidden=name!==tab;document.querySelector('[data-layout-tab="'+name+'"]').setAttribute('aria-selected',String(name===tab));}}
+  function selectTab(value){tab=value;adminUi.collapseSections();for(const name of ['standard','automation']){document.querySelector('#'+name+'-layout-editor').hidden=name!==tab;document.querySelector('[data-layout-tab="'+name+'"]').setAttribute('aria-selected',String(name===tab));document.querySelector('[data-layout-tab="'+name+'"]').tabIndex=name===tab?0:-1;}}
   return {
     isDirty:()=>standardWallDesigner.isDirty()||automationWallDesigner.isDirty(),active:()=>standardWallDesigner.active(),
     updateCameras(cameras){standardWallDesigner.updateCameras(cameras);automationWallDesigner.updateCameras(cameras);},
     openAutomation(){adminLayout.select('layouts');selectTab('automation');},
-    load(value){const page=document.querySelector('#page-layouts');if(!document.querySelector('#standard-layout-editor')){const nav=document.createElement('nav');nav.className='overlay-nav';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Layout type');for(const [id,label] of [['standard','Standard View layouts'],['automation','Automation layouts']]){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.layoutTab=id;b.setAttribute('role','tab');b.onclick=()=>selectTab(id);nav.append(b);}page.append(nav);for(const id of ['standard','automation']){const panel=document.createElement('section');panel.id=id+'-layout-editor';panel.setAttribute('role','tabpanel');page.append(panel);}}
+    load(value){const page=document.querySelector('#page-layouts');if(!document.querySelector('#standard-layout-editor')){const nav=document.createElement('nav');nav.className='system-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Layout type');for(const [id,label] of [['standard','Standard View layouts'],['automation','Automation layouts']]){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.layoutTab=id;b.id='layout-tab-'+id;b.setAttribute('role','tab');b.setAttribute('aria-controls',id+'-layout-editor');b.onkeydown=e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?'standard':e.key==='End'?'automation':id==='standard'?'automation':'standard';selectTab(next);document.querySelector('[data-layout-tab="'+next+'"]').focus();}};b.onclick=()=>selectTab(id);nav.append(b);}page.append(nav);for(const id of ['standard','automation']){const panel=document.createElement('section');panel.id=id+'-layout-editor';panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby','layout-tab-'+id);panel.tabIndex=0;page.append(panel);}}
       standardWallDesigner.load(value);automationWallDesigner.load(value);selectTab(tab);
     }
   };

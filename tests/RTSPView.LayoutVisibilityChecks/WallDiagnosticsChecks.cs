@@ -70,6 +70,13 @@ internal static class WallDiagnosticsChecks
         panel.SetFullScreen(true);
         if (panel.Visibility != Visibility.Visible || toggle.Visibility != Visibility.Collapsed)
             throw new Exception("Full screen did not show current errors automatically");
+        panel.Refresh([main, overlay], [1,17]);
+        if(panel.Visibility != Visibility.Collapsed || panel.WarningCount != 2) throw new Exception("Exclusions must suppress automatic opening without removing alerts");
+        panel.Refresh([main, overlay], [17]);
+        if(panel.Visibility != Visibility.Visible) throw new Exception("Non-excluded issue must still open diagnostics");
+        panel.SetFullScreen(false); panel.ToggleWindowed();
+        if(panel.Visibility != Visibility.Visible || panel.WarningCount != 2) throw new Exception("Manual diagnostics must include excluded cameras");
+        panel.ToggleWindowed(); panel.SetFullScreen(true);
         state.SetValue(overlay, new CameraRuntimeStatus { State = CameraConnectionState.Live });
         panel.Refresh([main, overlay]);
         if (panel.WarningCount != 1 || panel.SelectedSlot != 17) throw new Exception("Recovery lost the other camera's alert or changed selection");

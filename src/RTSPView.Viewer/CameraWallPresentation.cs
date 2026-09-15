@@ -9,8 +9,11 @@ public static class CameraWallPresentation
     {
         grid.RowDefinitions.Clear();
         grid.ColumnDefinitions.Clear();
-        for (var row = 0; row < (focusedSlot.HasValue ? 1 : layout.Rows); row++) grid.RowDefinitions.Add(new());
-        for (var column = 0; column < (focusedSlot.HasValue ? 1 : layout.Columns); column++) grid.ColumnDefinitions.Add(new());
+        var proportions = WallProportions.Calculate(layout);
+        for (var row = 0; row < (focusedSlot.HasValue ? 1 : layout.Rows); row++)
+            grid.RowDefinitions.Add(new() { Height = new System.Windows.GridLength(focusedSlot.HasValue ? 1 : proportions.Rows[row], System.Windows.GridUnitType.Star) });
+        for (var column = 0; column < (focusedSlot.HasValue ? 1 : layout.Columns); column++)
+            grid.ColumnDefinitions.Add(new() { Width = new System.Windows.GridLength(focusedSlot.HasValue ? 1 : proportions.Columns[column], System.Windows.GridUnitType.Star) });
         for (var index = 0; index < tiles.Count; index++)
         {
             var slot = AppSettings.MainCameraSlots[index];

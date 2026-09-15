@@ -139,7 +139,7 @@ public partial class MainWindow : Window
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick();
-            DiagnosticsPanel.Refresh(_allTiles);
+            DiagnosticsPanel.Refresh(_allTiles, _settings.DiagnosticsAutoOpenExcludedSlots);
             DiagnosticsButton.Content = DiagnosticsPanel.WarningCount > 0 ? $"Diagnostics ({DiagnosticsPanel.WarningCount})" : "Diagnostics";
             RaiseWarningWindows();
             _telemetryPublisher.Publish(new ViewerTelemetry
@@ -383,7 +383,7 @@ public partial class MainWindow : Window
     private void SetFullScreen(bool enabled)
     {
         _isFullScreen = enabled;
-        DiagnosticsPanel.Refresh(_allTiles);
+        DiagnosticsPanel.Refresh(_allTiles, _settings.DiagnosticsAutoOpenExcludedSlots);
         DiagnosticsPanel.SetFullScreen(enabled);
         if (enabled)
         {

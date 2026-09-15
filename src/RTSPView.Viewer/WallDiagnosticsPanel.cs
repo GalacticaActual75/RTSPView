@@ -25,6 +25,7 @@ public sealed class WallDiagnosticsPanel : UserControl
     private readonly Dictionary<int, TextBlock> _errorText = new();
     private HashSet<int> _warningSlots = [];
     private bool _fullScreen;
+    private HashSet<int> _autoOpenExcluded = [];
     private bool _windowedOpen;
     public int? SelectedSlot => _camera.SelectedValue is int slot ? slot : null;
     public int WarningCount => _warningSlots.Count;
@@ -77,7 +78,7 @@ public sealed class WallDiagnosticsPanel : UserControl
 
     private void ApplyVisibility()
     {
-        Visibility = (_fullScreen ? WarningCount > 0 : _windowedOpen) ? Visibility.Visible : Visibility.Collapsed;
+        Visibility = (_fullScreen ? _warningSlots.Any(slot => !_autoOpenExcluded.Contains(slot)) : _windowedOpen) ? Visibility.Visible : Visibility.Collapsed;
         _toggle.Visibility = _fullScreen ? Visibility.Collapsed : Visibility.Visible;
         _toggle.Content = "Close diagnostics";
     }
@@ -88,8 +89,9 @@ public sealed class WallDiagnosticsPanel : UserControl
         if (open && !_fullScreen) { _windowedOpen = true; ApplyVisibility(); }
     }
 
-    public void Refresh(CameraTile[] tiles)
+    public void Refresh(CameraTile[] tiles, IEnumerable<int>? autoOpenExcluded = null)
     {
+        _autoOpenExcluded = (autoOpenExcluded ?? []).ToHashSet();
         _tiles = tiles.Where(t => t.DiagnosticsAvailable).ToArray();
         var choices = _tiles.Select(t => new Choice(t.Slot, t.DiagnosticLabel)).ToArray();
         var signature = string.Join("\n", choices.Select(c => c.ToString()));

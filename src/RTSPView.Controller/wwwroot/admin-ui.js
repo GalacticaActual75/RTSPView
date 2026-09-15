@@ -47,7 +47,7 @@ const adminUi = (() => {
     }, true);
     collapseSections();
     window.addEventListener('pageshow', () => collapseSections());
-    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=dashboard2'; document.head.append(css);
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=diagnostics-exclusions1'; document.head.append(css);
     const hero = document.querySelector('.hero');
     const description = document.createElement('p'); description.id = 'pageDescription';
     hero.querySelector('h1').after(description);

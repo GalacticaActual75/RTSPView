@@ -496,11 +496,12 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
             MouseCursorHideSeconds = Math.Clamp(display.MouseCursorHideSeconds, 1, 30),
             ShowCameraNames = display.ShowCameraNames,
             ShowCameraStats = display.ShowCameraStats,
+            DiagnosticsAutoOpenExcludedSlots = display.DiagnosticsAutoOpenExcludedSlots,
             KeepViewerAlwaysOnTop = display.KeepViewerAlwaysOnTop
         }).Normalize();
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", "Display settings changed from web admin");
-        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop });
+        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop });
     }
     finally { configGate.Release(); }
 }).RequireAuthorization();
@@ -543,13 +544,13 @@ app.MapPut("/api/automation/layouts", async (WallLayoutsRequest request, Automat
     await configGate.WaitAsync();
     try
     {
-        AutomationLayouts.Validate(request.Layouts);
+        var automationLayouts = AutomationLayouts.Normalize(request.Layouts);
         var settings = await settingsStore.LoadAsync();
         if (settings.AutomationViewLayouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && automation.UsesLayout(l.Id)))
             return Results.BadRequest(new { error = "A rule uses this layout. Choose another layout in that rule before deleting it." });
-        await settingsStore.SaveAsync(settings with { AutomationViewLayouts = request.Layouts });
+        await settingsStore.SaveAsync(settings with { AutomationViewLayouts = automationLayouts });
         auditLog.Write("AUTOMATION", "Automation layouts saved");
-        return Results.Ok(new { layouts = request.Layouts, activeLayoutId = request.Layouts[0].Id });
+        return Results.Ok(new { layouts = automationLayouts, activeLayoutId = automationLayouts[0].Id });
     }
     catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
     finally { configGate.Release(); }

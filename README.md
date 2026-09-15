@@ -149,15 +149,30 @@ Start with **One large camera** or **Two large cameras**, then move, resize, add
 remove tiles and save. Select that saved layout in a **Focused layout** rule.
 Saving a template does not select it as the standard wall layout.
 
-Each template has one or two focus positions. Their assigned cameras are fallbacks;
-active cameras fill those positions in activation order. Select **Camera that detected
-the person** in the rule to follow different source cameras. A second active camera
-using the same template fills the second position; with only one active camera,
-the other position uses its fallback. Cameras already in the template swap positions
-to avoid duplicates. Custom templates show their assigned cameras, not automatically
-every stream; a triggering camera outside the template replaces the focus fallback.
-Templates support up to 16 tiles on a 6×6 grid and cannot be deleted while a rule
-references them. Clear timing and existing focus priority remain unchanged.
+Each automation template has one or two **Focus tiles**, with no camera assigned
+in the layout editor. The rule chooses the camera, either a fixed target or
+**Camera that detected the person**. Active cameras fill the focus tiles in
+activation order; a second focus tile stays empty until another camera is active.
+If a focused camera also has a regular tile, that regular position stays empty
+while the camera is focused, so it is not displayed twice. Existing saved focus
+positions migrate to unassigned Focus tiles without moving their geometry.
+Custom templates support up to 16 tiles on a 6×6 grid and cannot be deleted while
+a rule references them. Clear timing and focus priority remain unchanged.
+
+Both standard and automation layouts balance row heights and column widths for
+16:9 camera pictures while retaining tile placement. Full video remains visible:
+no cropping or stretching is introduced. Some arrangements still require bars;
+other source aspect ratios remain fitted inside their tiles. The regular 3×3
+layout is unchanged. **Focus + seven** is a 4×4 preset with a 3×3 large tile,
+three cameras down the right and four across the bottom. Its tiles all have 16:9
+proportions on a landscape wall. In automation layouts the large tile is a Focus
+tile; in standard layouts it is an assigned camera.
+
+Under **System → Viewer → Diagnostics automatic opening**, select cameras to
+exclude from automatically opening the fullscreen diagnostics panel. Excluded
+camera warnings, counts and statistics remain available in manual diagnostics;
+issues on other cameras still open the panel normally. Settings persist across
+restarts and include main cameras and overlays.
 
 Overlays scale uniformly when their host camera tile changes size or proportions.
 Their proportions follow the 16:9 overlay-editor canvas, so custom shapes do not

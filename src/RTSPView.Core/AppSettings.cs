@@ -27,6 +27,7 @@ public sealed record AppSettings
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;
     public bool ShowCameraStats { get; init; } = true;
+    public int[] DiagnosticsAutoOpenExcludedSlots { get; init; } = [];
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
     public SnapshotSettings Snapshots { get; init; } = new();
 
@@ -71,7 +72,7 @@ public sealed record AppSettings
         var layouts = SchemaVersion < 15 ? new WallLayout[] { new() } : Layouts;
         var activeId = SchemaVersion < 15 ? "default" : ActiveLayoutId;
         WallLayout.Validate(layouts, activeId);
-        AutomationLayouts.Validate(AutomationViewLayouts);
+        var automationLayouts = AutomationLayouts.Normalize(AutomationViewLayouts);
         var cameraCount = Math.Clamp(CameraCount, 9, MainCameraSlots.Length);
         for (var index = 9; index < normalized.Length; index++)
         {
@@ -83,10 +84,12 @@ public sealed record AppSettings
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
+            DiagnosticsAutoOpenExcludedSlots = (DiagnosticsAutoOpenExcludedSlots ?? []).Where(slot => slot >= 1 && slot <= MaximumStreamSlot).Distinct().Order().ToArray(),
             Snapshots = (Snapshots ?? new()).Normalize(),
             Cameras = normalized,
             CameraCount = cameraCount,
             Layouts = layouts,
+            AutomationViewLayouts = automationLayouts,
             ActiveLayoutId = activeId,
             DoorbellOverlay = overlay,
             GarageOverlay = garageOverlay,
@@ -230,5 +233,6 @@ public sealed record DisplaySettings
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;
     public bool ShowCameraStats { get; init; } = true;
+    public int[] DiagnosticsAutoOpenExcludedSlots { get; init; } = [];
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
 }

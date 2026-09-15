@@ -16,7 +16,7 @@ public sealed record WallLayout
     public int Rows { get; init; } = 3;
     public int Columns { get; init; } = 3;
     public string AspectRatio { get; init; } = "16:9";
-    // Used only by automation layouts: assigned camera slots identify focus positions.
+    // Automation layouts use -1/-2 for unassigned focus tiles; positive IDs are migrated legacy positions.
     public int[] FocusSlots { get; init; } = [];
 
     public (double Width, double Height) Fit(double availableWidth, double availableHeight)
@@ -28,7 +28,7 @@ public sealed record WallLayout
     public IReadOnlyList<WallTile> Tiles { get; init; } = Enumerable.Range(0, 9)
         .Select(i => new WallTile { CameraSlot = i + 1, Row = i / 3, Column = i % 3 }).ToArray();
 
-    public static void Validate(IReadOnlyList<WallLayout>? layouts, string? activeId, int maximumDimension = 4)
+    public static void Validate(IReadOnlyList<WallLayout>? layouts, string? activeId, int maximumDimension = 4, bool allowFocusTiles = false)
     {
         if (layouts is null || layouts.Count is < 1 or > 32)
             throw new InvalidDataException("Keep between 1 and 32 saved layouts.");
@@ -46,7 +46,7 @@ public sealed record WallLayout
             var cameras = new HashSet<int>();
             foreach (var tile in layout.Tiles)
             {
-                if (tile is null || !AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || !cameras.Add(tile.CameraSlot))
+                if (tile is null || !(AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || (allowFocusTiles && tile.CameraSlot is -1 or -2)) || !cameras.Add(tile.CameraSlot))
                     throw new InvalidDataException("Each tile must reference a different main camera.");
                 if (tile.Row < 0 || tile.Column < 0 || tile.RowSpan < 1 || tile.ColumnSpan < 1 ||
                     tile.RowSpan > layout.Rows || tile.ColumnSpan > layout.Columns ||

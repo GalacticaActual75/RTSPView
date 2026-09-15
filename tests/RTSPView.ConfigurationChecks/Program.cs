@@ -8,6 +8,7 @@ try
 {
     StreamActivityChecks.Run();
     OverlayGeometryChecks.Run();
+    WallProportionsChecks.Run();
     AutomationLayoutChecks.Run();
     await SnapshotChecks.RunAsync(root);
     await GitHubUpdateChecks.RunAsync(root);

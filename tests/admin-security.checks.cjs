@@ -31,6 +31,8 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  assert.equal((await request(a,'/api/display','PUT',{...config,diagnosticsAutoOpenExcludedSlots:[1,17]})).status,200);
+  assert.deepEqual((await request(a,'/api/config')).json.diagnosticsAutoOpenExcludedSlots,[1,17],'diagnostics exclusions persist');
   const automationLayouts=(await request(a,'/api/automation/layouts')).json.layouts;
   assert.equal(automationLayouts.length,2,'one and two focus templates provided');
   assert.equal(automationLayouts[1].focusSlots.length,2,'dual focus template has two positions');

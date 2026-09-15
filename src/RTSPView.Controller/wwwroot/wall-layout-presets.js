@@ -9,6 +9,7 @@ const wallLayoutPresets = (() => {
     {id:'3',name:'Nine',rows:3,columns:3,tiles:grid(3,3)},
     {id:'4',name:'Sixteen',rows:4,columns:4,tiles:grid(4,4)},
     {id:'featured',name:'Featured',rows:3,columns:3,tiles:[tile(0,0,2,2),tile(0,2),tile(1,2),tile(2,0),tile(2,1),tile(2,2)]},
+    {id:'focus-eight',name:'Focus + seven',rows:4,columns:4,tiles:[tile(0,0,3,3),tile(0,3),tile(1,3),tile(2,3),...grid(1,4).map(t=>({...t,row:3}))]},
     {id:'sidebar',name:'Sidebar',rows:3,columns:4,tiles:[tile(0,0,3,3),tile(0,3),tile(1,3),tile(2,3)]},
     {id:'cinema',name:'Cinema',rows:3,columns:4,tiles:[tile(0,0,2,4),...grid(1,4).map(t=>({...t,row:2}))]},
     {id:'dual',name:'Dual focus',rows:3,columns:4,tiles:[tile(0,0,2,2),tile(0,2,2,2),...grid(1,4).map(t=>({...t,row:2}))]},
