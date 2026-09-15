@@ -47,7 +47,7 @@ const automationUi = (() => {
     form.querySelector('.automation-rule-list').after(brokerDetails);
     broker.append(form.querySelector('.automation-test'));
     document.querySelector('#page-automation').append(form);
-    const editLayouts=document.createElement('button');editLayouts.type='button';editLayouts.className='secondary';editLayouts.textContent='Edit automation layouts';editLayouts.onclick=()=>wallDesigner.openAutomation();form.querySelector('.rules-intro').after(editLayouts);
+    const editLayouts=document.createElement('button');editLayouts.type='button';editLayouts.className='secondary automation-edit-layouts';editLayouts.textContent='Edit automation layouts';editLayouts.onclick=()=>wallDesigner.openAutomation();form.querySelector('.rules-intro').after(editLayouts);
     const markDirty = e => { if (!e.target.closest('.mqtt-tools')) { dirty = true; form.dataset.dirty = 'true'; } };
     form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);
     form.querySelector('.mqtt-start').onclick = () => diagnostics(true);

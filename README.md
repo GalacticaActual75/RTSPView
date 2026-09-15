@@ -418,3 +418,10 @@ original-stream player stays connected and decodes in the background, ready for
 focus and layout changes. It displays the full frame with aspect-fit sizing and
 uses software decoding; configured overlay sources therefore add background CPU
 and network load even when their original streams are not currently visible.
+
+Enabled, configured main streams connect and keep decoding even when they are not
+assigned to the current layout. Layouts control visibility; disable a stream to
+stop its background playback. Unassigned streams retain native decoding and the
+configured hardware-decoding preference, and still consume network and decoder
+resources. They can provide snapshots and be shown by automation without waiting
+for their first connection.

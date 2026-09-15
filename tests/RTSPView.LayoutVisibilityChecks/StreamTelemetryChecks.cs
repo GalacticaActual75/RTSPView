@@ -10,7 +10,7 @@ using RTSPView.Viewer;
 
 internal static class StreamTelemetryChecks
 {
-    public static async Task Run(bool preserveWholeFrame = false)
+    public static async Task Run(bool preserveWholeFrame = false, bool nativeBackground = false)
     {
         var directory = Path.Combine(Path.GetTempPath(), "RTSPView-stream-checks-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -31,11 +31,14 @@ internal static class StreamTelemetryChecks
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
         try
         {
-            tile.Initialize(engine, new RollingFileLogger(Path.Combine(directory, "logs")), new CameraSettings { Enabled = true }, false, compositedVideo: true, preserveWholeFrame: preserveWholeFrame);
+            tile.Initialize(engine, new RollingFileLogger(Path.Combine(directory, "logs")), new CameraSettings { Enabled = true }, false, compositedVideo: !nativeBackground, preserveWholeFrame: preserveWholeFrame);
+            if (nativeBackground) tile.SetWallVisibility(false);
             window.Show(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             // Substitute a deterministic local fixture only in the test; production remains RTSP-only.
             var player = (MediaPlayer)typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)!;
-            var media = new Media(engine, new Uri(file));
+            var playbackEngine = (LibVLC)typeof(CameraTile).GetField("_libVlc", flags)!.GetValue(tile)!;
+            var media = new Media(playbackEngine, new Uri(file));
+            if (nativeBackground) player.Hwnd = tile.GetNativeVideoHandle();
             media.AddOption(":avcodec-hw=none"); media.AddOption(":no-audio");
             typeof(CameraTile).GetField("_media", flags)!.SetValue(tile, media);
             if (!player.Play(media)) throw new Exception("Synthetic video did not start");
@@ -51,6 +54,25 @@ internal static class StreamTelemetryChecks
                     if (!await tile.RefreshSnapshotAsync() || tile.GetTelemetry().SnapshotCapturedAt is null)
                         throw new Exception("Snapshot capture did not publish its completion timestamp");
                     Console.WriteLine("PASS decoded fixture snapshot capture and completion telemetry");
+                    if (nativeBackground)
+                    {
+                        var before = tile.GetTelemetry().LastFrameAt;
+                        await Task.Delay(500); tile.Tick();
+                        if (tile.IsVisible || ((UIElement)tile.FindName("OverlayRoot")).IsVisible ||
+                            !player.IsPlaying || tile.GetTelemetry().LastFrameAt <= before)
+                            throw new Exception("Unassigned native camera failed to deliver hidden frames");
+                        var handle = player.Hwnd;
+                        tile.SetWallVisibility(true); window.UpdateLayout();
+                        await Task.Delay(200);
+                        if (player.Hwnd != handle || !ReferenceEquals(media, player.Media) && player.Media?.Mrl != media.Mrl || !player.IsPlaying)
+                            throw new Exception("Assigning native camera interrupted playback");
+                        tile.SetWallVisibility(false);
+                        tile.Apply(new CameraSettings { Enabled = false });
+                        for (var wait = 0; wait < 30 && player.IsPlaying; wait++) await Task.Delay(100);
+                        if (player.IsPlaying) throw new Exception("Disabled background camera kept playing");
+                        Console.WriteLine("PASS unassigned native camera decodes and snapshots, reveal retains playback, disable stops it");
+                        return;
+                    }
                     var statusField = typeof(CameraTile).GetField("_status", flags)!;
                     var status = (CameraRuntimeStatus)statusField.GetValue(tile)!;
                     statusField.SetValue(tile, status with { State = CameraConnectionState.Live, LastError = "Previous watchdog failure", ReconnectCount = 2 });

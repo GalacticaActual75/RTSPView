@@ -159,3 +159,6 @@ label{line-height:1.5}a{color:#8ec2ff}.secondary[href]{display:inline-flex;align
 .system-tabs{flex-wrap:wrap;gap:6px}
 .system-tabs>button{flex:1 1 130px;min-width:0;white-space:normal}
 .admin-page summary:focus-visible{outline:2px solid #63abff;outline-offset:3px}
+
+/* Keep rule actions separated even when the rules list is empty. */
+.automation-edit-layouts { margin-bottom: 16px; }

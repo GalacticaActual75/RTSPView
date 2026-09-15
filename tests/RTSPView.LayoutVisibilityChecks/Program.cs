@@ -33,6 +33,7 @@ internal static class Program
                 NativeBackgroundChecks.Run(tiles[0]);
                 await NativeStartupChecks.Run();
                 await FocusChecks.Run(wall, tiles);
+                await StreamTelemetryChecks.Run(nativeBackground: true);
                 await StreamTelemetryChecks.Run();
                 await StreamTelemetryChecks.Run(preserveWholeFrame: true);
                 WallDiagnosticsChecks.Run();

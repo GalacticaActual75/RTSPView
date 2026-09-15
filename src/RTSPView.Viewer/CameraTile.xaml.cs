@@ -146,7 +146,10 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     public void SetWallVisibility(bool visible)
     {
         if (!visible) OverlayRoot.Visibility = Visibility.Collapsed;
-        Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        // Hidden keeps the native video host measured and attached to the wall,
+        // without showing video or diagnostics. Collapsed cannot create an HWND
+        // for a camera that has never been assigned to a layout.
+        Visibility = visible ? Visibility.Visible : (_useCompositedOutput ? Visibility.Collapsed : Visibility.Hidden);
         SynchronizeStatusWindowVisibility();
     }
 
@@ -387,7 +390,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void ResumeNativeStart()
     {
-        if (!_pendingNativeStart || _disposed || !IsVisible || !VideoView.IsLoaded) return;
+        if (!_pendingNativeStart || _disposed || !VideoView.IsLoaded) return;
         var recreate = _pendingNativeRecreate;
         StartPlayer(recreate);
     }
@@ -649,7 +652,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         // can then leave MediaPlayer.Hwnd at zero even after the host loads.
         // Never start native playback until a real destination exists.
         var playbackHandle = _useCompositedOutput ? IntPtr.Zero : GetNativeVideoHandle();
-        if (!_useCompositedOutput && (!IsVisible || !VideoView.IsLoaded || playbackHandle == IntPtr.Zero))
+        if (!_useCompositedOutput && (!VideoView.IsLoaded || playbackHandle == IntPtr.Zero))
         {
             _pendingNativeStart = true;
             _pendingNativeRecreate |= recreatePlayer;

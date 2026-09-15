@@ -49,7 +49,7 @@ internal static class FocusChecks
             CameraWallPresentation.Apply(wall, [..tiles,raw], new WallLayout { Tiles=[new(){CameraSlot=33}] }, null);
             if(raw.Visibility!=Visibility.Visible || tiles.Any(t=>t.Visibility==Visibility.Visible))throw new Exception("Raw overlay source did not occupy its own normal layout tile");
             CameraWallPresentation.Apply(wall, [..tiles,raw], new WallLayout(), null);
-            if(raw.Visibility!=Visibility.Collapsed)throw new Exception("Unassigned raw source remained visible");
+            if(raw.IsVisible)throw new Exception("Unassigned raw source remained visible");
             wall.Children.Remove(raw);
         }
         var clicks = 0; tiles[0].FocusRequested += (_,_)=>clicks++;
