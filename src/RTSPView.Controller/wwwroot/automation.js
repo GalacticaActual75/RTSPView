@@ -271,12 +271,13 @@ const automationUi = (() => {
     let generation = 0;
     function show() {
       generation++; preview.hidden = !select.value; image.hidden = true; caption.textContent = 'Loading snapshot…';
-      if (!select.value) { image.removeAttribute('src'); return; }
+      if (!select.value) { image.removeAttribute('src'); delete image.dataset.snapshotSlot; return; }
       const name = inventory.find(c => c.slot === Number(select.value))?.name || 'Selected camera';
       image.alt = name + ' latest snapshot'; refresh.setAttribute('aria-label', 'Refresh snapshot for ' + name);
-      image.onload = () => { image.hidden = false; caption.textContent = 'Latest snapshot · not live video'; };
+      image._ageLabel = caption;
+      image.onload = () => { image.hidden = false; };
       image.onerror = () => { image.hidden = true; caption.textContent = 'Snapshot unavailable'; };
-      image.src = `/api/cameras/${Number(select.value)}/thumbnail?v=${Date.now()}`;
+      dashboardUX.snapshot(image,Number(select.value));
     }
     refresh.onclick = async () => {
       const current = generation, slot = Number(select.value); refresh.disabled = true;

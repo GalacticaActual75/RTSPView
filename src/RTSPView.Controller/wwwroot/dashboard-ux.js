@@ -8,17 +8,49 @@ const dashboardUX = (() => {
   setInterval(()=>{for(const [image,url] of resources)if(!image.isConnected&&!image._ageLabel?.isConnected){URL.revokeObjectURL(url);resources.delete(image);}for(const image of resources.keys())caption(image);},10000);
   function age(image) {
     const date=stamp.get(image), seconds=date?Math.max(0,Math.floor((Date.now()-date)/1000)):null;
-    return failed.has(image)?'Snapshot refresh failed · '+(seconds===null?'age unknown':Math.floor(seconds/60)+' minutes old'):seconds===null?'Snapshot age unknown':`Snapshot captured ${seconds<60?seconds+' seconds':Math.floor(seconds/60)+' minutes'} ago${seconds>=300?' · Stale':''}`;
+    if(failed.has(image))return resources.get(image)?'Preview unavailable · showing last image':'Preview unavailable';
+    return seconds===null?'Preview · capture time unknown':`Preview · updated ${seconds<60?seconds+'s':Math.floor(seconds/60)+'m'} ago`;
   }
   function caption(image) {
-    if(image._ageLabel){image._ageLabel.textContent=(image._agePrefix||'')+age(image);return;}
-    if(!image.parentElement)return;
-    let label=image.nextElementSibling;
-    if(!label?.classList.contains('snapshot-age')) {label=document.createElement('span');label.className='snapshot-age';image.after(label);}
-    label.textContent=age(image);label.title=stamp.get(image)?new Date(stamp.get(image)).toLocaleString():'No capture timestamp available';label.classList.toggle('stale',!stamp.get(image)||Date.now()-stamp.get(image)>=300000);
+    let label=image._ageLabel||image.nextElementSibling;
+    if(!image._ageLabel&&!label?.classList.contains('snapshot-age')) {
+      if(!image.parentElement)return;
+      label=document.createElement('span');label.className='snapshot-age';image.after(label);
+    }
+    label.textContent=(image._agePrefix||'')+age(image);
+    label.title=stamp.get(image)?'Snapshot captured '+new Date(stamp.get(image)).toLocaleString()+' · not live video':'Snapshot preview · not live video';
+    label.classList.remove('stale');
   }
+  const attempted=new Map();let capturing=false;
+  function visible(image) {
+    const element=image._ageLabel||image;
+    if(!element.isConnected||!element.getClientRects().length)return false;
+    const rect=element.getBoundingClientRect();
+    return rect.bottom>0&&rect.right>0&&rect.top<innerHeight&&rect.left<innerWidth;
+  }
+  async function refreshVisible() {
+    if(document.hidden||capturing)return;
+    const groups=new Map();
+    for(const image of resources.keys())if(visible(image)) {
+      const slot=Number(image.dataset.snapshotSlot);
+      if(slot>0) {if(!groups.has(slot))groups.set(slot,[]);groups.get(slot).push(image);}
+    }
+    const next=[...groups].filter(([slot])=>Date.now()-(attempted.get(slot)||0)>=15000)
+      .sort(([a],[b])=>(attempted.get(a)||0)-(attempted.get(b)||0))[0];
+    if(!next)return;
+    const [slot,images]=next;capturing=true;attempted.set(slot,Date.now());
+    try {
+      await api(`/api/cameras/${slot}/thumbnail/refresh`,{method:'POST'});
+      if(!document.hidden)await Promise.all(images.filter(image=>visible(image)&&Number(image.dataset.snapshotSlot)===slot).map(image=>snapshot(image,slot)));
+    } catch {
+      for(const image of images)if(Number(image.dataset.snapshotSlot)===slot){failed.add(image);caption(image);}
+    } finally {capturing=false;}
+  }
+  // One capture at a time, staggered across visible streams; no background-tab work.
+  setInterval(refreshVisible,750);
   async function snapshot(image,slot) {
     if(!slot)return;
+    if(!resources.has(image))resources.set(image,null);
     image.dataset.snapshotSlot=String(slot);const request={};image._snapshotRequest=request;
     try {
       const response=await fetch(`/api/cameras/${slot}/thumbnail?v=${Date.now()}`,{cache:'no-store'});
@@ -27,7 +59,7 @@ const dashboardUX = (() => {
       const url=URL.createObjectURL(blob),old=image.dataset.blobUrl;
       const date=Date.parse(response.headers.get('Last-Modified'));stamp.set(image,Number.isFinite(date)?date:null);
       image.src=url;image.dataset.blobUrl=url;resources.set(image,url);if(old)URL.revokeObjectURL(old);failed.delete(image);caption(image);
-    } catch {if(image._snapshotRequest!==request)return;failed.add(image);caption(image);const label=image._ageLabel||image.nextElementSibling;if(label)label.textContent=image.src?age(image):'Snapshot unavailable';}
+    } catch {if(image._snapshotRequest!==request)return;failed.add(image);caption(image);}
   }
   function sync() {
     const active=wallDesigner.active();
@@ -47,8 +79,7 @@ const dashboardUX = (() => {
     const enabled=cameraInventory.filter(c=>c.enabled&&(!c.overlaySourceSlot||wallDesigner.active()?.tiles.some(t=>t.cameraSlot===c.slot))),connected=enabled.filter(c=>t.viewerConnected&&t.viewer?.cameras.some(v=>v.slot===c.slot&&v.state==='Live')).length;
     const active=wallDesigner.active(),overlays=[...document.querySelectorAll('.camera-card')].filter(f=>f.dataset.kind!=='camera'&&f.dataset.appliedEnabled==='true'&&active?.tiles.some(tile=>tile.cameraSlot===Number(f.dataset.appliedHost))&&t.viewerConnected&&t.viewer?.cameras.some(c=>c.slot===Number(f.dataset.slot)&&c.state==='Live'&&!c.frameWarning)).length;
     const problems=enabled.filter(c=>!t.viewerConnected||!t.viewer?.cameras.some(v=>v.slot===c.slot&&v.state==='Live'&&!v.frameWarning)).length;
-    const stale=[...document.querySelectorAll('#cameras .feed-thumbnail')].filter(image=>!stamp.get(image)||Date.now()-stamp.get(image)>=300000).length;
-    summary.textContent=`${connected}/${enabled.length} streams connected · Active layout: ${active?.name||'None'} · ${overlays} connected always-visible overlays · ${problems} streams need attention · ${stale} stale or undated snapshots`;
+    summary.textContent=`${connected}/${enabled.length} streams connected · Active layout: ${active?.name||'None'} · ${overlays} connected always-visible overlays · ${problems} streams need attention`;
     for(const image of document.querySelectorAll('img[data-blob-url]'))caption(image);
   }
   function preview(form) {
@@ -58,7 +89,7 @@ const dashboardUX = (() => {
     const image=document.createElement('img');image.alt=title.textContent;image.src=form.querySelector('.feed-thumbnail').src;stamp.set(image,stamp.get(form.querySelector('.feed-thumbnail')));
     const refresh=document.createElement('button');refresh.textContent='Refresh snapshot';refresh.onclick=async()=>{refresh.disabled=true;refresh.textContent='Capturing snapshot…';try{await api(`/api/cameras/${form.dataset.slot}/thumbnail/refresh`,{method:'POST'});await snapshot(image,form.dataset.slot);await snapshot(form.querySelector('.feed-thumbnail'),form.dataset.slot);}catch(error){status.textContent=error.message;}finally{refresh.disabled=false;refresh.textContent='Refresh snapshot';}};
     const close=document.createElement('button');close.className='secondary';close.textContent='Close';close.onclick=()=>dialog.close();
-    dialog.append(title,status,image,refresh,close);document.body.append(dialog);caption(image);dialog.addEventListener('close',()=>{if(image.dataset.blobUrl)URL.revokeObjectURL(image.dataset.blobUrl);dialog.remove();});dialog.showModal();close.focus();
+    dialog.append(title,status,image,refresh,close);document.body.append(dialog);caption(image);dialog.addEventListener('close',()=>{if(image.dataset.blobUrl)URL.revokeObjectURL(image.dataset.blobUrl);dialog.remove();});dialog.showModal();snapshot(image,form.dataset.slot);close.focus();
   }
   function trackDisplay() {
     const form=document.querySelector('#displayForm');let baseline=new FormData(form);const state=document.querySelector('#displayState');

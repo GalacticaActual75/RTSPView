@@ -425,3 +425,8 @@ stop its background playback. Unassigned streams retain native decoding and the
 configured hardware-decoding preference, and still consume network and decoder
 resources. They can provide snapshots and be shown by automation without waiting
 for their first connection.
+
+Browser previews automatically request fresh snapshots about every 15 seconds
+while visible in the active tab. Captures run one at a time, so large grids or
+slow streams can take longer. Preview age is separate from stream health; failed
+refreshes retain the previous image. These previews are not live video.

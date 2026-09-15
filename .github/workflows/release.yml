@@ -56,6 +56,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Maintenance checks failed." }
           node tests/lan-firewall.checks.cjs
           node tests/branding.checks.cjs
+          node tests/preview-refresh.checks.cjs
+          if ($LASTEXITCODE -ne 0) { throw "Preview refresh checks failed." }
 
       - name: Check native tile backgrounds and layout visibility
         run: |
