@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace RTSPView.Core;
 
-public sealed record AutomationSource(int CameraSlot, string Topic);
+public sealed record AutomationSource(int CameraSlot, string Topic, string RequiredZone = "");
 public enum AutomationAction { Overlay, FullScreen, FocusedLayout }
 public sealed record AutomationRule
 {
@@ -46,6 +46,7 @@ public sealed record AutomationSettings
             if (rule.Sources is null || rule.Sources.Length is < 1 or > 32 || rule.Sources.Any(s => s is null) || rule.Sources.Select(s => s.CameraSlot).Distinct().Count() != rule.Sources.Length) throw new InvalidDataException("Select one or more distinct source cameras.");
             foreach (var source in rule.Sources)
             {
+                if (source.RequiredZone is null || source.RequiredZone.Length > 100 || source.RequiredZone.Any(char.IsControl)) throw new InvalidDataException("Zone names must be at most 100 characters without control characters.");
                 if (string.IsNullOrWhiteSpace(source.Topic) || source.Topic.Length > 512 || source.Topic.IndexOfAny(['#', '+', '\0']) >= 0) throw new InvalidDataException("Enter an exact MQTT event topic without wildcards.");
                 if (!cameras.Cameras.Concat(cameras.AllOverlays().Select(o => o.Camera)).Any(c => c.Slot == source.CameraSlot && !string.IsNullOrWhiteSpace(c.RtspUrl))) throw new InvalidDataException("Select a configured source camera.");
             }
@@ -104,6 +105,19 @@ public sealed class PersonOverlayEngine
     private readonly Dictionary<string, AutomationOverlayLease> _leases = new();
     public IReadOnlyDictionary<string, AutomationOverlayLease> Leases => _leases;
     public void Clear() { _watermarks.Clear(); _leases.Clear(); }
+    // Local rule tests share action arbitration and expiry, but never alter MQTT watermarks.
+    public void Trigger(AutomationRule rule, int sourceSlot, DateTimeOffset now, DateTimeOffset? eventTime = null)
+    {
+        if (!rule.Sources.Any(s => s.CameraSlot == sourceSlot)) throw new InvalidDataException("Select a source camera from this rule.");
+        Expire(now);
+        var target = rule.Action == AutomationAction.Overlay ? rule.OverlaySlot : rule.CameraSlot != 0 ? rule.CameraSlot : sourceSlot;
+        var key = rule.Action != AutomationAction.Overlay && rule.CameraSlot == 0 ? rule.Id + ":" + target : rule.Id;
+        _leases.TryGetValue(key, out var existing);
+        var sourceTime = eventTime ?? now;
+        var expiry = (sourceTime > now ? now : sourceTime).AddMinutes(rule.ClearMinutes);
+        if (existing is not null && existing.ExpiresAt > expiry) expiry = existing.ExpiresAt;
+        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id);
+    }
     public void Expire(DateTimeOffset now)
     {
         foreach (var id in _leases.Where(p => p.Value.ExpiresAt <= now).Select(p => p.Key).ToArray()) _leases.Remove(id);
@@ -126,16 +140,22 @@ public sealed class PersonOverlayEngine
             _watermarks[topic] = stamp;
             if (!root.TryGetProperty("detections", out var detections) || detections.ValueKind != JsonValueKind.Array ||
                 !detections.EnumerateArray().Any(d => d.ValueKind == JsonValueKind.Object && d.TryGetProperty("className", out var c) && c.ValueKind == JsonValueKind.String && c.GetString() == "person")) return "No person";
+            var matched = false;
             foreach (var rule in rules)
             {
-                var target = rule.Action == AutomationAction.Overlay ? rule.OverlaySlot : rule.CameraSlot != 0 ? rule.CameraSlot : rule.Sources.First(s => s.Topic == topic).CameraSlot;
-                var key = rule.Action != AutomationAction.Overlay && rule.CameraSlot == 0 ? rule.Id + ":" + target : rule.Id;
-                var id = _leases.TryGetValue(key, out var existing) ? existing.Id : Guid.NewGuid().ToString("N");
-                var expiry = (sourceTime > now ? now : sourceTime).AddMinutes(rule.ClearMinutes);
-                if (existing is not null && existing.ExpiresAt > expiry) expiry = existing.ExpiresAt;
-                _leases[key] = new(id, target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id);
+                foreach (var source in rule.Sources.Where(s => s.Topic == topic))
+                {
+                    if (!string.IsNullOrEmpty(source.RequiredZone) && !detections.EnumerateArray().Any(d =>
+                        d.ValueKind == JsonValueKind.Object && d.TryGetProperty("className", out var kind) &&
+                        kind.ValueKind == JsonValueKind.String && kind.GetString() == "person" &&
+                        d.TryGetProperty("zones", out var zones) && zones.ValueKind == JsonValueKind.Array &&
+                        zones.EnumerateArray().Any(z => z.ValueKind == JsonValueKind.String && z.GetString() == source.RequiredZone))) continue;
+                    Trigger(rule, source.CameraSlot, now, sourceTime);
+                    matched = true;
+                    break;
+                }
             }
-            return "Person detected";
+            return matched ? "Person detected" : "Person outside required zone";
         }
         catch (Exception e) when (e is JsonException or InvalidOperationException or ArgumentOutOfRangeException) { return "Invalid event"; }
     }

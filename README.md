@@ -140,6 +140,28 @@ the Viewer’s window/fullscreen setting is preserved. **Focused layout** gives 
 selected main camera a larger tile and includes every enabled, configured main
 stream (up to 16), using the saved layout’s landscape or portrait orientation.
 Both restore the saved layout when their timers expire, without editing it.
+The focused camera occupies a 2×2 tile at the upper left; remaining cameras use
+single tiles. This arrangement is generated automatically. Tile sizes and positions
+are not currently configurable through the layout designer.
+
+Each saved rule has a **Test** button, also available while the rule is collapsed.
+Each source also has an optional **Required zone** field. Enter the exact,
+case-sensitive Scrypted object-detection zone name (for example `MQTT`), or leave
+it blank to accept people anywhere. A person must carry that name in its own
+`zones` array; missing zones, other objects in the zone, and people outside it do
+not trigger or renew the rule. Scrypted can continue recording the whole frame.
+Zone filtering happens in RTSPView; the camera's MQTT topic still carries all
+published detections. Other sources in the same rule can still trigger it using
+their own filters. Test simulates a matching detection and does not verify actual
+zone metadata from Scrypted; verify that with a real walk-by and Raw MQTT details.
+
+For multiple sources, choose the source camera beside Test. Apply edits first and
+enable automation and the rule. Test simulates one person detection locally in the
+Controller, without publishing to MQTT or requiring a broker connection. It uses
+the saved action, normal priority, and configured clear delay. The Viewer must be
+running. Existing detections can keep an action visible longer, and higher-priority
+actions or manual dismissal can prevent it appearing. This tests the viewer action,
+not Scrypted detection or MQTT delivery.
 
 Choose **Camera that detected the person** to follow sources automatically. Each
 source then has its own clear timer; one camera’s detections do not keep another

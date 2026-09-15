@@ -338,6 +338,18 @@ app.MapPost("/api/automation/test", async (AutomationRequest request, Automation
     try { return Results.Ok(await automation.TestAsync(request, token)); }
     catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
 }).RequireAuthorization();
+app.MapPost("/api/automation/rules/{id}/test", async (string id, AutomationRuleTestRequest request, AutomationService automation, CancellationToken token) =>
+{
+    try
+    {
+        var result = await automation.TestRuleAsync(id, request.SourceSlot, token);
+        auditLog.Write("AUTOMATION", "Local rule test requested");
+        return Results.Ok(new { success = result.Success, message = result.Success
+            ? "Test sent to Viewer. Normal priority and clear delay apply; active detections may extend it." : result.Message });
+    }
+    catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
+    catch (OperationCanceledException) { return Results.BadRequest(new { error = "Test timed out. Check Controller and Viewer status." }); }
+}).RequireAuthorization();
 app.MapGet("/api/config/export", async (HttpContext context) =>
 {
     context.Response.Headers.CacheControl = "no-store";

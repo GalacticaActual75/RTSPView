@@ -82,6 +82,34 @@ Check(focusEngine.Leases.Count == 1 && focusEngine.Leases[rule.Id].Slot == 3 && 
 Check(JsonSerializer.Deserialize<AutomationRule>("{\"OverlaySlot\":10}")!.Action == AutomationAction.Overlay, "Existing rules must remain overlay actions");
 
 var directory = Path.Combine(Path.GetTempPath(), "rtspview-automation-checks-" + Guid.NewGuid().ToString("N"));
+var zonedRule = rule with { Sources = [new(1, rule.Sources[0].Topic, "MQTT"), rule.Sources[1]] };
+var zonedSettings = settings with { Rules = [zonedRule] };
+var zoneEngine = new PersonOverlayEngine();
+string ZoneEvent(int seconds, params object[] detections) => zoneEngine.Accept(zonedSettings, rule.Sources[0].Topic,
+    JsonSerializer.SerializeToUtf8Bytes(new { timestamp = now.AddSeconds(seconds).ToUnixTimeMilliseconds(), detections }), false, now.AddSeconds(seconds), now);
+Check(ZoneEvent(0, new { className = "person", zones = new[] { "Full" } }) == "Person outside required zone", "Outside person triggered zone rule");
+Check(ZoneEvent(1, new { className = "person" }, new { className = "vehicle", zones = new[] { "MQTT" } }) == "Person outside required zone", "Zone on a different object matched a person");
+Check(ZoneEvent(2, new { className = "person", zones = "MQTT" }) == "Person outside required zone", "Malformed zone metadata accepted");
+Check(ZoneEvent(3, new { className = "person", zones = new[] { "mqtt" } }) == "Person outside required zone", "Zone match ignored case");
+Check(zoneEngine.Leases.Count == 0, "Rejected zones created leases");
+Check(ZoneEvent(4, new { className = "person", zones = new[] { "Full", "MQTT" } }) == "Person detected", "Person in overlapping MQTT zone rejected");
+var zoneExpiry = zoneEngine.Leases.Values.Single().ExpiresAt;
+ZoneEvent(5, new { className = "person", zones = Array.Empty<string>() });
+Check(zoneEngine.Leases.Values.Single().ExpiresAt == zoneExpiry, "Outside person renewed zone timer");
+Check(zoneEngine.Accept(zonedSettings, rule.Sources[1].Topic, Event(now.AddSeconds(6)), false, now.AddSeconds(6), now) == "Person detected", "Unfiltered second source stopped working");
+zoneEngine.Expire(now.AddSeconds(13)); Check(zoneEngine.Leases.Count == 0, "Zone rule did not expire");
+Check(JsonSerializer.Deserialize<AutomationSource>("{\"CameraSlot\":1,\"Topic\":\"old\"}")!.RequiredZone == "", "Legacy sources gained a zone restriction");
+foreach (var action in Enum.GetValues<AutomationAction>())
+{
+    var local = new PersonOverlayEngine();
+    var testedRule = rule with { Action = action, CameraSlot = 0 };
+    local.Trigger(testedRule, 2, now);
+    Check(local.Leases.Values.Single().Slot == (action == AutomationAction.Overlay ? 10 : 2), "Local test selected wrong target");
+    Check(local.Leases.Values.Single().Action == action, "Local test selected wrong action");
+    Check(local.Accept(settings with { Rules = [testedRule] }, rule.Sources[1].Topic, Event(now), false, now, now) == "Person detected", "Local test polluted real event watermark");
+    local.Expire(now.AddSeconds(7));
+    Check(local.Leases.Count == 0, "Local test did not expire");
+}
 Directory.CreateDirectory(directory);
 var cameras = new AppSettings();
 cameras = cameras with { Cameras = cameras.Cameras.Select(c => c with { RtspUrl = "rtsp://example.test/" + c.Slot }).ToArray(),
@@ -134,6 +162,8 @@ Check(!JsonSerializer.Serialize(service.Configuration).Contains("test-secret"), 
 var test = JsonSerializer.Serialize(await service.TestAsync(new(connection, null), CancellationToken.None));
 Check(test.Contains("\"success\":true"), "Draft connection test failed");
 Check(commands.IsEmpty, "Test connection executed a viewer command");
+try { await service.TestRuleAsync("missing", 1, CancellationToken.None); throw new Exception("Unknown rule test accepted"); } catch (InvalidDataException) { }
+try { await service.TestRuleAsync(rule.Id, 99, CancellationToken.None); throw new Exception("Unknown test source accepted"); } catch (InvalidDataException) { }
 await broker.InjectApplicationMessage(new InjectedMqttApplicationMessage(new MqttApplicationMessageBuilder()
     .WithTopic(rule.Sources[0].Topic).WithPayload(Event(DateTimeOffset.UtcNow)).WithRetainFlag().Build()));
 await service.StartAsync(CancellationToken.None);
@@ -148,10 +178,24 @@ await Publish(rule.Sources[0].Topic, DateTimeOffset.UtcNow);
 await Until(() => commands.Any(c => c.Automation?.Leases.Length == 1), "Real MQTT did not produce a viewer lease");
 await Until(() => RuleStatus().GetProperty("lastTriggered").ValueKind == JsonValueKind.String, "Successful viewer command did not record the rule trigger time");
 var initial = commands.Last(c => c.Automation?.Leases.Length == 1).Automation!.Leases[0];
+var otherRule = rule with { Id = Guid.NewGuid().ToString("N"), Action = AutomationAction.FocusedLayout, CameraSlot = 0 };
+await service.SaveAsync(new(connection with { Rules = [rule, otherRule] }, null), CancellationToken.None);
+await Until(() => service.Status.Connection == "Connected" && service.Status.Rules.Length == 2, "Test rules did not load");
+var localResult = await service.TestRuleAsync(otherRule.Id, 2, CancellationToken.None);
+Check(localResult.Success, "Local rule test was not acknowledged by Viewer");
+Check(commands.Last().Automation!.Leases is [{ Action: AutomationAction.FocusedLayout, Slot: 2 }], "Local test activated another rule sharing its MQTT topic");
+await service.SaveAsync(new(connection, null), CancellationToken.None);
+await Until(() => service.Status.Connection == "Connected" && service.Status.Rules.Length == 1, "Original rules did not reload");
+await Publish(rule.Sources[0].Topic, DateTimeOffset.UtcNow);
+await Until(() => commands.Last().Automation?.Leases.Length == 1, "Original rule did not restart");
+initial = commands.Last().Automation!.Leases[0];
 await Publish(rule.Sources[1].Topic, DateTimeOffset.UtcNow.AddMilliseconds(50));
 await Until(() => commands.Any(c => c.Automation?.Leases.Any(l => l.ExpiresAt > initial.ExpiresAt) == true), "Second source did not renew live lease");
 await broker.StopAsync();
 await Until(() => commands.Last().Automation?.Leases.Length == 0, "Broker outage did not expire the existing lease");
+Check((await service.TestRuleAsync(rule.Id, 1, CancellationToken.None)).Success, "Rule test required a live broker");
+Check(commands.Last().Automation?.Leases.Single().Slot == 10, "Offline rule test did not reach Viewer");
+await Until(() => commands.Last().Automation?.Leases.Length == 0, "Offline rule test did not clear");
 await broker.StartAsync();
 await Until(() => service.Status.Connection == "Connected", "Service did not reconnect");
 var afterReconnect = commands.Count;
@@ -161,6 +205,7 @@ await Publish(rule.Sources[1].Topic, DateTimeOffset.UtcNow);
 await Until(() => commands.Last().Automation?.Leases.Length == 1, "Fresh post-reconnect event failed");
 await service.SaveAsync(new(connection with { Enabled = false }, null), CancellationToken.None);
 await Until(() => service.Status.Connection == "Disabled" && commands.Last().Automation?.Leases.Length == 0, "Disable did not clear viewer leases");
+try { await service.TestRuleAsync(rule.Id, 1, CancellationToken.None); throw new Exception("Disabled automation test accepted"); } catch (InvalidDataException) { }
 var countBeforeDiscovery = commands.Count;
 await service.SaveAsync(new(connection with { Rules = [focusRule] }, null), CancellationToken.None);
 await Until(() => service.Status.Connection == "Connected", "Focus rules did not connect");

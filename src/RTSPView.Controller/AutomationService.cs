@@ -11,6 +11,8 @@ namespace RTSPView.Controller;
 
 public sealed record AutomationRequest(AutomationSettings Settings, string? Password, bool ClearPassword = false);
 public sealed record MqttDiagnosticsRequest(AutomationRequest Connection, string Prefix = "scrypted");
+public sealed record AutomationRuleTestRequest(int SourceSlot);
+internal sealed record PendingRuleTest(string RuleId, int SourceSlot, int Revision, CancellationToken Token, TaskCompletionSource<ViewerCommandResult> Completion);
 internal sealed record StoredAutomation(AutomationSettings Settings, string ProtectedPassword);
 public sealed record AutomationStatus(string Connection, string LastResult, DateTimeOffset? LastMessage,
     DateTimeOffset? LastPerson, object[] Rules);
@@ -24,6 +26,7 @@ public sealed class AutomationService : BackgroundService
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private StoredAutomation _stored = new(new(), "");
     private int _revision;
+    private readonly Channel<PendingRuleTest> _ruleTests = Channel.CreateBounded<PendingRuleTest>(32);
     private AutomationStatus _status = new("Disabled", "Waiting", null, null, []);
     public AutomationStatus Status => _status;
     public MqttDiagnostics Diagnostics { get; } = new();
@@ -65,6 +68,20 @@ public sealed class AutomationService : BackgroundService
             Interlocked.Increment(ref _revision);
         }
         finally { _saveGate.Release(); }
+    }
+
+    public async Task<ViewerCommandResult> TestRuleAsync(string ruleId, int sourceSlot, CancellationToken token)
+    {
+        var settings = _stored.Settings;
+        var rule = settings.Rules.SingleOrDefault(r => r.Id == ruleId);
+        if (!settings.Enabled || rule?.Enabled != true) throw new InvalidDataException("Enable automation and save an enabled rule before testing.");
+        if (!rule.Sources.Any(s => s.CameraSlot == sourceSlot)) throw new InvalidDataException("Select a source camera from this saved rule.");
+        var completion = new TaskCompletionSource<ViewerCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        if (!_ruleTests.Writer.TryWrite(new(ruleId, sourceSlot, _revision, timeout.Token, completion)))
+            throw new InvalidDataException("Another test is pending. Try again shortly.");
+        return await completion.Task.WaitAsync(timeout.Token);
     }
 
     private static MqttClientOptions Options(AutomationSettings settings, string password, bool test = false)
@@ -154,6 +171,25 @@ public sealed class AutomationService : BackgroundService
                     }
                     var settings = _stored.Settings;
                     settings.Validate(cameras);
+                    while (_ruleTests.Reader.TryRead(out var test))
+                    {
+                        if (test.Token.IsCancellationRequested) continue;
+                        var rule = settings.Rules.SingleOrDefault(r => r.Id == test.RuleId);
+                        if (test.Revision != revision || !settings.Enabled || rule?.Enabled != true)
+                        {
+                            test.Completion.TrySetException(new InvalidDataException("Settings changed. Apply changes and test again."));
+                            continue;
+                        }
+                        try
+                        {
+                            engine.Trigger(rule, test.SourceSlot, DateTimeOffset.UtcNow);
+                            var result = await Send(engine, hash, stoppingToken);
+                            sent = JsonSerializer.Serialize(engine.Leases.Values);
+                            if (result.Success) lastTriggered[rule.Id] = DateTimeOffset.UtcNow;
+                            test.Completion.TrySetResult(result);
+                        }
+                        catch (Exception e) { test.Completion.TrySetException(e); }
+                    }
                     if (!settings.Enabled)
                     {
                         _status = _status with { Connection = "Disabled", LastResult = "Automation disabled", Rules = [] };

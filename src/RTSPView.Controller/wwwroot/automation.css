@@ -70,6 +70,10 @@
 .target-help { font-size: 13px; color: var(--muted); margin: 8px 0; }
 .rule-actions { margin-top: 24px; justify-content: flex-end; }
 .rule-remove { color: #f0a6a6; }
+.rule-test-controls { margin-top: 12px; flex-wrap: wrap; }
+.rule-test-controls select { width: auto; max-width: 100%; min-width: 180px; }
+.rule-test-message:empty { display: none; }
+.rule-test-message { font-size: 13px; color: var(--muted); }
 .source-connection { min-width: 0; margin-top: 24px; font-size: 13px; }
 .source-connection > summary { cursor: pointer; color: var(--muted); }
 .source-connection[open] > summary { margin-bottom: 12px; }

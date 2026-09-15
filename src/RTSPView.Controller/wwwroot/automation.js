@@ -72,6 +72,10 @@ const automationUi = (() => {
     const select = optionSelect(inventory, source.cameraSlot, 'Source camera'); select.className = 'source-camera'; cameraLabel.append(select);
     const cameraColumn = document.createElement('div'); cameraColumn.append(cameraLabel);
     addCameraPreview(select, cameraColumn);
+    const zoneLabel = document.createElement('label'); zoneLabel.textContent = 'Required zone (optional)';
+    const zone = document.createElement('input'); zone.className = 'source-zone'; zone.maxLength = 100; zone.placeholder = 'Any zone'; zone.value = source.requiredZone || ''; zone.spellcheck = false;
+    const zoneHelp = document.createElement('small'); zoneHelp.textContent = 'Exact Scrypted object zone name, e.g. MQTT. Blank accepts people anywhere.';
+    zoneLabel.append(zone, zoneHelp); cameraColumn.append(zoneLabel);
     const topicLabel = document.createElement('div'); topicLabel.className = 'source-event';
     const chooserLabel = document.createElement('label'); chooserLabel.textContent = 'Detected camera / event topic';
     const chooser = document.createElement('select'); chooser.className = 'source-discovered'; chooserLabel.append(chooser); topicLabel.append(chooserLabel);
@@ -80,7 +84,7 @@ const automationUi = (() => {
     const input = document.createElement('input'); input.className = 'source-topic'; input.required = true; input.maxLength = 512; input.placeholder = 'scrypted/<device-id>/ObjectDetector'; input.value = source.topic || ''; input.spellcheck = false; manualLabel.append(input); advanced.append(manualLabel); topicLabel.append(advanced);
     chooser.onchange = () => { input.value = chooser.value; advanced.open = !chooser.value; if (!chooser.value) input.focus(); dirty = true; };
     input.oninput = () => updateSourceChoices(row, false);
-    select.onchange = () => { input.value = ''; updateSourceChoices(row, true); row.querySelector('.source-connection').open = !input.value; };
+    select.onchange = () => { input.value = ''; zone.value = ''; updateSourceChoices(row, true); row.querySelector('.source-connection').open = !input.value; };
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Remove source'; remove.onclick = () => { const card = row.closest('.automation-rule'); row.remove(); dirty = true; card.dispatchEvent(new Event('change', {bubbles:true})); };
     const eventDetails = document.createElement('details'); eventDetails.className = 'source-connection'; eventDetails.open = !source.topic;
     const eventSummary = document.createElement('summary'); eventSummary.textContent = 'Event connection'; eventDetails.append(eventSummary, topicLabel);
@@ -123,9 +127,32 @@ const automationUi = (() => {
       const description = document.createElement('span'); description.className = 'rule-summary-description';
       const sources = [...card.querySelectorAll('.source-camera')].filter(s => s.value).length;
       description.textContent = `When any of ${sources} cameras detects a person: ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'}. Clear after ${card.querySelector('.rule-delay').value} minutes without detections${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
+      const zones = [...card.querySelectorAll('.source-zone')].map(z => z.value.trim()).filter(Boolean);
+      if (zones.length) description.textContent += ' · Required zones: ' + [...new Set(zones)].join(', ');
       summary.replaceChildren(name, description);
     };
     card.addEventListener('input', updateSummary); card.addEventListener('change', updateSummary); updateSummary();
+    const testControls = document.createElement('div'); testControls.className = 'control-buttons rule-test-controls';
+    const testSource = optionSelect(rule.sources.map(s => ({slot:s.cameraSlot, name:inventory.find(c => c.slot === s.cameraSlot)?.name || 'Camera'})), rule.sources[0]?.cameraSlot, 'Test source camera');
+    testSource.required = false;
+    testSource.hidden = rule.sources.length < 2;
+    const testButton = document.createElement('button'); testButton.type = 'button'; testButton.className = 'secondary'; testButton.textContent = 'Test';
+    testButton.setAttribute('aria-label', 'Test ' + rule.name);
+    const testMessage = document.createElement('p'); testMessage.className = 'rule-test-message'; testMessage.setAttribute('role','status');
+    // Test controls do not edit the saved rule or mark the form dirty.
+    testSource.addEventListener('input', e => e.stopPropagation()); testSource.addEventListener('change', e => e.stopPropagation());
+    testButton.onclick = async () => {
+      if (dirty || !savedRules.some(r => r.id === rule.id)) { testMessage.textContent = 'Apply changes before testing this rule.'; return; }
+      if (!form.elements.enabled.checked || !rule.enabled) { testMessage.textContent = 'Enable automation and this rule, then apply changes before testing.'; return; }
+      testButton.disabled = true; testMessage.textContent = 'Simulating a person detection…';
+      try {
+        const result = await api('/api/automation/rules/' + encodeURIComponent(rule.id) + '/test', {method:'POST', body:JSON.stringify({sourceSlot:Number(testSource.value)})});
+        testMessage.textContent = result.message;
+        await refresh();
+      } catch (e) { testMessage.textContent = e.message; }
+      finally { testButton.disabled = false; }
+    };
+    testControls.append(testSource, testButton); card.append(testControls, testMessage);
     rules.append(card);
   }
   function renderActionTarget(card) {
@@ -137,7 +164,7 @@ const automationUi = (() => {
     if (action !== 0) { select.add(new Option('Camera that detected the person', '0'), 1); select.value = String(selected); }
     label.textContent = action === 0 ? 'Show overlay' : 'Camera to focus'; label.append(select);
     select.onchange = () => { card.dataset[action === 0 ? 'overlayTarget' : 'cameraTarget'] = select.value; };
-    card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Enlarge this main camera and show all enabled, configured main streams around it. Restore the previous layout after the clear delay.';
+    card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Automatic layout: this camera occupies a 2×2 tile at the upper left, with all other enabled, configured main streams in smaller tiles. Uses the active layout’s orientation and restores that layout after the clear delay. Tile sizes and positions cannot currently be customized. Apply changes, then use Test to preview it.';
   }
   function draft() {
     const f = form.elements;
@@ -148,7 +175,7 @@ const automationUi = (() => {
         overlaySlot: Number(card.querySelector('.rule-action').value) === 0 ? Number(card.querySelector('.rule-target').value) : 0,
         cameraSlot: Number(card.querySelector('.rule-action').value) !== 0 ? Number(card.querySelector('.rule-target').value) : 0,
         clearMinutes: Number(card.querySelector('.rule-delay').value), sources: [...card.querySelectorAll('.automation-source')].map(row => ({
-          cameraSlot: Number(row.querySelector('.source-camera').value), topic: row.querySelector('.source-topic').value.trim()}))}))},
+          cameraSlot: Number(row.querySelector('.source-camera').value), topic: row.querySelector('.source-topic').value.trim(), requiredZone: row.querySelector('.source-zone').value.trim()}))}))},
       password: f.password.value || null, clearPassword: f.clearPassword.checked};
   }
   function render(data) {
