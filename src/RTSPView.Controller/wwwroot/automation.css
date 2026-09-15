@@ -36,3 +36,60 @@
 .overlay-automation-info { padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .overlay-automation-info p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 @media (max-width: 800px) { .automation-grid, .rule-editor > .automation-grid, .automation-source, .automation-target-grid { grid-template-columns: 1fr; } }
+
+/* Rules first; setup and troubleshooting stay out of the everyday view. */
+#automationForm { max-width: 1080px; margin-inline: auto; }
+#automationForm details { border: 0; padding: 0; margin: 0; }
+#automationForm summary { padding: 8px 0; }
+#automationForm .automation-section { border-top: 1px solid var(--line); padding: 12px 0; }
+#automationForm .automation-help { margin-top: 16px; }
+#automationForm .source-connection { margin-top: 24px; }
+#automationForm .automation-master { margin: 0; }
+#automationForm .rule-editor[open] > summary { margin-bottom: 12px; }
+#automationForm .automation-grid label { margin: 0; }
+#automationForm .automation-source { margin: 8px 0; padding: 12px 0; }
+#automationForm .automation-broker .automation-grid { margin-top: 12px; }
+#automationForm .source-event details { margin-top: 10px; }
+#automationForm .automation-rule-list { margin-top: 18px; }
+#automationForm > h2 { margin-bottom: 6px; }
+#automationForm > p { color: var(--muted); }
+.automation-master { margin-top: 20px; }
+.automation-connection { font-size: 13px; margin: 8px 0 24px; }
+#automationForm .automation-rule-list { border: 0; padding: 0; margin: 24px 0; }
+#automationForm .automation-rule-list > legend { padding: 0; font-size: 18px; }
+#automationForm .automation-rule { padding: 14px 18px; margin: 12px 0; background: var(--bg, #0c121a); }
+.rule-summary { font-size: 15px; }
+.rule-summary-name { font-weight: 600; }
+.rule-summary-description { display: block; margin: 6px 0 0 18px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.rule-status { margin: 8px 0 0 18px; font-size: 12px; }
+.rule-editor h4 { margin: 24px 0 8px; font-size: 14px; }
+.rule-editor > .rule-identity { grid-template-columns: minmax(160px, 1fr) auto; }
+.rule-editor > .rule-action-grid { grid-template-columns: 1fr 1fr; }
+.rule-timing { display: block; max-width: 300px; }
+.rule-timing input { width: 100%; }
+.target-help { font-size: 13px; color: var(--muted); margin: 8px 0; }
+.rule-actions { margin-top: 24px; justify-content: flex-end; }
+.rule-remove { color: #f0a6a6; }
+.source-connection { min-width: 0; margin-top: 24px; font-size: 13px; }
+.source-connection > summary { cursor: pointer; color: var(--muted); }
+.source-connection[open] > summary { margin-bottom: 12px; }
+.source-event > button { margin-top: 10px; }
+.automation-camera-preview { grid-template-columns: 96px 1fr; gap: 4px 10px; align-items: center; }
+.automation-camera-preview img { width: 96px; height: 54px; grid-row: span 2; }
+.automation-camera-preview small { font-size: 11px; }
+.automation-camera-preview button { font-size: 11px; padding: 3px 6px; }
+.automation-help { margin: 20px 0 0; font-size: 13px; color: var(--muted); }
+.automation-help summary { cursor: pointer; }
+.automation-section { border-top: 1px solid var(--line); padding: 18px 0; margin: 0; }
+.automation-section > summary { cursor: pointer; font-weight: 600; }
+.automation-section > p { font-size: 13px; color: var(--muted); }
+.broker-summary { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 12px; overflow-wrap: anywhere; }
+#automationForm .automation-broker fieldset { border: 0; padding: 0; margin-bottom: 0; }
+.automation-broker legend { display: none; }
+.automation-savebar { position: sticky; bottom: 0; background: var(--panel, #141c25); border-top: 1px solid var(--line); padding: 14px 0; margin-top: 16px; z-index: 2; }
+@media (max-width: 800px) {
+  #automationForm .source-connection { margin-top: 0; }
+  .rule-editor > .rule-action-grid { grid-template-columns: 1fr; }
+  .source-connection { margin-top: 0; }
+  .automation-source > button { margin-top: 0; justify-self: start; }
+}

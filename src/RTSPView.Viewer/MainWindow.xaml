@@ -18,6 +18,7 @@
         <Button Width="105" Height="32" Margin="10,0,0,0" Content="Save + Start" Click="SaveButton_Click" Background="#1976D2" Foreground="White" BorderThickness="0"/>
         <Button Width="95" Height="32" Margin="8,0,0,0" Content="Restart" Click="RestartButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
         <Button Width="105" Height="32" Margin="8,0,0,0" Content="Full Screen" Click="FullScreenButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
+        <Button x:Name="DiagnosticsButton" Width="120" Height="32" Margin="8,0,0,0" Content="Diagnostics" Click="DiagnosticsButton_Click" ToolTip="Open or close camera diagnostics" Background="#343A40" Foreground="White" BorderThickness="0"/>
         <Button Width="105" Height="32" Margin="8,0,0,0" Content="Configure…" Click="ConfigureButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
         <Button Width="130" Height="32" Margin="8,0,0,0" Content="Open web config" Click="OpenWebConfig_Click" ToolTip="Open local web configuration in your default browser" Background="#343A40" Foreground="White" BorderThickness="0"/>
         <TextBlock x:Name="LanAddressText" MaxWidth="240" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="#B8C1CC" FontSize="12" Text="LAN IP: detecting…" TextTrimming="CharacterEllipsis"/>

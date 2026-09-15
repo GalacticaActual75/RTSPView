@@ -7,9 +7,46 @@ const adminUi = (() => {
     layouts: 'Arrange streams in a saved layout, then apply it to the wall.',
     overlays: 'Position, shape, and frame picture-in-picture streams. Save to apply changes to the wall.',
     system: 'Configure RTSPView settings, networking, display behavior, updates, and backups.',
-    automation: 'Connect camera events to overlay actions, discover MQTT topics, and inspect incoming messages.'
+    automation: 'Choose what the wall shows when a camera detects a person.'
   };
+  function collapseSections(root = document) {
+    root.querySelectorAll('details[open]').forEach(details => { details.open = false; });
+    root.querySelectorAll('.settings-info[aria-expanded="true"]').forEach(button => {
+      button.setAttribute('aria-expanded', 'false');
+      const content = document.getElementById(button.getAttribute('aria-controls'));
+      if (content) content.hidden = true;
+    });
+  }
   function init() {
+    // One expanded category per level and page. Nested editors retain their
+    // open ancestors, including when validation reveals a hidden field.
+    const scope = details => details.parentElement?.closest('details') || details.closest('.admin-page') || document;
+    const openSection = details => {
+      const parent = scope(details);
+      for (const other of parent.querySelectorAll('details[open]'))
+        if (other !== details && scope(other) === parent) { collapseSections(other); other.open = false; }
+      for (const button of parent.querySelectorAll('.settings-info[aria-expanded="true"]')) {
+        button.setAttribute('aria-expanded', 'false');
+        const content = document.getElementById(button.getAttribute('aria-controls'));
+        if (content) content.hidden = true;
+      }
+      details.open = true;
+    };
+    document.addEventListener('toggle', event => {
+      if (event.target.tagName === 'DETAILS' && event.target.open) openSection(event.target);
+      else if (event.target.tagName === 'DETAILS') collapseSections(event.target);
+    }, true);
+    let revealingInvalid = false;
+    document.addEventListener('invalid', event => {
+      if (revealingInvalid) return;
+      revealingInvalid = true; setTimeout(() => { revealingInvalid = false; }, 0);
+      const parents = [];
+      for (let node = event.target.parentElement; node; node = node.parentElement)
+        if (node.tagName === 'DETAILS') parents.unshift(node);
+      parents.forEach(openSection);
+    }, true);
+    collapseSections();
+    window.addEventListener('pageshow', () => collapseSections());
     const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=maintenance2'; document.head.append(css);
     const hero = document.querySelector('.hero');
     const description = document.createElement('p'); description.id = 'pageDescription';
@@ -76,5 +113,5 @@ const adminUi = (() => {
       error.textContent = [camera.frameWarning, camera.lastError].filter(Boolean).join(' · '); details.append(error);
     }
   }
-  return {init, page, host, stream};
+  return {init, page, host, stream, collapseSections};
 })();

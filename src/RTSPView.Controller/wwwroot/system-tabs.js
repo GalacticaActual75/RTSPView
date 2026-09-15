@@ -22,7 +22,11 @@ const systemTabs = (() => {
     button.setAttribute('aria-controls', content.id);
     content.append(...notes); heading.append(button); heading.after(content);
     const close = () => { content.hidden = true; button.setAttribute('aria-expanded', 'false'); };
-    button.onclick = () => { content.hidden = !content.hidden; button.setAttribute('aria-expanded', String(!content.hidden)); };
+    button.onclick = () => {
+      const opening = content.hidden;
+      adminUi.collapseSections(card.closest('.admin-page') || card);
+      content.hidden = !opening; button.setAttribute('aria-expanded', String(opening));
+    };
     content.onkeydown = event => { if (event.key === 'Escape') { close(); button.focus(); event.stopPropagation(); } };
     button.onkeydown = event => { if (event.key === 'Escape') { close(); event.stopPropagation(); } };
   }
@@ -40,6 +44,7 @@ const systemTabs = (() => {
     tablist.className = 'system-tabs'; tablist.setAttribute('role', 'tablist'); tablist.setAttribute('aria-label', 'System settings');
     const tabs = [], panels = [];
     function select(index, focus = false) {
+      adminUi.collapseSections(page);
       tabs.forEach((tab, i) => {
         tab.setAttribute('aria-selected', String(i === index)); tab.tabIndex = i === index ? 0 : -1;
         panels[i].hidden = i !== index;

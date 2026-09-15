@@ -82,6 +82,7 @@ const adminLayout = (() => {
     select('overview');
   }
   function select(id) {
+    if (id !== current) adminUi.collapseSections();
     current = id;
     document.querySelector('.mobile-nav').value = id;
     document.querySelector('main').dataset.page = id;
@@ -147,8 +148,9 @@ const adminLayout = (() => {
       form.append(open);
     }
     if (overlayMode) {
+      settings.open = false;
       const stream = form.querySelector('.camera-preview');
-      const status = document.createElement('details'); status.className = 'inspector-section overlay-status'; status.open = true;
+      const status = document.createElement('details'); status.className = 'inspector-section overlay-status';
       const heading = document.createElement('summary'); heading.textContent = 'Overlay status'; status.append(heading);
       stream.before(status); status.append(stream);
       settings.querySelector('summary').textContent = 'Overlay controls';
@@ -158,7 +160,7 @@ const adminLayout = (() => {
       settings.append(connection);
       connection.append(form.querySelector('.restart-camera'));
       const makeGroup = (title, names) => {
-        const section = document.createElement('details'); section.className = 'inspector-section'; section.open = true;
+        const section = document.createElement('details'); section.className = 'inspector-section';
         const heading = document.createElement('summary'); heading.textContent = title; section.append(heading);
         const group = document.createElement('div'); group.className = 'inspector-fields'; section.append(group);
         for (const name of names) group.append(form.elements[name].closest('label'));
@@ -203,6 +205,7 @@ const adminLayout = (() => {
     document.title = beta ? 'RTSPView Beta Admin' : 'RTSPView Admin';
   }
   function selectOverlay(id) {
+    adminUi.collapseSections(pages.overlays);
     for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))grid.hidden=grid.id!==id;
     for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))button.setAttribute('aria-pressed',String(button.dataset.overlayTarget===id));
     window.dispatchEvent(new Event('resize'));

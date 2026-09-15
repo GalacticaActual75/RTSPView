@@ -140,6 +140,7 @@ public partial class MainWindow : Window
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick();
             DiagnosticsPanel.Refresh(_allTiles);
+            DiagnosticsButton.Content = DiagnosticsPanel.WarningCount > 0 ? $"Diagnostics ({DiagnosticsPanel.WarningCount})" : "Diagnostics";
             RaiseWarningWindows();
             _telemetryPublisher.Publish(new ViewerTelemetry
             {
@@ -382,6 +383,8 @@ public partial class MainWindow : Window
     private void SetFullScreen(bool enabled)
     {
         _isFullScreen = enabled;
+        DiagnosticsPanel.Refresh(_allTiles);
+        DiagnosticsPanel.SetFullScreen(enabled);
         if (enabled)
         {
             PositionOnPreferredMonitor();
@@ -884,6 +887,8 @@ public partial class MainWindow : Window
         RegisterPointerActivity();
         if (sender is CameraTile tile) DiagnosticsPanel.SelectCamera(tile.Slot);
     }
+
+    private void DiagnosticsButton_Click(object sender, RoutedEventArgs e) => DiagnosticsPanel.ToggleWindowed();
 
     private void Tile_DiagnosticsRequested(object? sender, EventArgs e)
     {

@@ -27,6 +27,11 @@ internal static class WallDiagnosticsChecks
         state.SetValue(overlay, new CameraRuntimeStatus { State = CameraConnectionState.StreamError, LastError = "Decoder could not recover. Retrying the stream." });
         var panel = new WallDiagnosticsPanel();
         panel.Refresh([main, overlay]);
+        if (panel.Visibility != Visibility.Collapsed) throw new Exception("Windowed diagnostics opened without a click");
+        panel.SelectCamera(17);
+        if (panel.Visibility != Visibility.Collapsed) throw new Exception("Hover opened windowed diagnostics");
+        panel.ToggleWindowed();
+        if (panel.Visibility != Visibility.Visible) throw new Exception("Diagnostics button did not open windowed panel");
         if (panel.WarningCount != 2) throw new Exception("Simultaneous main/overlay errors were not preserved");
         if (!overlay.DiagnosticWarning!.Contains("Decoder could not recover")) throw new Exception("Connection error lost its explanatory text");
         panel.SelectCamera(17, true);
@@ -61,16 +66,36 @@ internal static class WallDiagnosticsChecks
         var toggle = (Button)((DockPanel)panel.Content).Children[0];
         toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         panel.Refresh([main, overlay]);
-        if (panel.Width != 44) throw new Exception("Existing errors reopened a deliberately collapsed panel");
+        if (panel.Visibility != Visibility.Collapsed) throw new Exception("Existing errors reopened a closed windowed panel");
+        panel.SetFullScreen(true);
+        if (panel.Visibility != Visibility.Visible || toggle.Visibility != Visibility.Collapsed)
+            throw new Exception("Full screen did not show current errors automatically");
         state.SetValue(overlay, new CameraRuntimeStatus { State = CameraConnectionState.Live });
         panel.Refresh([main, overlay]);
         if (panel.WarningCount != 1 || panel.SelectedSlot != 17) throw new Exception("Recovery lost the other camera's alert or changed selection");
+        if (panel.Visibility != Visibility.Visible) throw new Exception("Partial recovery hid remaining errors");
+        state.SetValue(main, new CameraRuntimeStatus { State = CameraConnectionState.Live });
+        panel.Refresh([main, overlay]);
+        if (panel.Visibility != Visibility.Collapsed) throw new Exception("Full screen retained diagnostics after all errors cleared");
+        grid.Measure(new Size(900, 620)); grid.Arrange(new Rect(0, 0, 900, 620)); grid.UpdateLayout();
+        if (grid.ColumnDefinitions[1].ActualWidth != 0) throw new Exception("Hidden diagnostics left a reserved strip");
+        panel.SelectCamera(17, true);
+        if (panel.Visibility != Visibility.Collapsed) throw new Exception("Manual selection opened healthy full-screen diagnostics");
         state.SetValue(overlay, new CameraRuntimeStatus { State = CameraConnectionState.StreamError });
         panel.Refresh([main, overlay]);
-        if (panel.Width != 280) throw new Exception("New connection problem did not open the diagnostics panel");
+        if (panel.Visibility != Visibility.Visible) throw new Exception("New connection problem did not open full-screen diagnostics");
+        panel.SetFullScreen(false);
+        if (panel.Visibility != Visibility.Collapsed) throw new Exception("Leaving full screen opened windowed diagnostics without a click");
+        panel.ToggleWindowed();
+        panel.SetFullScreen(true);
+        state.SetValue(overlay, new CameraRuntimeStatus { State = CameraConnectionState.Live });
+        panel.Refresh([main, overlay]);
+        if (panel.Visibility != Visibility.Collapsed) throw new Exception("Windowed preference kept healthy full-screen panel visible");
+        panel.SetFullScreen(false);
+        if (panel.Visibility != Visibility.Visible) throw new Exception("Leaving full screen lost the windowed open preference");
         panel.Refresh([main]);
         if (panel.SelectedSlot != 1) throw new Exception("Removed overlay left a stale selected camera");
         main.Dispose(); overlay.Dispose();
-        Console.WriteLine("PASS shared diagnostics: simultaneous errors, feed identity, unclipped text, warning badge, reserved space, recovery and removal");
+        Console.WriteLine("PASS shared diagnostics: simultaneous errors, feed identity, unclipped text, warning badge, fullscreen auto-show/recovery, windowed toggle, reclaimed space and removal");
     }
 }

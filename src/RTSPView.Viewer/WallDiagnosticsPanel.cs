@@ -24,7 +24,8 @@ public sealed class WallDiagnosticsPanel : UserControl
     private string _errorSignature = "";
     private readonly Dictionary<int, TextBlock> _errorText = new();
     private HashSet<int> _warningSlots = [];
-    private bool _expanded = true;
+    private bool _fullScreen;
+    private bool _windowedOpen;
     public int? SelectedSlot => _camera.SelectedValue is int slot ? slot : null;
     public int WarningCount => _warningSlots.Count;
     private sealed record Choice(int Slot, string Label);
@@ -48,9 +49,10 @@ public sealed class WallDiagnosticsPanel : UserControl
         _body.Children.Add(_camera); _body.Children.Add(_stats); _body.Children.Add(_restart);
         _body.Children.Add(Text("Connection alerts", true)); _body.Children.Add(_errors);
         Content = root;
-        _toggle.Click += (_, _) => SetExpanded(!_expanded);
+        _toggle.Click += (_, _) => ToggleWindowed();
         _camera.SelectionChanged += (_, _) => RefreshStatistics();
         _restart.Click += (_, e) => { e.Handled = true; _tiles.FirstOrDefault(t => t.Slot == SelectedSlot)?.Start(); };
+        ApplyVisibility();
     }
 
     private static TextBlock Text(string value, bool heading = false) => new()
@@ -60,18 +62,30 @@ public sealed class WallDiagnosticsPanel : UserControl
         Margin = new Thickness(0, 4, 0, 8)
     };
 
-    private void SetExpanded(bool expanded)
+    public void SetFullScreen(bool fullScreen)
     {
-        _expanded = expanded; Width = expanded ? 280 : 44;
-        _body.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
-        _toggle.Content = expanded ? "Diagnostics  ‹" : $"›\n{WarningCount}";
-        _toggle.ToolTip = $"Camera diagnostics: {WarningCount} connection alerts";
+        _fullScreen = fullScreen;
+        ApplyVisibility();
+    }
+
+    public void ToggleWindowed()
+    {
+        if (_fullScreen) return;
+        _windowedOpen = !_windowedOpen;
+        ApplyVisibility();
+    }
+
+    private void ApplyVisibility()
+    {
+        Visibility = (_fullScreen ? WarningCount > 0 : _windowedOpen) ? Visibility.Visible : Visibility.Collapsed;
+        _toggle.Visibility = _fullScreen ? Visibility.Collapsed : Visibility.Visible;
+        _toggle.Content = "Close diagnostics";
     }
 
     public void SelectCamera(int slot, bool open = false)
     {
         if (_tiles.Any(t => t.Slot == slot)) _camera.SelectedValue = slot;
-        if (open) SetExpanded(true);
+        if (open && !_fullScreen) { _windowedOpen = true; ApplyVisibility(); }
     }
 
     public void Refresh(CameraTile[] tiles)
@@ -88,7 +102,6 @@ public sealed class WallDiagnosticsPanel : UserControl
         }
         var warnings = _tiles.Select(t => (Tile: t, Message: t.DiagnosticWarning)).Where(w => w.Message is not null).ToArray();
         var nextSlots = warnings.Select(w => w.Tile.Slot).ToHashSet();
-        var newWarning = nextSlots.Except(_warningSlots).Any();
         _warningSlots = nextSlots;
         // Keep existing controls and scroll position stable while telemetry updates.
         var errorSignature = string.Join(",", warnings.Select(w => w.Tile.Slot));
@@ -108,8 +121,7 @@ public sealed class WallDiagnosticsPanel : UserControl
             if (warnings.Length == 0) _errors.Children.Add(Text("No connection alerts."));
         }
         foreach (var warning in warnings) _errorText[warning.Tile.Slot].Text = warning.Tile.DiagnosticLabel + "\n" + warning.Message;
-        if (newWarning) SetExpanded(true);
-        else if (!_expanded) SetExpanded(false);
+        ApplyVisibility();
         RefreshStatistics();
     }
 

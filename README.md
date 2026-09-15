@@ -31,9 +31,12 @@ custom overlay shapes do not clip their text. Hover over a camera, select it in
 the panel, or click its small warning badge to inspect statistics. **Restart
 selected stream** restarts only that feed. Alerts clear individually on recovery.
 
-Use the panel's header to collapse it to a narrow strip with an alert count.
-A newly affected camera opens it automatically. The wall fits the remaining space,
-including in full screen, without changing the saved layout. Detailed statistics
+In full screen, the panel appears only while at least one camera has a connection
+or stale-video issue, then disappears completely when all issues clear. In windowed
+mode it starts hidden; use the **Diagnostics** button to open or close it. The button
+shows the current alert count, but errors do not open the windowed panel automatically.
+The wall reclaims all panel space when it hides without changing the saved layout.
+Detailed statistics
 and errors now appear here instead of over the video; main-camera name labels
 still follow the name-display preference. Hidden, configured overlay feeds can
 also report connection problems while being kept ready for automation.
@@ -43,6 +46,11 @@ also report connection problems while being kept ready for automation.
 Open the top-level **Automation** tab to configure the broker and person-detection rules.
 Saved rules collapse to a summary; click a rule to expand and edit it. New rules
 stay open, and validation expands any rule that needs attention.
+Rules are shown first; connection settings, event discovery and troubleshooting
+are expandable sections. Across administration pages, opening a category closes
+its peers at the same level. Refreshing starts with categories collapsed.
+An **Entered topic (not observed)** option is a saved or typed topic that discovery
+has not received during the listening session; it does not confirm event support.
 The Controller maintains the MQTT connection even with the browser closed; the
 Viewer must be running to display overlays. Automation is disabled by default.
 
