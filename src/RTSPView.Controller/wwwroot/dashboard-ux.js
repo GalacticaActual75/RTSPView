@@ -1,6 +1,7 @@
 /* Snapshot timestamps describe the displayed image, never the time it was fetched. */
 const dashboardUX = (() => {
   const styles=document.createElement('link');styles.rel='stylesheet';styles.href='dashboard.css?v=1';document.head.append(styles);
+  document.addEventListener('DOMContentLoaded',()=>document.head.append(styles),{once:true});
   const stamp = new WeakMap();
   const failed = new WeakSet();
   const resources=new Map();

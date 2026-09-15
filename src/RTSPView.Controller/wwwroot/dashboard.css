@@ -18,3 +18,4 @@ main[data-page=overview],main[data-page=layouts]{max-width:none;width:100%}
 @media(max-width:600px){#page-overview .camera-grid{grid-template-columns:minmax(0,1fr)}}
 .designer-tile>.snapshot-age{position:absolute;left:6px;top:6px;background:#07111cdb;padding:3px 6px;z-index:1;pointer-events:none;max-width:calc(100% - 12px)}
 .designer-camera{flex-wrap:wrap}.designer-camera>.snapshot-age{flex-basis:100%;font-size:11px}
+#page-overview .camera-live .live-details{display:none}
