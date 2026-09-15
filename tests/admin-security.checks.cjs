@@ -31,6 +31,16 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  const automationLayouts=(await request(a,'/api/automation/layouts')).json.layouts;
+  assert.equal(automationLayouts.length,2,'one and two focus templates provided');
+  assert.equal(automationLayouts[1].focusSlots.length,2,'dual focus template has two positions');
+  const editedLayouts=automationLayouts.map((l,i)=>({...l,name:i===1?'Edited dual focus':l.name}));
+  assert.equal((await request(a,'/api/automation/layouts','PUT',{layouts:editedLayouts})).status,200,'automation layout saves');
+  const layoutConfig=(await request(a,'/api/config')).json;
+  assert.deepEqual(layoutConfig.layouts,config.layouts,'automation editor changed standard layouts');
+  assert.equal(layoutConfig.activeLayoutId,config.activeLayoutId,'automation save changed live layout');
+  assert.equal(layoutConfig.automationViewLayouts[1].name,'Edited dual focus','automation layout edit did not persist');
+  assert.equal((await request(a,'/api/automation/layouts','PUT',{layouts:[{...editedLayouts[0],focusSlots:[1,1]}]})).status,400,'invalid focus positions rejected');
   const automation=(await request(a,'/api/automation')).json;
   assert.equal(automation.settings.enabled,false,'automation defaults off');
   const mqttSecret='test-mqtt-'+crypto.randomUUID();
@@ -58,6 +68,8 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/automation')).json.settings.rules[0].action,1,'fullscreen action persists');
   assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:1}]}})).status,200,'focused-layout fixed-camera rule saves');
   assert.equal((await request(a,'/api/automation')).json.settings.rules[0].cameraSlot,1,'fixed focus target persists');
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:1,layoutId:editedLayouts[1].id}]}})).status,200,'rule selects saved automation layout');
+  assert.equal((await request(a,'/api/automation/layouts','PUT',{layouts:[editedLayouts[0]]})).status,400,'in-use automation layout cannot be deleted');
   assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:10}]}})).status,400,'focused layout rejects overlay target');
   await request(a,'/api/automation','PUT',{settings:automation.settings});
   await request(a,'/api/cameras/1','PUT',config.cameras[0]);

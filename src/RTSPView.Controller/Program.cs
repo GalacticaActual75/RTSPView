@@ -537,6 +537,23 @@ app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
+app.MapGet("/api/automation/layouts", async () => Results.Ok(new { layouts = (await settingsStore.LoadAsync()).AutomationViewLayouts })).RequireAuthorization();
+app.MapPut("/api/automation/layouts", async (WallLayoutsRequest request, AutomationService automation) =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        AutomationLayouts.Validate(request.Layouts);
+        var settings = await settingsStore.LoadAsync();
+        if (settings.AutomationViewLayouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && automation.UsesLayout(l.Id)))
+            return Results.BadRequest(new { error = "A rule uses this layout. Choose another layout in that rule before deleting it." });
+        await settingsStore.SaveAsync(settings with { AutomationViewLayouts = request.Layouts });
+        auditLog.Write("AUTOMATION", "Automation layouts saved");
+        return Results.Ok(new { layouts = request.Layouts, activeLayoutId = request.Layouts[0].Id });
+    }
+    catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
 app.MapPut("/api/layouts", async (WallLayoutsRequest request) =>
 {
     await configGate.WaitAsync();

@@ -14,6 +14,7 @@ public sealed record AutomationRule
     public AutomationSource[] Sources { get; init; } = [];
     public int OverlaySlot { get; init; }
     public AutomationAction Action { get; init; }
+    public string LayoutId { get; init; } = "";
     // Zero follows each triggering source; positive values select a fixed camera.
     public int CameraSlot { get; init; }
     public double ClearMinutes { get; init; } = 2;
@@ -41,6 +42,8 @@ public sealed record AutomationSettings
         foreach (var rule in Rules)
         {
             if (!Enum.IsDefined(rule.Action)) throw new InvalidDataException("Select a supported automation action.");
+            if (rule.LayoutId is null || (rule.Action == AutomationAction.FocusedLayout && rule.LayoutId.Length > 0 && !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId)))
+                throw new InvalidDataException("Select an available automation layout.");
             if (!Guid.TryParse(rule.Id, out _) || string.IsNullOrWhiteSpace(rule.Name) || rule.Name.Length > 100) throw new InvalidDataException("Each rule needs an ID and a name of up to 100 characters.");
             if (!double.IsFinite(rule.ClearMinutes) || rule.ClearMinutes is < 0.1 or > 120) throw new InvalidDataException("Clear delay must be 0.1–120 minutes.");
             if (rule.Sources is null || rule.Sources.Length is < 1 or > 32 || rule.Sources.Any(s => s is null) || rule.Sources.Select(s => s.CameraSlot).Distinct().Count() != rule.Sources.Length) throw new InvalidDataException("Select one or more distinct source cameras.");
@@ -69,7 +72,7 @@ public sealed record AutomationSettings
 }
 
 public sealed record AutomationOverlayLease(string Id, int Slot, DateTimeOffset ExpiresAt,
-    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "");
+    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "", string LayoutId = "");
 public sealed record AutomationPresentation(string ConfigurationHash, AutomationOverlayLease[] Leases);
 
 public static class AutomationConfiguration
@@ -116,7 +119,7 @@ public sealed class PersonOverlayEngine
         var sourceTime = eventTime ?? now;
         var expiry = (sourceTime > now ? now : sourceTime).AddMinutes(rule.ClearMinutes);
         if (existing is not null && existing.ExpiresAt > expiry) expiry = existing.ExpiresAt;
-        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id);
+        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id, rule.LayoutId);
     }
     public void Expire(DateTimeOffset now)
     {

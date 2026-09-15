@@ -140,9 +140,31 @@ the Viewer’s window/fullscreen setting is preserved. **Focused layout** gives 
 selected main camera a larger tile and includes every enabled, configured main
 stream (up to 16), using the saved layout’s landscape or portrait orientation.
 Both restore the saved layout when their timers expire, without editing it.
-The focused camera occupies a 2×2 tile at the upper left; remaining cameras use
-single tiles. This arrangement is generated automatically. Tile sizes and positions
-are not currently configurable through the layout designer.
+The default **Automatic** arrangement gives the focused camera a 2×2 tile at the
+upper left; remaining cameras use single tiles. Existing rules keep this behavior.
+For a custom arrangement, open **Layouts → Automation layouts**, or use **Edit
+automation layouts** in Automation. Separate **Standard View layouts** and
+**Automation layouts** tabs keep the normal wall and automation templates independent.
+Start with **One large camera** or **Two large cameras**, then move, resize, add or
+remove tiles and save. Select that saved layout in a **Focused layout** rule.
+Saving a template does not select it as the standard wall layout.
+
+Each template has one or two focus positions. Their assigned cameras are fallbacks;
+active cameras fill those positions in activation order. Select **Camera that detected
+the person** in the rule to follow different source cameras. A second active camera
+using the same template fills the second position; with only one active camera,
+the other position uses its fallback. Cameras already in the template swap positions
+to avoid duplicates. Custom templates show their assigned cameras, not automatically
+every stream; a triggering camera outside the template replaces the focus fallback.
+Templates support up to 16 tiles on a 6×6 grid and cannot be deleted while a rule
+references them. Clear timing and existing focus priority remain unchanged.
+
+Overlays scale uniformly when their host camera tile changes size or proportions.
+Their proportions follow the 16:9 overlay-editor canvas, so custom shapes do not
+stretch when a host becomes tall, wide, or focused. Width/height percentages act
+as maximum bounds; horizontal/vertical positioning retains the selected anchor.
+Zoom, image positioning, shape and opacity remain configured as saved. Fullscreen
+actions targeting the overlay itself still display the camera across the Viewer.
 
 Each saved rule has a **Test** button, also available while the rule is collapsed.
 Each source also has an optional **Required zone** field. Enter the exact,

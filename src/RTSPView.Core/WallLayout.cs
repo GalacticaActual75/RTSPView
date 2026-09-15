@@ -16,6 +16,8 @@ public sealed record WallLayout
     public int Rows { get; init; } = 3;
     public int Columns { get; init; } = 3;
     public string AspectRatio { get; init; } = "16:9";
+    // Used only by automation layouts: assigned camera slots identify focus positions.
+    public int[] FocusSlots { get; init; } = [];
 
     public (double Width, double Height) Fit(double availableWidth, double availableHeight)
     {
@@ -26,7 +28,7 @@ public sealed record WallLayout
     public IReadOnlyList<WallTile> Tiles { get; init; } = Enumerable.Range(0, 9)
         .Select(i => new WallTile { CameraSlot = i + 1, Row = i / 3, Column = i % 3 }).ToArray();
 
-    public static void Validate(IReadOnlyList<WallLayout>? layouts, string? activeId)
+    public static void Validate(IReadOnlyList<WallLayout>? layouts, string? activeId, int maximumDimension = 4)
     {
         if (layouts is null || layouts.Count is < 1 or > 32)
             throw new InvalidDataException("Keep between 1 and 32 saved layouts.");
@@ -36,8 +38,8 @@ public sealed record WallLayout
             if (layout is null || string.IsNullOrWhiteSpace(layout.Id) || layout.Id.Length > 64 || !ids.Add(layout.Id) ||
                 string.IsNullOrWhiteSpace(layout.Name) || layout.Name.Length > 80)
                 throw new InvalidDataException("Layouts need unique IDs and names of 1–80 characters.");
-            if (layout.Rows is < 1 or > 4 || layout.Columns is < 1 or > 4 || layout.Tiles is null || layout.Tiles.Count is < 1 or > 16)
-                throw new InvalidDataException("Layouts support 1–4 rows and columns and 1–16 camera tiles.");
+            if (layout.Rows < 1 || layout.Rows > maximumDimension || layout.Columns < 1 || layout.Columns > maximumDimension || layout.Tiles is null || layout.Tiles.Count is < 1 or > 16)
+                throw new InvalidDataException($"Layouts support 1–{maximumDimension} rows and columns and 1–16 camera tiles.");
             if (layout.AspectRatio is not ("16:9" or "9:16"))
                 throw new InvalidDataException("Choose landscape (16:9) or portrait (9:16).");
             var occupied = new HashSet<(int, int)>();

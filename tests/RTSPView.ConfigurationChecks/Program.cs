@@ -7,6 +7,8 @@ Directory.CreateDirectory(root);
 try
 {
     StreamActivityChecks.Run();
+    OverlayGeometryChecks.Run();
+    AutomationLayoutChecks.Run();
     await SnapshotChecks.RunAsync(root);
     await GitHubUpdateChecks.RunAsync(root);
     var migrationRoot = Path.Combine(root, "migration-user");

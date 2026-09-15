@@ -2,6 +2,7 @@
 const automationUi = (() => {
   let form, rules, message, connection, inventory = [], overlays = [], loaded = false, dirty = false, busy = false, refreshing = false;
   let savedRules = [], discovered = [], diagnosticState = null, paused = false, clearedThrough = 0, diagnosticBusy = false;
+  let viewLayouts = [];
   const uuid = () => '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
     (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16));
   function init() {
@@ -46,6 +47,7 @@ const automationUi = (() => {
     form.querySelector('.automation-rule-list').after(brokerDetails);
     broker.append(form.querySelector('.automation-test'));
     document.querySelector('#page-automation').append(form);
+    const editLayouts=document.createElement('button');editLayouts.type='button';editLayouts.className='secondary';editLayouts.textContent='Edit automation layouts';editLayouts.onclick=()=>wallDesigner.openAutomation();form.querySelector('.rules-intro').after(editLayouts);
     const markDirty = e => { if (!e.target.closest('.mqtt-tools')) { dirty = true; form.dataset.dirty = 'true'; } };
     form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);
     form.querySelector('.mqtt-start').onclick = () => diagnostics(true);
@@ -115,6 +117,7 @@ const automationUi = (() => {
     card.querySelector('.rule-name').value = rule.name; card.querySelector('.rule-enabled').checked = rule.enabled;
     card.querySelector('.rule-delay').value = rule.clearMinutes;
     card.dataset.overlayTarget = rule.overlaySlot || ''; card.dataset.cameraTarget = rule.cameraSlot || 0;
+    card.dataset.layoutTarget = rule.layoutId || '';
     card.querySelector('.rule-action').value = rule.action || 0;
     renderActionTarget(card);
     card.querySelector('.rule-action').onchange = () => { renderActionTarget(card); dirty = true; };
@@ -165,6 +168,12 @@ const automationUi = (() => {
     label.textContent = action === 0 ? 'Show overlay' : 'Camera to focus'; label.append(select);
     select.onchange = () => { card.dataset[action === 0 ? 'overlayTarget' : 'cameraTarget'] = select.value; };
     card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Automatic layout: this camera occupies a 2×2 tile at the upper left, with all other enabled, configured main streams in smaller tiles. Uses the active layout’s orientation and restores that layout after the clear delay. Tile sizes and positions cannot currently be customized. Apply changes, then use Test to preview it.';
+    card.querySelector('.rule-layout-choice')?.remove();
+    if(action===2){
+      const block=document.createElement('div');block.className='rule-layout-choice';const layoutLabel=document.createElement('label');layoutLabel.textContent='Automation layout';const picker=document.createElement('select');picker.className='rule-layout';picker.add(new Option('Automatic — all enabled streams',''));for(const item of viewLayouts)picker.add(new Option(item.name,item.id));if(card.dataset.layoutTarget&&!viewLayouts.some(l=>l.id===card.dataset.layoutTarget))picker.add(new Option('Unavailable layout',card.dataset.layoutTarget));picker.value=card.dataset.layoutTarget;picker.onchange=()=>{card.dataset.layoutTarget=picker.value;};layoutLabel.append(picker);block.append(layoutLabel);
+      const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Edit automation layouts';edit.onclick=()=>wallDesigner.openAutomation();block.append(edit);card.querySelector('.target-help').before(block);
+      card.querySelector('.target-help').textContent='Choose a saved one-focus or two-focus layout, or use the automatic arrangement. Active cameras fill its focus positions in detection order; remaining positions use their configured fallback cameras. Choose “Camera that detected the person” to focus multiple source cameras. The standard view returns when detections clear.';
+    }
   }
   function draft() {
     const f = form.elements;
@@ -172,6 +181,7 @@ const automationUi = (() => {
       authenticate: f.authenticate.value === 'true', username: f.username.value, clientId: f.clientId.value,
       rules: [...rules.children].map(card => ({id: card.dataset.id, name: card.querySelector('.rule-name').value,
         enabled: card.querySelector('.rule-enabled').checked, action: Number(card.querySelector('.rule-action').value),
+        layoutId: card.dataset.layoutTarget || '',
         overlaySlot: Number(card.querySelector('.rule-action').value) === 0 ? Number(card.querySelector('.rule-target').value) : 0,
         cameraSlot: Number(card.querySelector('.rule-action').value) !== 0 ? Number(card.querySelector('.rule-target').value) : 0,
         clearMinutes: Number(card.querySelector('.rule-delay').value), sources: [...card.querySelectorAll('.automation-source')].map(row => ({
@@ -190,7 +200,7 @@ const automationUi = (() => {
   }
   async function load(config) {
     try {
-      if (config) { overlays = [config.doorbellOverlay, config.garageOverlay, ...(config.additionalOverlays || [])].map(o => o.camera).filter(c => c.rtspUrl);
+      if (config) { viewLayouts = config.automationViewLayouts || []; overlays = [config.doorbellOverlay, config.garageOverlay, ...(config.additionalOverlays || [])].map(o => o.camera).filter(c => c.rtspUrl);
         inventory = [...config.cameras, ...overlays].filter(c => c.rtspUrl); }
       if (!dirty && !busy) render(await api('/api/automation'));
       await refresh();
@@ -341,5 +351,6 @@ const automationUi = (() => {
     inventory = inventory.filter(c => c.slot !== camera.slot); if (camera.rtspUrl) inventory.push(camera);
     refreshOverlayLinks(); refresh();
   }
-  return {init, load, refresh, decorateOverlay, updateOverlay, refreshOverlayLinks};
+  async function refreshLayouts(){viewLayouts=(await api('/api/automation/layouts')).layouts;for(const card of rules.children)renderActionTarget(card);}
+  return {init, load, refresh, decorateOverlay, updateOverlay, refreshOverlayLinks, refreshLayouts};
 })();

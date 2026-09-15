@@ -629,30 +629,8 @@ public partial class MainWindow : Window
 
     private static Rect CalculateOverlayBounds(CameraTile target, DoorbellOverlaySettings overlay)
     {
-        var maximumWidth = Math.Max(1,
-            target.ActualWidth * Math.Clamp(overlay.ViewportWidthPercent, 10, 95) / 100d);
-        var maximumHeight = Math.Max(1,
-            target.ActualHeight * Math.Clamp(overlay.ViewportHeightPercent, 10, 95) / 100d);
-        var (width, height) = CalculateDoorbellViewportSize(overlay, maximumWidth, maximumHeight);
-        var horizontalTravel = Math.Max(0, target.ActualWidth - width);
-        var verticalTravel = Math.Max(0, target.ActualHeight - height);
-        var left = horizontalTravel * overlay.ViewportHorizontalPositionPercent / 100d;
-        var top = verticalTravel * overlay.ViewportVerticalPositionPercent / 100d;
-        return new Rect(left, top, width, height);
-    }
-
-    private static (double Width, double Height) CalculateDoorbellViewportSize(
-        DoorbellOverlaySettings overlay,
-        double maximumWidth,
-        double maximumHeight)
-    {
-        if (overlay.ViewportShape is DoorbellViewportShape.Square or DoorbellViewportShape.Circle)
-        {
-            var side = Math.Max(1, Math.Min(maximumWidth, maximumHeight));
-            return (side, side);
-        }
-
-        return (maximumWidth, maximumHeight);
+        var bounds = OverlayGeometry.Calculate(overlay, target.ActualWidth, target.ActualHeight);
+        return new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
     }
 
     private static void ApplyOverlayWindowRegion(
