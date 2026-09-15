@@ -73,7 +73,7 @@ const dashboardUX = (() => {
     }
     for(const select of document.querySelectorAll('select[name="hostCameraSlot"]'))for(const option of select.options){const camera=cameraInventory.find(c=>c.slot===Number(option.value));if(camera)option.textContent=camera.name+' · #'+camera.slot;}
   }
-  function saved(camera) {const form=document.querySelector(`.camera-card[data-slot="${camera.slot}"]`);if(form){form.dataset.appliedEnabled=String(camera.enabled);form.dataset.appliedHost=form.elements.hostCameraSlot?.value||'';}const index=cameraInventory.findIndex(c=>c.slot===camera.slot);if(index>=0)cameraInventory[index]=camera;wallDesigner.updateCameras(cameraInventory);sync();}
+  function saved(camera) {if(camera.slot<10||camera.slot>25)automationUi.updateCamera(camera);const form=document.querySelector(`.camera-card[data-slot="${camera.slot}"]`);if(form){form.dataset.appliedEnabled=String(camera.enabled);form.dataset.appliedHost=form.elements.hostCameraSlot?.value||'';}const index=cameraInventory.findIndex(c=>c.slot===camera.slot);if(index>=0)cameraInventory[index]=camera;wallDesigner.updateCameras(cameraInventory);sync();}
   function health(t) {
     let summary=document.querySelector('#cameraHealth');if(!summary){summary=document.createElement('section');summary.id='cameraHealth';summary.className='panel health-summary';document.querySelector('#stats').before(summary);}
     const enabled=cameraInventory.filter(c=>c.enabled&&(!c.overlaySourceSlot||wallDesigner.active()?.tiles.some(t=>t.cameraSlot===c.slot))),connected=enabled.filter(c=>t.viewerConnected&&t.viewer?.cameras.some(v=>v.slot===c.slot&&v.state==='Live')).length;

@@ -432,3 +432,22 @@ Browser previews automatically request fresh snapshots about every 15 seconds
 while visible in the active tab. Captures run one at a time, so large grids or
 slow streams can take longer. Preview age is separate from stream health; failed
 refreshes retain the previous image. These previews are not live video.
+
+### Following detections between streams (beta)
+
+In a rule, choose **Allow a newer detection to take over** to let a fresh
+person-detection episode on another stream replace its fullscreen or focused view
+before the clear timer expires. Repeated detections renew the existing episode
+without stealing focus back. Existing rules default to holding their view.
+When the winning episode expires, another still-active rule may resume; the
+standard layout returns after all relevant episodes expire. Manual dismissal
+still applies to the current episodes.
+
+Choose **Any detection-enabled stream** to use the stream/topic/zone mappings
+configured across rules, including disabled rules. Configure mappings using
+Selected streams first; unmapped RTSP feeds cannot trigger automation. Each
+stream must have a consistent topic and zone mapping across rules in this mode.
+Select **Focused layout**, your saved layout, and **Camera that detected the
+person** to follow detections. With takeover enabled and dynamic Focus 2, the
+newest detecting stream fills Focus 1 and the previous still-active stream fills
+Focus 2. A fixed Focus 2 selection continues to take precedence.

@@ -18,6 +18,8 @@ public sealed record AutomationRule
     // Zero follows each triggering source; positive values select a fixed camera.
     public int CameraSlot { get; init; }
     public int SecondCameraSlot { get; init; }
+    public bool AllowNewerDetection { get; init; }
+    public bool AnyConfiguredSource { get; init; }
     public double ClearMinutes { get; init; } = 2;
 }
 
@@ -32,6 +34,14 @@ public sealed record AutomationSettings
     public string ClientId { get; init; } = "rtspview-" + Guid.NewGuid().ToString("N")[..12];
     public AutomationRule[] Rules { get; init; } = [];
 
+    public AutomationSettings ResolveSources() => this with
+    {
+        Rules = Rules.Select(rule => rule.AnyConfiguredSource ? rule with
+        {
+            Sources = Rules.SelectMany(r => r.Sources ?? []).Distinct().ToArray()
+        } : rule).ToArray()
+    };
+
     public void Validate(AppSettings cameras, bool connectionRequired = false)
     {
         if ((Enabled || connectionRequired) && string.IsNullOrWhiteSpace(Host)) throw new InvalidDataException("Enter a broker host.");
@@ -40,7 +50,10 @@ public sealed record AutomationSettings
         if (ClientId is null || ClientId.Length is < 1 or > 64 || ClientId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_')) throw new InvalidDataException("Client ID must contain 1–64 letters, numbers, dashes or underscores.");
         if (Username is null || Username.Length > 256 || (Authenticate && string.IsNullOrWhiteSpace(Username))) throw new InvalidDataException("Enter a broker username.");
         if (Rules is null || Rules.Length > 32 || Rules.Any(r => r is null) || Rules.Select(r => r.Id).Distinct().Count() != Rules.Length) throw new InvalidDataException("Use at most 32 rules with unique IDs.");
-        foreach (var rule in Rules)
+        if (Rules.Any(r => r.Sources is null || r.Sources.Any(s => s is null))) throw new InvalidDataException("Invalid source mappings.");
+        if (Rules.Any(r => r.AnyConfiguredSource) && Rules.SelectMany(r => r.Sources).Distinct().GroupBy(s => s.CameraSlot).Any(g => g.Count() > 1))
+            throw new InvalidDataException("Any-stream rules require a consistent topic and zone mapping for each stream across rules.");
+        foreach (var rule in ResolveSources().Rules)
         {
             if (!Enum.IsDefined(rule.Action)) throw new InvalidDataException("Select a supported automation action.");
             if (rule.LayoutId is null || (rule.Action == AutomationAction.FocusedLayout && rule.LayoutId.Length > 0 && !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId)))
@@ -78,7 +91,7 @@ public sealed record AutomationSettings
 }
 
 public sealed record AutomationOverlayLease(string Id, int Slot, DateTimeOffset ExpiresAt,
-    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "", string LayoutId = "", int SecondCameraSlot = 0);
+    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "", string LayoutId = "", int SecondCameraSlot = 0, bool AllowNewerDetection = false);
 public sealed record AutomationPresentation(string ConfigurationHash, AutomationOverlayLease[] Leases);
 
 public static class AutomationConfiguration
@@ -125,7 +138,7 @@ public sealed class PersonOverlayEngine
         var sourceTime = eventTime ?? now;
         var expiry = (sourceTime > now ? now : sourceTime).AddMinutes(rule.ClearMinutes);
         if (existing is not null && existing.ExpiresAt > expiry) expiry = existing.ExpiresAt;
-        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id, rule.LayoutId, rule.SecondCameraSlot);
+        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id, rule.LayoutId, rule.SecondCameraSlot, rule.AllowNewerDetection);
     }
     public void Expire(DateTimeOffset now)
     {
@@ -135,7 +148,7 @@ public sealed class PersonOverlayEngine
     {
         Expire(now);
         if (!settings.Enabled || retained) return "Retained or disabled";
-        var rules = settings.Rules.Where(r => r.Enabled && r.Sources.Any(s => s.Topic == topic)).ToArray();
+        var rules = settings.ResolveSources().Rules.Where(r => r.Enabled && r.Sources.Any(s => s.Topic == topic)).ToArray();
         if (rules.Length == 0) return "Unmapped topic";
         if (payload.Length > 65536) return "Message too large";
         try

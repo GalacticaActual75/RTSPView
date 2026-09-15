@@ -76,7 +76,7 @@ public sealed class AutomationService : BackgroundService
 
     public async Task<ViewerCommandResult> TestRuleAsync(string ruleId, int sourceSlot, CancellationToken token)
     {
-        var settings = _stored.Settings;
+        var settings = _stored.Settings.ResolveSources();
         var rule = settings.Rules.SingleOrDefault(r => r.Id == ruleId);
         if (!settings.Enabled || rule?.Enabled != true) throw new InvalidDataException("Enable automation and save an enabled rule before testing.");
         if (!rule.Sources.Any(s => s.CameraSlot == sourceSlot)) throw new InvalidDataException("Select a source camera from this saved rule.");
@@ -100,7 +100,7 @@ public sealed class AutomationService : BackgroundService
 
     private static async Task Subscribe(IMqttClient client, AutomationSettings settings, CancellationToken token)
     {
-        var topics = settings.Rules.Where(r => r.Enabled).SelectMany(r => r.Sources).Select(s => s.Topic).Distinct().ToArray();
+        var topics = settings.ResolveSources().Rules.Where(r => r.Enabled).SelectMany(r => r.Sources).Select(s => s.Topic).Distinct().ToArray();
         if (topics.Length == 0) return;
         var builder = new MqttClientSubscribeOptionsBuilder();
         foreach (var topic in topics) builder.WithTopicFilter(topic);
@@ -173,7 +173,7 @@ public sealed class AutomationService : BackgroundService
                         engine.Clear(); sent = ""; lastEvents.Clear(); lastTriggered.Clear(); sentRules.Clear(); nextConnect = now; failures = 0;
                         await Send(engine, hash, stoppingToken);
                     }
-                    var settings = _stored.Settings;
+                    var settings = _stored.Settings.ResolveSources();
                     settings.Validate(cameras);
                     while (_ruleTests.Reader.TryRead(out var test))
                     {

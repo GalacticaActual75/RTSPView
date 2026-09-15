@@ -22,6 +22,33 @@ static async Task Until(Func<bool> condition, string reason)
 }
 
 var now = DateTimeOffset.UtcNow;
+// A new detection episode may replace a yielding fullscreen across action types.
+var takeoverEngine = new PersonOverlayEngine();
+var driveway = new AutomationRule { Action=AutomationAction.FullScreen, CameraSlot=1, Sources=[new(1,"drive")], AllowNewerDetection=true };
+var front = new AutomationRule { Action=AutomationAction.FocusedLayout, CameraSlot=0, LayoutId="follow", Sources=[new(2,"front"),new(3,"yard")], AllowNewerDetection=true };
+var takeover = new OverlayAutomationState();
+takeoverEngine.Trigger(driveway,1,now);
+takeoverEngine.Trigger(front,2,now.AddSeconds(1));
+takeover.Update(takeoverEngine.Leases.Values.ToArray(),now.AddSeconds(1));
+Check(takeover.Focus(now.AddSeconds(1))?.Slot==2,"New focused layout failed to replace yielding fullscreen");
+takeoverEngine.Trigger(driveway,1,now.AddSeconds(2));
+takeover.Update(takeoverEngine.Leases.Values.ToArray(),now.AddSeconds(2));
+Check(takeover.Focus(now.AddSeconds(2))?.Slot==2,"Repeated driveway detection stole focus back");
+takeoverEngine.Trigger(front,3,now.AddSeconds(3));
+takeover.Update(takeoverEngine.Leases.Values.ToArray(),now.AddSeconds(3));
+Check(takeover.FocusSlots(now.AddSeconds(3),"follow").SequenceEqual([3,2]),"Follow layout did not put newest stream first and previous active stream second");
+takeover.Dismiss();Check(takeover.Focus(now.AddSeconds(3)) is null,"Manual dismissal failed during takeover");
+var hold = new OverlayAutomationState();
+hold.Update([new("hold",1,now.AddMinutes(2),AutomationAction.FullScreen,now,AllowNewerDetection:false),new("new",2,now.AddMinutes(2),AutomationAction.FocusedLayout,now.AddSeconds(1),AllowNewerDetection:true)],now.AddSeconds(1));
+Check(hold.Focus(now.AddSeconds(1))?.Slot==1,"Default hold behavior changed");
+var anyRule = front with { Id=Guid.NewGuid().ToString("N"),AnyConfiguredSource=true,Sources=[] };
+var mapped = new AutomationSettings { Enabled=true,Host="localhost",Rules=[driveway with { Enabled=false },front with { Enabled=false },anyRule] };
+var anyEngine = new PersonOverlayEngine();
+Check(anyEngine.Accept(mapped,"drive",Event(now),false,now,now)=="Person detected" && anyEngine.Leases.Values.Single().Slot==1,"Any-stream rule did not use configured mapping from disabled rule");
+Check(anyEngine.Accept(mapped,"unknown",Event(now),false,now,now)=="Unmapped topic","Any-stream accepted unmapped stream");
+Check(anyEngine.Accept(mapped,"front",Event(now),true,now,now)!="Person detected","Any-stream accepted retained event");
+Console.WriteLine("PASS takeover across actions, stable renewals, two-focus ordering, hold/manual override, and any mapped source");
+
 var rule = new AutomationRule { Name = "Any entrance", Sources = [new(1, "scrypted/44/ObjectDetector"), new(2, "scrypted/45/ObjectDetector")], OverlaySlot = 10, ClearMinutes = 0.1 };
 var settings = new AutomationSettings { Enabled = true, Host = "localhost", Rules = [rule] };
 var engine = new PersonOverlayEngine();

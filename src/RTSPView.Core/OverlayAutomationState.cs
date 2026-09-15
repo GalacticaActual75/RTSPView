@@ -15,9 +15,26 @@ public sealed class OverlayAutomationState
     public void Clear() { _leases = []; _dismissed.Clear(); }
     private IEnumerable<AutomationOverlayLease> Active(DateTimeOffset now) => _leases.Where(l => l.ExpiresAt > now && !_dismissed.Contains(l.Id));
     public HashSet<int> ActiveSlots(DateTimeOffset now) => Active(now).Where(l => l.Action == AutomationAction.Overlay).Select(l => l.Slot).ToHashSet();
-    public AutomationOverlayLease? Focus(DateTimeOffset now) => Active(now).Where(l => l.Action != AutomationAction.Overlay)
-        .OrderBy(l => l.Action == AutomationAction.FullScreen ? 0 : 1).ThenBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).FirstOrDefault();
-    public int[] FocusSlots(DateTimeOffset now, string layoutId) => Active(now)
-        .Where(l => l.Action == AutomationAction.FocusedLayout && l.LayoutId == layoutId)
-        .OrderBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).SelectMany(l => l.SecondCameraSlot > 0 ? new[] { l.Slot, l.SecondCameraSlot } : new[] { l.Slot }).Distinct().Take(2).ToArray();
+    public AutomationOverlayLease? Focus(DateTimeOffset now)
+    {
+        var candidates = Active(now).Where(l => l.Action != AutomationAction.Overlay).ToArray();
+        var winner = candidates.OrderBy(l => l.Action == AutomationAction.FullScreen ? 0 : 1)
+            .ThenBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).FirstOrDefault();
+        if (winner is null) return null;
+        foreach (var next in candidates.OrderBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal))
+            if (winner.AllowNewerDetection && next.StartedAt > winner.StartedAt && next.Slot != winner.Slot)
+                winner = next;
+        return winner;
+    }
+    public int[] FocusSlots(DateTimeOffset now, string layoutId)
+    {
+        var winner = Focus(now);
+        var candidates = Active(now).Where(l => l.Action == AutomationAction.FocusedLayout && l.LayoutId == layoutId);
+        var ordered = winner?.AllowNewerDetection == true
+            ? candidates.OrderByDescending(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal)
+            : candidates.OrderBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal);
+        return ordered.OrderBy(l => l.Id == winner?.Id ? 0 : 1)
+            .SelectMany(l => l.SecondCameraSlot > 0 ? new[] { l.Slot, l.SecondCameraSlot } : new[] { l.Slot })
+            .Distinct().Take(2).ToArray();
+    }
 }

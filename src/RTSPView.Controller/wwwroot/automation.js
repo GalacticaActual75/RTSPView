@@ -25,7 +25,7 @@ const automationUi = (() => {
       <div class="automation-rules"></div><button type="button" class="secondary automation-add">Add rule</button>
       <details class="automation-help"><summary>How rules behave</summary><p>Choose <b>Automation only</b> as the target’s Display mode in Overlays to hide it while waiting. Always visible overlays remain on screen after a rule clears.</p>
       <p>Clear means no new person detections; it does not prove the scene is empty. During a broker outage, the existing clear timer still expires.</p>
-      <p>Fullscreen takes priority over focused layout. Competing cameras wait in detection order until earlier detections clear. Manual double-clicks override active automation; saved layouts are restored when focus clears.</p>
+      <p>By default fullscreen takes priority and views hold until their timer expires. Enable newer-detection takeover on a rule to let another stream replace it immediately. Any detection-enabled stream uses your configured topic and zone mappings. Manual double-clicks override active automation; saved layouts are restored when focus clears.</p>
       </details></fieldset><details class="mqtt-tools automation-section" aria-label="MQTT discovery and details">
       <summary>Find camera events & troubleshoot</summary><p>Discover event topics using your connection settings. Listening lasts five minutes and does not activate rules.</p>
       <details><summary>Advanced discovery settings</summary><label>Topic prefix<input class="mqtt-prefix" value="scrypted" maxlength="400" spellcheck="false"></label></details>
@@ -100,13 +100,17 @@ const automationUi = (() => {
     card.innerHTML = `<div class="automation-grid rule-identity">
       <label>Rule name<input class="rule-name" maxlength="100" required></label>
       <label><input class="rule-enabled" type="checkbox"> Enabled</label></div>
-      <h4>When a person is detected on</h4><div class="rule-sources"></div>
+      <h4>When a person is detected on</h4>
+      <label>Trigger streams<select class="rule-source-mode"><option value="selected">Selected streams</option><option value="any">Any detection-enabled stream</option></select></label>
+      <p class="source-mode-help" hidden>Uses the stream/topic/zone mappings configured across your rules, including disabled rules. Add mappings with Selected streams first. RTSP feeds without detection mappings cannot trigger this rule.</p><div class="rule-sources"></div>
       <button type="button" class="secondary source-add">Add source camera</button>
       <h4>Then</h4><div class="automation-grid rule-action-grid">
       <label>Action<select class="rule-action"><option value="0">Show overlay</option><option value="1">Fullscreen camera</option><option value="2">Focused layout</option></select></label>
       <label class="target-label"></label></div>
       <p class="target-help"></p>
-      <h4>Keep it shown until</h4><label class="rule-timing">No new person detections for (minutes)<input class="rule-delay" type="number" min="0.1" max="120" step="0.1" required></label>
+      <h4>Keep it shown until</h4>
+      <label>When another stream detects a person<select class="rule-takeover"><option value="hold">Hold until clear delay expires</option><option value="newer">Allow a newer detection to take over</option></select></label>
+      <p>Takeover applies to fullscreen and focused views. Repeated detections extend the timer without stealing focus. After a view clears, another still-active rule may resume.</p><label class="rule-timing">No new person detections for (minutes)<input class="rule-delay" type="number" min="0.1" max="120" step="0.1" required></label>
       <div class="control-buttons rule-actions">
       <button type="button" class="secondary rule-remove">Delete rule</button></div><p class="rule-status" role="status">Not saved</p>`;
     const editor = document.createElement('details'); editor.className = 'rule-editor'; editor.open = !collapsed;
@@ -116,6 +120,8 @@ const automationUi = (() => {
     if (collapsed) card.querySelector('.rule-status').textContent = 'Saved';
     card.querySelector('.rule-name').value = rule.name; card.querySelector('.rule-enabled').checked = rule.enabled;
     card.querySelector('.rule-delay').value = rule.clearMinutes;
+    card.querySelector('.rule-takeover').value=rule.allowNewerDetection?'newer':'hold';
+    card.querySelector('.rule-source-mode').value=rule.anyConfiguredSource?'any':'selected';
     card.dataset.overlayTarget = rule.overlaySlot || ''; card.dataset.cameraTarget = rule.cameraSlot || 0;
     card.dataset.layoutTarget = rule.layoutId || '';card.dataset.secondCameraTarget=rule.secondCameraSlot||0;
     card.querySelector('.rule-action').value = rule.action || 0;
@@ -123,13 +129,20 @@ const automationUi = (() => {
     card.querySelector('.rule-action').onchange = () => { renderActionTarget(card); dirty = true; };
     for (const source of rule.sources.length ? rule.sources : [{}]) addSource(card.querySelector('.rule-sources'), source);
     card.querySelector('.source-add').onclick = () => { if (card.querySelector('.rule-sources').children.length < 32) addSource(card.querySelector('.rule-sources')); dirty = true; card.dispatchEvent(new Event('change', {bubbles:true})); };
+    const applySourceMode=()=>{
+      const any=card.querySelector('.rule-source-mode').value==='any';
+      card.querySelector('.rule-sources').hidden=any;card.querySelector('.source-add').hidden=any;
+      card.querySelector('.source-mode-help').hidden=!any;
+      for(const input of card.querySelectorAll('.rule-sources input,.rule-sources select'))input.disabled=any;
+    };
+    card.querySelector('.rule-source-mode').onchange=()=>{applySourceMode();dirty=true;};applySourceMode();
     card.querySelector('.rule-remove').onclick = () => { card.remove(); dirty = true; };
     const updateSummary = () => {
       const action = card.querySelector('.rule-action'), target = card.querySelector('.rule-target');
       const name = document.createElement('span'); name.className = 'rule-summary-name'; name.textContent = card.querySelector('.rule-name').value.trim() || 'Unnamed rule';
       const description = document.createElement('span'); description.className = 'rule-summary-description';
-      const sources = [...card.querySelectorAll('.source-camera')].filter(s => s.value).length;
-      description.textContent = `When any of ${sources} cameras detects a person: ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'}. Clear after ${card.querySelector('.rule-delay').value} minutes without detections${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
+      const sources = card.querySelector('.rule-source-mode').value==='any'?'any detection-enabled stream': 'any of '+[...card.querySelectorAll('.source-camera')].filter(s => s.value).length+' selected streams';
+      description.textContent = `When ${sources} detects a person: ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'}. Clear after ${card.querySelector('.rule-delay').value} minutes without detections${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
       const second=card.querySelector('.rule-second-target');if(second&&Number(second.value)>0)description.textContent+=' · Focus 2: '+second.selectedOptions[0].textContent;
       const zones = [...card.querySelectorAll('.source-zone')].map(z => z.value.trim()).filter(Boolean);
       if (zones.length) description.textContent += ' · Required zones: ' + [...new Set(zones)].join(', ');
@@ -137,9 +150,10 @@ const automationUi = (() => {
     };
     card.addEventListener('input', updateSummary); card.addEventListener('change', updateSummary); updateSummary();
     const testControls = document.createElement('div'); testControls.className = 'control-buttons rule-test-controls';
-    const testSource = optionSelect(rule.sources.map(s => ({slot:s.cameraSlot, name:inventory.find(c => c.slot === s.cameraSlot)?.name || 'Camera'})), rule.sources[0]?.cameraSlot, 'Test source camera');
+    const testSources=rule.anyConfiguredSource?[...new Map(savedRules.flatMap(r=>r.sources).map(s=>[s.cameraSlot,s])).values()]:rule.sources;
+    const testSource = optionSelect(testSources.map(s => ({slot:s.cameraSlot, name:inventory.find(c => c.slot === s.cameraSlot)?.name || 'Camera'})), testSources[0]?.cameraSlot, 'Test source camera');
     testSource.required = false;
-    testSource.hidden = rule.sources.length < 2;
+    testSource.hidden = testSources.length < 2;
     const testButton = document.createElement('button'); testButton.type = 'button'; testButton.className = 'secondary'; testButton.textContent = 'Test';
     testButton.setAttribute('aria-label', 'Test ' + rule.name);
     const testMessage = document.createElement('p'); testMessage.className = 'rule-test-message'; testMessage.setAttribute('role','status');
@@ -161,6 +175,9 @@ const automationUi = (() => {
   }
   function renderActionTarget(card) {
     const action = Number(card.querySelector('.rule-action').value), label = card.querySelector('.target-label');
+    const actionGrid=card.querySelector('.rule-action-grid');
+    actionGrid.append(label);
+    card.querySelector('.rule-layout-label')?.remove();
     const items = action === 0 ? overlays : inventory.filter(c =>
       (c.enabled && !overlays.some(o => o.slot === c.slot)) || (action === 1 && overlays.some(o => o.slot === c.slot)));
     const selected = action === 0 ? Number(card.dataset.overlayTarget) : Number(card.dataset.cameraTarget);
@@ -171,10 +188,10 @@ const automationUi = (() => {
     card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Automatic layout: this camera occupies a 2×2 tile at the upper left, with all other enabled, configured main streams in smaller tiles. Uses the active layout’s orientation and restores that layout after the clear delay. Tile sizes and positions cannot currently be customized. Apply changes, then use Test to preview it.';
     card.querySelector('.rule-layout-choice')?.remove();
     if(action===2){
-      const block=document.createElement('div');block.className='rule-layout-choice';const layoutLabel=document.createElement('label');layoutLabel.textContent='Automation layout';const picker=document.createElement('select');picker.className='rule-layout';picker.add(new Option('Automatic — all enabled streams',''));for(const item of viewLayouts)picker.add(new Option(item.name,item.id));if(card.dataset.layoutTarget&&!viewLayouts.some(l=>l.id===card.dataset.layoutTarget))picker.add(new Option('Unavailable layout',card.dataset.layoutTarget));picker.value=card.dataset.layoutTarget;picker.onchange=()=>{card.dataset.layoutTarget=picker.value;renderActionTarget(card);};layoutLabel.append(picker);block.append(layoutLabel);
+      const block=document.createElement('div');block.className='rule-layout-choice automation-grid';const layoutLabel=document.createElement('label');layoutLabel.className='rule-layout-label';layoutLabel.textContent='Automation layout';const picker=document.createElement('select');picker.className='rule-layout';picker.add(new Option('Automatic — all enabled streams',''));for(const item of viewLayouts)picker.add(new Option(item.name,item.id));if(card.dataset.layoutTarget&&!viewLayouts.some(l=>l.id===card.dataset.layoutTarget))picker.add(new Option('Unavailable layout',card.dataset.layoutTarget));picker.value=card.dataset.layoutTarget;picker.onchange=()=>{card.dataset.layoutTarget=picker.value;renderActionTarget(card);};layoutLabel.append(picker);actionGrid.append(layoutLabel);block.append(label);
       const dual=viewLayouts.find(l=>l.id===card.dataset.layoutTarget)?.focusSlots?.length===2;
       if(dual){label.firstChild.textContent='Focus 1 camera';select.setAttribute('aria-label','Focus 1 camera');const secondLabel=document.createElement('label');secondLabel.textContent='Focus 2 camera';const second=optionSelect(items,Number(card.dataset.secondCameraTarget),'Focus 2 camera');second.className='rule-second-target';second.add(new Option('Next camera with an active detection','0'),1);second.value=String(card.dataset.secondCameraTarget||0);second.onchange=()=>{card.dataset.secondCameraTarget=second.value;};secondLabel.append(second);block.append(secondLabel);}
-      const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Edit automation layouts';edit.onclick=()=>wallDesigner.openAutomation();block.append(edit);card.querySelector('.target-help').before(block);
+      const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Edit automation layouts';edit.style.gridColumn='1 / -1';edit.style.justifySelf='start';edit.onclick=()=>wallDesigner.openAutomation();block.append(edit);card.querySelector('.target-help').before(block);
       card.querySelector('.target-help').textContent='Choose a saved one-focus or two-focus layout, or use the automatic arrangement. This rule supplies the camera for the focus tile; the layout editor only sets its position and size. For a two-focus layout, choose a Focus 2 camera to show both cameras on the same trigger, or let the next active detection fill it. Choose “Camera that detected the person” to focus multiple source cameras. The standard view returns when detections clear.';
     }
   }
@@ -183,13 +200,14 @@ const automationUi = (() => {
     return { settings: {enabled: f.enabled.checked, host: f.host.value.trim(), port: Number(f.port.value), tls: f.tls.value === 'true',
       authenticate: f.authenticate.value === 'true', username: f.username.value, clientId: f.clientId.value,
       rules: [...rules.children].map(card => ({id: card.dataset.id, name: card.querySelector('.rule-name').value,
+        anyConfiguredSource:card.querySelector('.rule-source-mode').value==='any', allowNewerDetection:card.querySelector('.rule-takeover').value==='newer',
         enabled: card.querySelector('.rule-enabled').checked, action: Number(card.querySelector('.rule-action').value),
         layoutId: card.dataset.layoutTarget || '',
         secondCameraSlot: Number(card.querySelector('.rule-second-target')?.value||0),
         overlaySlot: Number(card.querySelector('.rule-action').value) === 0 ? Number(card.querySelector('.rule-target').value) : 0,
         cameraSlot: Number(card.querySelector('.rule-action').value) !== 0 ? Number(card.querySelector('.rule-target').value) : 0,
         clearMinutes: Number(card.querySelector('.rule-delay').value), sources: [...card.querySelectorAll('.automation-source')].map(row => ({
-          cameraSlot: Number(row.querySelector('.source-camera').value), topic: row.querySelector('.source-topic').value.trim(), requiredZone: row.querySelector('.source-zone').value.trim()}))}))},
+          cameraSlot: Number(row.querySelector('.source-camera').value), topic: row.querySelector('.source-topic').value.trim(), requiredZone: row.querySelector('.source-zone').value.trim()})).filter(s=>card.querySelector('.rule-source-mode').value!=='any'||s.topic)}))},
       password: f.password.value || null, clearPassword: f.clearPassword.checked};
   }
   function render(data) {
@@ -354,8 +372,22 @@ const automationUi = (() => {
   function updateOverlay(camera) {
     overlays = overlays.filter(c => c.slot !== camera.slot); if (camera.rtspUrl) overlays.push(camera);
     inventory = inventory.filter(c => c.slot !== camera.slot && c.slot !== camera.slot+23); if (camera.rtspUrl) inventory.push(camera, {...camera,slot:camera.slot+23,name:camera.name+' (overlay source)',enabled:true});
-    refreshOverlayLinks(); refresh();
+    refreshStreamChoices(); refreshOverlayLinks(); refresh();
+  }
+  function refreshStreamChoices() {
+    for(const card of rules.children) {
+      for(const select of card.querySelectorAll('.source-camera')) {
+        const value=select.value, replacement=optionSelect(inventory,Number(value),'Source camera');
+        select.replaceChildren(...replacement.options);select.value=value;
+      }
+      renderActionTarget(card);
+    }
+  }
+  function updateCamera(camera) {
+    inventory=inventory.filter(c=>c.slot!==camera.slot);
+    if(camera.rtspUrl)inventory.push(camera);
+    refreshStreamChoices();
   }
   async function refreshLayouts(){viewLayouts=(await api('/api/automation/layouts')).layouts;for(const card of rules.children)renderActionTarget(card);}
-  return {init, load, refresh, decorateOverlay, updateOverlay, refreshOverlayLinks, refreshLayouts};
+  return {init, load, refresh, decorateOverlay, updateCamera, updateOverlay, refreshOverlayLinks, refreshLayouts};
 })();
