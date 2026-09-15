@@ -2,6 +2,18 @@ namespace RTSPView.Core;
 
 public static class StreamCatalog
 {
+    public static AppSettings DeleteOverlay(AppSettings settings, int slot)
+    {
+        if (!settings.AllOverlays().Any(o => o.Camera.Slot == slot) || settings.DeletedOverlaySlots.Contains(slot))
+            throw new InvalidDataException("That overlay has already been removed or does not exist.");
+        var source = SourceSlot(slot);
+        if (settings.Layouts.Concat(settings.AutomationViewLayouts).Any(l => l.Tiles.Any(t => t.CameraSlot == source)))
+            throw new InvalidDataException("A layout uses this overlay's original stream. Remove it from the layout before deleting the overlay.");
+        return (settings with {
+            DeletedOverlaySlots = [..settings.DeletedOverlaySlots, slot],
+            DiagnosticsAutoOpenExcludedSlots = settings.DiagnosticsAutoOpenExcludedSlots.Where(s => s != slot && s != source).ToArray()
+        }).Normalize();
+    }
     public const int MaximumSlot = 48;
     public static bool IsOverlaySource(int slot) => slot is >= 33 and <= 48;
     public static int SourceSlot(int overlaySlot) => overlaySlot + 23;

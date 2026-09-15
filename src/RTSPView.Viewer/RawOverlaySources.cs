@@ -17,7 +17,8 @@ public partial class MainWindow
         }
         foreach (var source in sources)
         {
-            var camera = source with { Enabled = EffectiveFocusedSlot == source.Slot || (!EffectiveFocusedSlot.HasValue && layout.Tiles.Any(t => t.CameraSlot == source.Slot)) };
+            // Keep configured original sources warm across focus and layout changes.
+            var camera = source with { Enabled = true };
             if (!_rawOverlaySources.TryGetValue(source.Slot, out var entry))
             {
                 var tile = new CameraTile { SharedDiagnostics = true, Visibility = Visibility.Collapsed };
@@ -26,7 +27,7 @@ public partial class MainWindow
                 tile.FocusRequested += Tile_FocusRequested;
                 WallGrid.Children.Add(tile);
                 // A separate normal renderer: no overlay mask, zoom, crop or opacity.
-                tile.Initialize(_libVlc, _logger, camera, _settings.RequestHardwareDecoding);
+                tile.Initialize(_libVlc, _logger, camera, _settings.RequestHardwareDecoding, compositedVideo: true, preserveWholeFrame: true);
                 tile.ApplyOverlayPreferences(_settings.ShowCameraNames, _settings.ShowCameraStats);
                 entry = (tile, camera);
             }

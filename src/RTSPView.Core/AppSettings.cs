@@ -20,6 +20,7 @@ public sealed record AppSettings
     public const int MaximumAdditionalOverlays = 14;
     public const int MaximumStreamSlot = 32;
     public IReadOnlyList<DoorbellOverlaySettings> AdditionalOverlays { get; init; } = [];
+    public IReadOnlyList<int> DeletedOverlaySlots { get; init; } = [];
     public IEnumerable<DoorbellOverlaySettings> AllOverlays() => new[] { DoorbellOverlay, GarageOverlay }.Concat(AdditionalOverlays);
     public bool RequestHardwareDecoding { get; init; } = true;
     public bool StartFullScreen { get; init; } = true;
@@ -91,6 +92,7 @@ public sealed record AppSettings
         {
             SchemaVersion = CurrentSchemaVersion,
             DeletedCameraSlots = (DeletedCameraSlots ?? []).Where(MainCameraSlots.Contains).Distinct().ToArray(),
+            DeletedOverlaySlots = (DeletedOverlaySlots ?? []).Where(s => s >= 10 && s < 12 + Math.Min((AdditionalOverlays ?? []).Count, MaximumAdditionalOverlays)).Distinct().ToArray(),
             DiagnosticsAutoOpenExcludedSlots = (DiagnosticsAutoOpenExcludedSlots ?? []).Where(slot => slot >= 1 && slot <= StreamCatalog.MaximumSlot).Distinct().Order().ToArray(),
             Snapshots = (Snapshots ?? new()).Normalize(),
             Cameras = normalized,
@@ -113,6 +115,8 @@ public sealed record AppSettings
         int cameraSlot,
         string defaultName)
     {
+        if ((DeletedOverlaySlots ?? []).Contains(cameraSlot))
+            overlay = new DoorbellOverlaySettings { Camera = new CameraSettings { Slot = cameraSlot, Name = defaultName, Enabled = false } };
         var position = Enum.IsDefined(overlay.Position) ? overlay.Position : PictureInPicturePosition.BottomLeft;
         var viewportShape = Enum.IsDefined(overlay.ViewportShape) ? overlay.ViewportShape : DoorbellViewportShape.Native;
         var customViewportIsValid = CustomViewportPathValidator.IsValid(

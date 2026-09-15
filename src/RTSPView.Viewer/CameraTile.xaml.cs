@@ -174,8 +174,11 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         }
     }
 
-    public void Initialize(LibVLC libVlc, RollingFileLogger logger, CameraSettings settings, bool requestHardwareDecoding, bool compositedVideo = false)
+    private bool _preserveWholeFrame;
+
+    public void Initialize(LibVLC libVlc, RollingFileLogger logger, CameraSettings settings, bool requestHardwareDecoding, bool compositedVideo = false, bool preserveWholeFrame = false)
     {
+        _preserveWholeFrame = preserveWholeFrame;
         _useCompositedOutput = compositedVideo;
         settings = PlaybackSettings(settings);
         if (compositedVideo)
@@ -589,6 +592,15 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _lastSizingSourceHeight = source.Height;
         if (_useCompositedOutput)
         {
+            if (_preserveWholeFrame)
+            {
+                var scale = Math.Min(_videoDisplayWidth / source.Width, _videoDisplayHeight / source.Height);
+                CompositedImage.Width = source.Width * scale;
+                CompositedImage.Height = source.Height * scale;
+                System.Windows.Controls.Canvas.SetLeft(CompositedImage, (_videoDisplayWidth - CompositedImage.Width) / 2);
+                System.Windows.Controls.Canvas.SetTop(CompositedImage, (_videoDisplayHeight - CompositedImage.Height) / 2);
+                return;
+            }
             var layout = DoorbellVideoTransform.CalculateLayout(source.Width, source.Height,
                 _videoDisplayWidth, _videoDisplayHeight, _videoZoomPercent,
                 _imageHorizontalPositionPercent, _imageVerticalPositionPercent);

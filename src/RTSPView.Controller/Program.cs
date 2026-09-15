@@ -404,6 +404,13 @@ app.MapPost("/api/overlays", async () =>
     try
     {
         var settings = await settingsStore.LoadAsync();
+        var reuse = settings.DeletedOverlaySlots.FirstOrDefault();
+        if (reuse != 0)
+        {
+            var restored = (settings with { DeletedOverlaySlots = settings.DeletedOverlaySlots.Where(s => s != reuse).ToArray() }).Normalize();
+            await settingsStore.SaveAsync(restored);
+            return Results.Ok(restored.AllOverlays().Single(o => o.Camera.Slot == reuse));
+        }
         if (settings.AdditionalOverlays.Count >= AppSettings.MaximumAdditionalOverlays)
             return Results.BadRequest(new { error = "A maximum of 16 overlays is supported." });
         var count = settings.AdditionalOverlays.Count;
@@ -423,7 +430,7 @@ app.MapPut("/api/overlays/{slot:int}", async (int slot, DoorbellOverlaySettings 
     {
         var settings = await settingsStore.LoadAsync();
         var index = slot - 12;
-        if (index < 0 || index >= settings.AdditionalOverlays.Count) return Results.NotFound(new { error = "Overlay no longer exists. Reload the page." });
+        if (index < 0 || index >= settings.AdditionalOverlays.Count || settings.DeletedOverlaySlots.Contains(slot)) return Results.NotFound(new { error = "Overlay no longer exists. Reload the page." });
         var overlays = settings.AdditionalOverlays.ToArray();
         overlays[index] = overlay with { Camera = (overlay.Camera ?? new CameraSettings()) with { Slot = slot } };
         var updated = (settings with { AdditionalOverlays = overlays }).Normalize();
@@ -432,6 +439,22 @@ app.MapPut("/api/overlays/{slot:int}", async (int slot, DoorbellOverlaySettings 
         return Results.Ok(updated.AdditionalOverlays[index]);
     }
     catch (InvalidDataException exception) { return Results.BadRequest(new { error = exception.Message }); }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
+
+app.MapDelete("/api/overlays/{slot:int}", async (int slot, AutomationService automation) =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        if (automation.UsesOverlay(slot)) return Results.BadRequest(new { error = "An automation rule uses this overlay or its original stream. Remove that reference before deleting it." });
+        var settings = await settingsStore.LoadAsync();
+        await settingsStore.SaveAsync(StreamCatalog.DeleteOverlay(settings, slot));
+        try { File.Delete(Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg")); } catch (IOException) { }
+        auditLog.Write("AUDIT", $"Overlay {slot} deleted from web admin");
+        return Results.Ok(new { deleted = slot });
+    }
+    catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
     finally { configGate.Release(); }
 }).RequireAuthorization();
 

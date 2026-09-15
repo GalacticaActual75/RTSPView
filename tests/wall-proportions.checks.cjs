@@ -2,11 +2,15 @@ const assert=require('node:assert/strict'),balance=require('../src/RTSPView.Cont
 const standard=balance(presets.get('3'));
 assert.deepEqual(standard.rows,[1/3,1/3,1/3]);assert.deepEqual(standard.columns,[1/3,1/3,1/3]);
 const layout={rows:4,columns:3,tiles:[{row:0,column:0,rowSpan:3,columnSpan:2},...[0,1,2,3].map(row=>({row,column:2,rowSpan:1,columnSpan:1})),...[0,1].map(column=>({row:3,column,rowSpan:1,columnSpan:1}))]};
-const p=balance(layout);assert(Math.abs(p.rows[3]-.3)<1e-10);assert(Math.abs(p.columns[2]-.2653333333333333)<1e-10);
+const p=balance(layout);assert.deepEqual(p.rows,[.25,.25,.25,.25]);assert.deepEqual(p.columns,[1/3,1/3,1/3]);
+const mixed={rows:4,columns:4,tiles:[{row:0,column:0,rowSpan:3,columnSpan:2},{row:0,column:2,rowSpan:2,columnSpan:2},...[2,3].map(column=>({row:2,column,rowSpan:1,columnSpan:1})),...[0,1,2,3].map(column=>({row:3,column,rowSpan:1,columnSpan:1}))]};
+const mixedBounds=balance(mixed);assert(Math.abs(mixedBounds.rows[3]-.27)<1e-10,'native parity');
+for(const t of mixed.tiles.filter(t=>t.rowSpan===1&&t.columnSpan===1)){const r=mixedBounds.bounds(t);assert(Math.abs(r.width-.25)<1e-10);assert(Math.abs(r.height-.27)<1e-10);}
 for(const preset of presets.catalog)for(const format of ['16:9','9:16']){
  const l=presets.get(preset.id,format);l.aspectRatio=format;const before=JSON.stringify(l),p=balance(l);
  for(const tracks of [p.rows,p.columns]){assert(Math.abs(tracks.reduce((a,b)=>a+b,0)-1)<1e-10);assert(tracks.every(v=>v>0&&Number.isFinite(v)));}
  for(const tile of l.tiles){const b=p.bounds(tile);assert(b.left>=-1e-10&&b.top>=-1e-10&&b.left+b.width<=1+1e-10&&b.top+b.height<=1+1e-10);assert.equal(p.cell(p.columns,b.left+b.width/100),tile.column);}
+ const small=l.tiles.filter(t=>t.rowSpan===1&&t.columnSpan===1).map(p.bounds);for(const b of small){assert(Math.abs(b.width-small[0].width)<1e-10);assert(Math.abs(b.height-small[0].height)<1e-10);}
  assert.equal(JSON.stringify(l),before);
 }
 console.log('PASS preview proportions: unchanged 3x3, native parity, landscape/portrait bounds and pointer cells');

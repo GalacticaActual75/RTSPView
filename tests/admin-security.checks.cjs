@@ -87,6 +87,19 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
 
   assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:10}]}})).status,400,'focused layout rejects overlay target');
   await request(a,'/api/automation','PUT',{settings:automation.settings});
+  await request(a,'/api/doorbell','PUT',automaticOverlay);
+  const overlayRule={...focusRule,action:0,cameraSlot:0,overlaySlot:10};
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[overlayRule]}})).status,200);
+  assert.equal((await request(a,'/api/overlays/10','DELETE')).status,400,'rule prevents overlay deletion');
+  await request(a,'/api/automation','PUT',{settings:automation.settings});
+  a.csrf='';assert.equal((await request(a,'/api/overlays/10','DELETE')).status,400,'overlay deletion requires CSRF');await session(a);
+  assert.equal((await request(a,'/api/overlays/10','DELETE')).status,200,'built-in overlay can be deleted');
+  assert.equal((await request(a,'/api/config')).json.doorbellOverlay.camera.rtspUrl,'','overlay credentials cleared');
+  assert((await request(a,'/api/config')).json.deletedOverlaySlots.includes(10),'overlay deletion persists');
+  assert.equal((await request(a,'/api/overlays','POST')).json.camera.slot,10,'deleted built-in overlay slot reused');
+  const extra=(await request(a,'/api/overlays','POST')).json;
+  assert.equal((await request(a,'/api/overlays/'+extra.camera.slot,'DELETE')).status,200,'additional overlay can be deleted');
+  assert.equal((await request(a,'/api/overlays','POST')).json.camera.slot,extra.camera.slot,'additional overlay slot reused');
   await request(a,'/api/cameras/1','PUT',config.cameras[0]);await request(a,'/api/cameras/2','PUT',config.cameras[1]);
   assert.equal((await request(a,'/api/dependencies/pawnio/install','POST',{confirmed:false})).status,400,'dependency install requires confirmation');
   assert.equal((await request(a,'/api/dependencies/pawnio/arbitrary','POST',{confirmed:true})).status,404,'arbitrary maintenance actions rejected');

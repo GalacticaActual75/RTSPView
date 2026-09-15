@@ -403,9 +403,18 @@ layout placements without renumbering other streams; Add stream reuses removed
 slots. Remove automation references or change a configured overlay's host first
 if deletion reports a dependency.
 
+Use **Delete overlay** on the Overlays tab to remove an overlay, including Doorbell
+or Garage. This clears its connection, shape and framing and removes its original
+stream entry. Remove references in automation rules and layouts first; the delete
+action reports these dependencies. Other overlay IDs stay unchanged, and **Add
+overlay** reuses deleted slots.
+
 Configured overlay feeds also appear in Streams as **(overlay source)** entries
 and in both layout editors. These share their source connection settings with
 Overlays, but layout playback uses the complete original frame, with no overlay
 crop, shape, zoom or opacity. Edit the shared connection through **Edit source in
 Overlays**. Overlay presentation and layout playback can coexist; the additional
-normal player connects only while that source is displayed in the wall.
+original-stream player stays connected and decodes in the background, ready for
+focus and layout changes. It displays the full frame with aspect-fit sizing and
+uses software decoding; configured overlay sources therefore add background CPU
+and network load even when their original streams are not currently visible.

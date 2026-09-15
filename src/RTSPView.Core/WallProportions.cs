@@ -8,6 +8,15 @@ public static class WallProportions
     {
         var rows = Enumerable.Repeat(1d / layout.Rows, layout.Rows).ToArray();
         var columns = Enumerable.Repeat(1d / layout.Columns, layout.Columns).ToArray();
+        var small = layout.Tiles.Where(t => t.RowSpan == 1 && t.ColumnSpan == 1).ToArray();
+        int[][] Groups(int count, IEnumerable<int> linked)
+        {
+            var shared = linked.Distinct().Order().ToArray();
+            return (shared.Length > 0 ? new[] { shared } : Array.Empty<int[]>())
+                .Concat(Enumerable.Range(0, count).Where(i => !shared.Contains(i)).Select(i => new[] { i })).ToArray();
+        }
+        var rowGroups = Groups(layout.Rows, small.Select(t => t.Row));
+        var columnGroups = Groups(layout.Columns, small.Select(t => t.Column));
         var aspect = layout.AspectRatio == "9:16" ? 9d / 16 : 16d / 9;
         double Score()
         {
@@ -26,15 +35,17 @@ public static class WallProportions
             for (var pass = 0; pass < 12; pass++)
             {
                 var improved = false;
-                foreach (var tracks in new[] { rows, columns })
-                    for (var a = 0; a < tracks.Length; a++)
-                        for (var b = 0; b < tracks.Length; b++)
+                foreach (var (tracks, groups) in new[] { (rows, rowGroups), (columns, columnGroups) })
+                    for (var a = 0; a < groups.Length; a++)
+                        for (var b = 0; b < groups.Length; b++)
                         {
-                            if (a == b || tracks[b] - step < .35 / tracks.Length || tracks[a] + step > 2d / tracks.Length) continue;
-                            tracks[a] += step; tracks[b] -= step;
+                            var add = step / groups[a].Length; var subtract = step / groups[b].Length;
+                            if (a == b || groups[b].Any(i => tracks[i] - subtract < .35 / tracks.Length) || groups[a].Any(i => tracks[i] + add > 2d / tracks.Length)) continue;
+                            foreach (var i in groups[a]) tracks[i] += add;
+                            foreach (var i in groups[b]) tracks[i] -= subtract;
                             var score = Score();
                             if (score < best - 1e-10) { best = score; improved = true; }
-                            else { tracks[a] -= step; tracks[b] += step; }
+                            else { foreach (var i in groups[a]) tracks[i] -= add; foreach (var i in groups[b]) tracks[i] += subtract; }
                         }
                 if (!improved) break;
             }

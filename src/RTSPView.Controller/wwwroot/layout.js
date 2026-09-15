@@ -216,6 +216,6 @@ const adminLayout = (() => {
     pages.overlays.querySelector(`[data-overlay-target="${id}"]`).textContent=title;
     return grid;
   }
-  function clearExtraOverlays(){for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))if(!['doorbell','garage'].includes(grid.id))grid.remove();for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))if(!['doorbell','garage'].includes(button.dataset.overlayTarget))button.remove();selectOverlay('doorbell')}
+  function clearExtraOverlays(){for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))grid.remove();for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))button.remove();}
   return {init, metrics, card, release, overlayGrid, selectOverlay, clearExtraOverlays, select};
 })();

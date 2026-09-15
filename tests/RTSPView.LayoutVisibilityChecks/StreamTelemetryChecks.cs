@@ -10,7 +10,7 @@ using RTSPView.Viewer;
 
 internal static class StreamTelemetryChecks
 {
-    public static async Task Run()
+    public static async Task Run(bool preserveWholeFrame = false)
     {
         var directory = Path.Combine(Path.GetTempPath(), "RTSPView-stream-checks-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -31,7 +31,7 @@ internal static class StreamTelemetryChecks
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
         try
         {
-            tile.Initialize(engine, new RollingFileLogger(Path.Combine(directory, "logs")), new CameraSettings { Enabled = true }, false, compositedVideo: true);
+            tile.Initialize(engine, new RollingFileLogger(Path.Combine(directory, "logs")), new CameraSettings { Enabled = true }, false, compositedVideo: true, preserveWholeFrame: preserveWholeFrame);
             window.Show(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             // Substitute a deterministic local fixture only in the test; production remains RTSP-only.
             var player = (MediaPlayer)typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)!;
@@ -71,6 +71,16 @@ internal static class StreamTelemetryChecks
                     tile.ApplyOverlayPreferences(false, false);
                     var image = (System.Windows.Controls.Image)tile.FindName("CompositedImage");
                     var frameSource = image.Source;
+                    if (preserveWholeFrame)
+                    {
+                        window.Width = 700; window.Height = 300;
+                        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+                        typeof(CameraTile).GetMethod("ApplyVideoSizing", flags)!.Invoke(tile, [player]);
+                        var canvas = (FrameworkElement)tile.FindName("CompositedCanvas");
+                        if (Math.Abs(image.Width / image.Height - 4d / 3) > .001 || image.Width > canvas.ActualWidth + 1 || image.Height > canvas.ActualHeight + 1)
+                            throw new Exception("Original overlay source cropped or distorted its 4:3 frame in a wide tile");
+                        Console.WriteLine("PASS original overlay source preserves full frame in wide focus tile");
+                    }
                     for (var cycle = 0; cycle < 2; cycle++)
                     {
                         var before = tile.GetTelemetry().LastFrameAt;

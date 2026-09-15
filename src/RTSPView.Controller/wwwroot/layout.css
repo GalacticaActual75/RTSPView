@@ -78,6 +78,8 @@ button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #8e
 .doorbell-grid .camera-card>.actions .restart-camera{flex-basis:100%;background:transparent;color:var(--muted);text-align:left;padding:0}
 .overlay-placement{display:block}.overlay-placement fieldset{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;border:0;border-top:1px solid var(--line);margin:20px 0;padding:14px 0 0;min-width:0}.overlay-placement legend{font-weight:650;padding-right:12px}.overlay-placement fieldset label:first-of-type{grid-column:1/-1}
 .overlay-placement fieldset label{margin:4px 0}.overlay-help{font-size:13px;line-height:1.65;margin-top:10px!important;background:transparent;border:0;padding:0}
+.overlay-placement .reset-doorbell-framing{display:block;margin:16px 0;max-width:100%;white-space:normal}
+.delete-overlay{color:#ffb4b4}
 .save-state{font-size:13px}.actions{gap:8px;flex-wrap:wrap}.control-panel{margin-bottom:20px}.viewer-action-strip{background:transparent;border:0;padding:0}.display-note{background:transparent}.display-toggle-grid label{background:transparent}
 #passwordForm{margin-top:0!important}#configPanel a{padding:9px 14px;border-radius:6px;text-decoration:none;color:var(--text)}#configPanel .control-buttons{align-items:center}
 #controlState:empty{display:none}#controlState:not(:empty){position:fixed;bottom:20px;right:20px;max-width:calc(100% - 40px);background:#203449;padding:14px 20px;z-index:5;border:1px solid #486582;border-radius:8px}

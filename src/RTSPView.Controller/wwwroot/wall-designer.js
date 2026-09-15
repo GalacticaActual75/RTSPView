@@ -201,7 +201,7 @@ function createWallDesigner(isAutomation = false) {
         const input=el('input');input.type='number';input.min=1;input.max=isAutomation?6:4;input.value=tile[key]+offset;
         input.onchange=()=>updateTile({...tile,[key]:Number(input.value)-offset},selectedTile);field(label,input,properties);
       }
-      side.append(el('p','Position and size in grid cells. Row heights and column widths balance automatically for 16:9 feeds, without cropping or stretching.','designer-help'));
+      side.append(el('p','Position and size in grid cells. One-cell camera tiles stay equal in size. Larger tiles span multiple cells; all feeds keep their proportions without cropping or stretching.','designer-help'));
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].filter(o=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(overlays.length){const hosts=el('div',undefined,'designer-hosts');hosts.append(el('span','OVERLAYS','designer-eyebrow'));for(const o of overlays)hosts.append(el('span',o.camera.name,'designer-host'));side.append(hosts);}
       const remove=button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=0;changed();},side);remove.classList.add('designer-danger');remove.disabled=(isAutomation&&layout.focusSlots.includes(tile.cameraSlot));
