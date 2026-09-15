@@ -62,7 +62,7 @@ const automationUi = (() => {
   function optionSelect(items, value, label) {
     const select = document.createElement('select'); select.required = true; select.setAttribute('aria-label', label);
     const empty = document.createElement('option'); empty.value = ''; empty.textContent = `Select ${label.toLowerCase()}`; select.append(empty);
-    for (const item of items) { const option = document.createElement('option'); option.value = item.slot; option.textContent = item.name; select.append(option); }
+    for (const item of items) { const option = document.createElement('option'); option.value = item.slot; option.textContent = item.name + ' · #' + item.slot; select.append(option); }
     if (value && !items.some(i => i.slot === value)) { const missing = document.createElement('option'); missing.value = value; missing.textContent = `Unavailable stream (${value})`; select.append(missing); }
     select.value = value || ''; return select;
   }
