@@ -4,6 +4,8 @@
 
 RTSPView is a Windows viewer for RTSP streams: security cameras, encoder feeds, rebroadcasts, composite feeds, and other compatible RTSP sources. Arrange up to 16 main streams into configurable layouts, add picture-in-picture overlays, and manage playback through a web dashboard. It supports hardware decoding through LibVLC and automatic stream recovery. Controller supervises the WPF Viewer; both run as the signed-in Windows user.
 
+RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast RTSP streams and optionally responding to its MQTT detection events. **Scrypted is not required:** you can use compatible RTSP streams directly from cameras, NVRs, or other sources without setting up MQTT automation.
+
 ## Install and first setup
 
 Use Windows 10/11 x64 with a current graphics driver. Download the installer and checksum from this repository's Releases page, verify the checksum, and run the installer. Installation requires elevation; normal operation should use a standard Windows account.
