@@ -1,7 +1,7 @@
 const wallProportions = (layout, targets = null) => {
   const custom=layout.rowWeights?.length===layout.rows&&layout.columnWeights?.length===layout.columns;
   const rows=custom?[...layout.rowWeights]:Array(layout.rows).fill(1/layout.rows),columns=custom?[...layout.columnWeights]:Array(layout.columns).fill(1/layout.columns);
-  const aspect=layout.aspectRatio==='9:16'?9/16:16/9;
+  const aspect=layout.outputWidth&&layout.outputHeight?layout.outputWidth/layout.outputHeight:layout.aspectRatio==='9:16'?9/16:16/9;
   const small=layout.tiles.filter(t=>t.rowSpan===1&&t.columnSpan===1);
   const groups=(count,linked)=>{const shared=[...new Set(linked)].sort((a,b)=>a-b);return [...(shared.length?[shared]:[]),...Array.from({length:count},(_,i)=>i).filter(i=>!shared.includes(i)).map(i=>[i])];};
   const rowGroups=groups(layout.rows,small.map(t=>t.row)),columnGroups=groups(layout.columns,small.map(t=>t.column));
@@ -28,7 +28,7 @@ const wallProportions = (layout, targets = null) => {
 wallProportions.fit = (layout, targets) => {
   const baseline=wallProportions(layout);
   const fitted=wallProportions({...layout,rowWeights:baseline.rows,columnWeights:baseline.columns},targets);
-  const aspect=layout.aspectRatio==='9:16'?9/16:16/9;
+  const aspect=layout.outputWidth&&layout.outputHeight?layout.outputWidth/layout.outputHeight:layout.aspectRatio==='9:16'?9/16:16/9;
   const waste=p=>layout.tiles.reduce((n,t)=>{const b=p.bounds(t),ratio=aspect*b.width/b.height,target=targets[t.cameraSlot];return n+b.width*b.height*(1-Math.min(ratio/target,target/ratio));},0);
   return waste(fitted)<waste(baseline)-1e-8?fitted:baseline;
 };

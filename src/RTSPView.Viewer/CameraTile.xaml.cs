@@ -582,11 +582,30 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         player.EncounteredError += (_, _) => { if (ReferenceEquals(_player, player)) ScheduleRecovery("LibVLC reported a decoder or stream error"); };
     }
 
+    private string? _wallSizing;
+    private double _outputTileWidth;
+
+    public void SetWallSizing(WallTile tile, double outputTileWidth)
+    {
+        _wallSizing = tile.Sizing;
+        _videoZoomPercent = tile.ZoomPercent;
+        _imageHorizontalPositionPercent = tile.HorizontalPositionPercent;
+        _imageVerticalPositionPercent = tile.VerticalPositionPercent;
+        _outputTileWidth = outputTileWidth;
+        ApplyVideoSizing(_player);
+    }
+
     private void ApplyVideoSizing(MediaPlayer? player)
     {
         if (player is null) return;
         player.Scale = 0;
-        if (!string.IsNullOrEmpty(player.AspectRatio)) player.AspectRatio = null;
+        if (_wallSizing is not null)
+        {
+            _videoDisplayWidth = Math.Max(1, (int)VideoView.ActualWidth);
+            _videoDisplayHeight = Math.Max(1, (int)VideoView.ActualHeight);
+        }
+        var desiredAspect = _wallSizing == "stretch" ? $"{_videoDisplayWidth}:{_videoDisplayHeight}" : null;
+        if ((player.AspectRatio ?? "") != (desiredAspect ?? "")) player.AspectRatio = desiredAspect;
         if (!string.IsNullOrEmpty(player.CropGeometry)) player.CropGeometry = string.Empty;
         var dimensions = GetVideoDimensions();
         if (dimensions is not { } source)
@@ -599,11 +618,12 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             var width = CompositedCanvas.ActualWidth;
             var height = CompositedCanvas.ActualHeight;
             if (width <= 0 || height <= 0 || source.Width == 0 || source.Height == 0) return;
-            var scale = Math.Min(width / source.Width, height / source.Height);
-            CompositedImage.Width = source.Width * scale;
-            CompositedImage.Height = source.Height * scale;
-            System.Windows.Controls.Canvas.SetLeft(CompositedImage, (width - CompositedImage.Width) / 2);
-            System.Windows.Controls.Canvas.SetTop(CompositedImage, (height - CompositedImage.Height) / 2);
+            var wallImage = WallVideoTransform.Calculate(source.Width, source.Height, width, height,
+                _wallSizing ?? "fit", _outputTileWidth, _videoZoomPercent, _imageHorizontalPositionPercent, _imageVerticalPositionPercent);
+            CompositedImage.Width = wallImage.RenderWidth;
+            CompositedImage.Height = wallImage.RenderHeight;
+            System.Windows.Controls.Canvas.SetLeft(CompositedImage, wallImage.OffsetX);
+            System.Windows.Controls.Canvas.SetTop(CompositedImage, wallImage.OffsetY);
             return;
         }
         if (_videoDisplayWidth <= 0 || _videoDisplayHeight <= 0) return;
@@ -630,7 +650,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
                 (int)source.Height,
                 _videoZoomPercent,
                 _imageHorizontalPositionPercent,
-                _imageVerticalPositionPercent);
+                _imageVerticalPositionPercent, _wallSizing, _outputTileWidth);
             if (layoutApplied && !_nativeVideoLayoutConfirmed)
             {
                 _nativeVideoLayoutConfirmed = true;

@@ -76,12 +76,33 @@ try
     Check(sixteen.Fit(1080, 1920) == (1080, 607.5), "landscape fits portrait screen without stretching");
     designed = designed with { Layouts = [new(), portrait] };
     var layoutStore = new JsonSettingsStore(Path.Combine(root, "layout-roundtrip.json"));
+    var suiteLayout = new WallLayout { Id = "suite", Rows = 12, Columns = 12, OutputWidth = 3440, OutputHeight = 1440,
+        Tiles = [new() { CameraSlot = 1, Sizing = "fill", ZoomPercent = 175, HorizontalPositionPercent = 20, VerticalPositionPercent = 80 },
+            new() { CameraSlot = 2, Column = 1, Sizing = "stretch" }, new() { CameraSlot = 3, Column = 2, Sizing = "fit" }, new() { CameraSlot = 4, Column = 3 }] };
+    await layoutStore.SaveAsync(designed with { Layouts = [suiteLayout], ActiveLayoutId = "suite" });
+    var suiteReloaded = (await layoutStore.LoadAsync()).Layouts.Single();
+    Check(suiteReloaded.OutputWidth == 3440 && suiteReloaded.OutputHeight == 1440 && suiteReloaded.Tiles.SequenceEqual(suiteLayout.Tiles), "resolution, per-tile sizing, zoom and position survive reload");
+    Check(suiteReloaded.Fit(1720, 1000) == (1720, 720), "custom output aspect scales to viewer");
+    Check(suiteReloaded.Tiles.Last().Sizing == "original" && suiteReloaded.Tiles.Last().ZoomPercent == 100, "new tile defaults to original size and 100 percent zoom");
+    var originalImage = WallVideoTransform.Calculate(1920, 1080, 320, 180, "original", 640);
+    Check(originalImage.RenderWidth == 960 && originalImage.OffsetX == -320, "original pixels scale with output reference and clip centered");
+    var fitImage = WallVideoTransform.Calculate(1920, 1080, 400, 400, "fit");
+    Check(fitImage.RenderWidth == 400 && fitImage.RenderHeight == 225 && fitImage.OffsetY == 87.5, "fit preserves entire source and letterboxes");
+    var fillImage = WallVideoTransform.Calculate(1920, 1080, 400, 400, "fill", 0, 200, 100, 0);
+    Check(Math.Abs(fillImage.RenderWidth - 1422.222222) < .001 && fillImage.RenderHeight == 800 && fillImage.OffsetY == 0 && fillImage.OffsetX < -1000, "fill zoom and edge positioning crop the source");
+    var stretchImage = WallVideoTransform.Calculate(1920, 1080, 400, 300, "stretch", 0, 50, 0, 100);
+    Check(stretchImage.RenderWidth == 200 && stretchImage.RenderHeight == 150 && stretchImage.OffsetX == 0 && stretchImage.OffsetY == 150, "stretch zoom and positioning remain independent");
     await layoutStore.SaveAsync(designed);
     var reloadedLayouts = await layoutStore.LoadAsync();
     Check(reloadedLayouts.Layouts.Last().AspectRatio == "9:16", "portrait format survives save and reload");
     Check(reloadedLayouts.ActiveLayoutId == "sixteen" && reloadedLayouts.Layouts.Last().Tiles.SequenceEqual(sixteen.Tiles), "saved layouts survive settings reload");
     foreach (var invalidLayout in new[] {
-        sixteen with { Rows = 5 },
+        sixteen with { Rows = 13 },
+        sixteen with { OutputWidth = 1920, OutputHeight = 0 },
+        sixteen with { Tiles = [new() { CameraSlot = 1, Sizing = "invalid" }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1, ZoomPercent = 401 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1, HorizontalPositionPercent = -1 }] },
+        sixteen with { Tiles = [new() { CameraSlot = 1, VerticalPositionPercent = 101 }] },
         sixteen with { AspectRatio = "invalid" },
         sixteen with { Tiles = [new() { CameraSlot = 10 }] },
         sixteen with { Tiles = [new() { CameraSlot = 1 }, new() { CameraSlot = 2 }] },

@@ -8,6 +8,12 @@ internal static class AutomationLayoutChecks
         settings = settings with { Cameras = settings.Cameras.Select(c => c with { Enabled = true, RtspUrl = "rtsp://example.test/" + c.Slot }).ToArray() };
         AutomationLayouts.Validate(settings.AutomationViewLayouts);
         var template = settings.AutomationViewLayouts[1];
+        var framed = template with { OutputWidth = 3440, OutputHeight = 1440,
+            Tiles = template.Tiles.Select(t => t.CameraSlot == -1 ? t with { Sizing = "fill", ZoomPercent = 150, HorizontalPositionPercent = 25 } : t).ToArray() };
+        var resolvedFraming = AutomationLayouts.Resolve(settings, framed, [1, 2]);
+        Check(resolvedFraming.OutputWidth == 3440 && resolvedFraming.Tiles[0].Sizing == "fill" &&
+            resolvedFraming.Tiles[0].ZoomPercent == 150 && resolvedFraming.Tiles[0].HorizontalPositionPercent == 25,
+            "Focus resolution must preserve output dimensions and per-position image framing");
         Check(template.Tiles[0].CameraSlot == -1 && template.Tiles[1].CameraSlot == -2, "Focus tiles must not bind cameras");
         var legacy = template with { FocusSlots = [1,2], Tiles = template.Tiles.Select(t => t.CameraSlot < 0 ? t with { CameraSlot = -t.CameraSlot } : t).ToArray() };
         var migrated = AutomationLayouts.Normalize([legacy])[0];

@@ -80,3 +80,27 @@
 .designer-inspector .designer-camera .snapshot-age{display:none}
 @media(max-width:900px){.designer-workspace.has-drawer{grid-template-columns:minmax(0,1fr)}.designer-inspector{position:static;max-height:none}.designer-board{max-width:100%}}
 .designer-tile .snapshot-age{top:auto!important;left:auto!important;right:8px;bottom:22px;max-width:calc(100% - 16px);font-size:10px}
+
+/* Layout suite: persistent controls and generous pointer targets. */
+.designer-actions,.designer-canvas-controls{flex-wrap:wrap}
+.designer-grid-fields[hidden]{display:none}
+.designer-board{touch-action:none}
+.designer-tile img{position:absolute;max-width:none!important;max-height:none!important}
+.designer-placement{position:absolute;pointer-events:none;background:#448eef55;border:2px solid #70b9ff;box-sizing:border-box;z-index:5}
+.designer-placement.invalid{background:#ff555544;border-color:#ff7777}
+#page-layouts .designer-camera.armed{border-color:#70b9ff;background:#214466}
+.designer-resize{padding:0;right:auto;bottom:auto;width:14px;height:14px;background:#9dccff;border:1px solid #102640;box-sizing:border-box;z-index:6;border-radius:3px}
+.handle-n{left:calc(50% - 7px);top:0;cursor:ns-resize}.handle-s{left:calc(50% - 7px);bottom:0;cursor:ns-resize}
+.handle-e{right:0;top:calc(50% - 7px);cursor:ew-resize}.handle-w{left:0;top:calc(50% - 7px);cursor:ew-resize}
+.handle-nw{left:0;top:0;cursor:nwse-resize}.handle-ne{right:0;top:0;cursor:nesw-resize}
+.handle-sw{left:0;bottom:0;cursor:nesw-resize}.handle-se{right:0;bottom:0;cursor:nwse-resize}
+.designer-inspector>label{margin-top:15px!important}
+.designer-framing{display:grid;gap:12px;margin-top:16px}.designer-framing input[type=range]{padding:0;accent-color:#65acff}
+.designer-stage{min-height:200px}.designer-tile{background:#000}
+@media(max-width:760px){.designer-actions{justify-content:flex-start}.designer-properties{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+#page-layouts .designer-tile>.snapshot-age{left:auto;top:auto;right:6px;bottom:20px;font-size:9px}
+.designer-board.pan-images .designer-tile{cursor:move}
+@media(max-width:760px){#page-layouts .designer-tile>.snapshot-age{display:none}}
+
+.designer-aspect-guide{display:none}

@@ -1,6 +1,23 @@
 function createWallDesigner(isAutomation = false) {
   let config, saved, draft, selectedId, selectedTile = -1, previous, dirty = false, busy = false;
-  let root, board, status;
+  let root, board, status, observer, armedCamera = null;
+  const redoHistory=[];
+  const resolution = l => [l.outputWidth || (l.aspectRatio === '9:16' ? 1080 : 1920), l.outputHeight || (l.aspectRatio === '9:16' ? 1920 : 1080)];
+  let streamDimensions = new Map(), panImage = false;
+  function sizeImages(candidate=null, candidateIndex=-1) {
+    if(!board)return;
+    const [width]=resolution(current()),scale=board.clientWidth/width;
+    board.querySelectorAll('img[data-tile-index]').forEach(image=>{
+      const index=Number(image.dataset.tileIndex),tile=index===candidateIndex?candidate:current().tiles[index],slot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(current().id+":"+tile.cameraSlot),size=streamDimensions.get(slot);
+      const w=image.parentElement.clientWidth,h=image.parentElement.clientHeight;
+      const sw=size?.width||image.naturalWidth||16,sh=size?.height||image.naturalHeight||9,mode=tile.sizing||'original';
+      const fit=mode==='original'&&size?scale:mode==='fill'?Math.max(w/sw,h/sh):Math.min(w/sw,h/sh);
+      const zoom=(tile.zoomPercent??100)/100,rw=(mode==='stretch'?w:sw*fit)*zoom,rh=(mode==='stretch'?h:sh*fit)*zoom;
+      Object.assign(image.style,{width:rw+'px',height:rh+'px',left:(w-rw)*(tile.horizontalPositionPercent??50)/100+'px',top:(h-rh)*(tile.verticalPositionPercent??50)/100+'px',objectFit:'fill'});
+    });
+    const note=root.querySelector('[data-dimensions-note]');if(note)note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));
+  }
+
   const streamAspects = new Map(), previewCameras = new Map(), undoHistory = [];
   let checkpoint, drawer = '', searchText = '';
   function toggleDrawer(value) { drawer = drawer === value ? '' : value; render(); }
@@ -27,7 +44,7 @@ function createWallDesigner(isAutomation = false) {
       if(linked.length){const mean=linked.reduce((n,i)=>n+layout[key][i],0)/linked.length;for(const i of linked)layout[key][i]=mean;}
     }
     if(checkpoint){undoHistory.push(checkpoint);if(undoHistory.length>50)undoHistory.shift();}
-    dirty = true; render(); message(isAutomation ? 'Unsaved automation layout. Save when ready.' : 'Unsaved draft. Apply when ready to change the wall.');
+    redoHistory.length=0;dirty = true; render(); message(isAutomation ? 'Unsaved automation layout. Save when ready.' : 'Unsaved draft. Apply when ready to change the wall.');
   }
   function validTile(candidate, index) {
     const layout = current();
@@ -61,11 +78,11 @@ function createWallDesigner(isAutomation = false) {
     if(isAutomation)layout.focusSlots=layout.tiles.filter(t=>t.cameraSlot<0).map(t=>t.cameraSlot);
     selectedTile=-1;changed();
   }
-  function addCamera(slot, row, column) {
+  function addCamera(slot, row, column, rowSpan=1, columnSpan=1) {
     if(current().tiles.length>=16){message('A layout supports up to 16 tiles. Remove a tile first.');return;}
-    const tile = {cameraSlot:slot,row,column,rowSpan:1,columnSpan:1};
+    const tile = {cameraSlot:slot,row,column,rowSpan,columnSpan,sizing:"original"};
     if (!validTile(tile,-1)) { message('Choose an empty cell and a stream not already in this layout.'); return; }
-    current().tiles.push(tile); drawer='tile'; selectedTile = current().tiles.length-1; changed();
+    armedCamera=null;current().tiles.push(tile); drawer='tile'; selectedTile = current().tiles.length-1; changed();
   }
   async function persist(apply = false, revert = false) {
     if (busy) return;
@@ -80,7 +97,7 @@ function createWallDesigner(isAutomation = false) {
     try {
       const result = await api(isAutomation?'/api/automation/layouts':'/api/layouts',{method:'PUT',body:JSON.stringify(payload)});
       previous = copy(saved); saved = copy(result); draft = copy(result); dirty = false;
-      undoHistory.length=0;
+      undoHistory.length=0;redoHistory.length=0;
       if (!draft.layouts.some(layout=>layout.id===selectedId)) selectedId = draft.activeLayoutId;
       render(); dashboardUX.sync(); message(revert ? 'Previous saved layouts restored.' : apply ? 'Layout applied. The viewer will update shortly.' : 'Layouts saved.');
       if(isAutomation){message('Automation layouts saved. Choose one in a focused-layout rule.');await automationUi.refreshLayouts();}
@@ -89,8 +106,9 @@ function createWallDesigner(isAutomation = false) {
   }
   function render() {
     checkpoint=copy({draft,selectedId,selectedTile});
-    root.replaceChildren();
+    observer?.disconnect();root.replaceChildren();
     const layout=current(), proportions=wallProportions(layout);
+    const [outputWidth,outputHeight]=resolution(layout);
     const top=el('div',undefined,'designer-toolbar');root.append(top);
     const picker=el('div',undefined,'designer-layout-picker');top.append(picker);
     const layouts=el('select');
@@ -113,10 +131,11 @@ function createWallDesigner(isAutomation = false) {
     },menu);deleteButton.disabled=isAutomation?draft.layouts.length===1:selectedId===saved.activeLayoutId;deleteButton.classList.add('designer-danger');
     const revert=button('Revert last save',()=>persist(false,true),menu);revert.disabled=!previous;
     const actions=el('div',undefined,'designer-actions');top.append(actions);
-    for(const [id,label] of [['add','Add camera'],['presets','Presets'],['sizing','Sizing'],['advanced','Advanced'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
+    for(const [id,label] of [['add','Add camera'],['presets','Presets'],['sizing','Sizing'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
 
-    button('Undo edit',()=>{const state=undoHistory.pop();if(!state)return;draft=state.draft;selectedId=state.selectedId;selectedTile=state.selectedTile;dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();message('Last layout edit undone.');},actions).disabled=!undoHistory.length;
-    button('Discard changes',()=>{draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=-1;dirty=false;undoHistory.length=0;render();message('Draft discarded.');},menu).classList.add('designer-discard');root.querySelector('.designer-discard').disabled=!dirty;
+    button('Undo edit',()=>{const state=undoHistory.pop();if(!state)return;redoHistory.push(copy({draft,selectedId,selectedTile}));draft=state.draft;selectedId=state.selectedId;selectedTile=state.selectedTile;dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();message('Last layout edit undone.');},actions).disabled=!undoHistory.length;
+    button('Redo edit',()=>{const state=redoHistory.pop();if(!state)return;undoHistory.push(copy({draft,selectedId,selectedTile}));({draft,selectedId,selectedTile}=state);dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();},actions).disabled=!redoHistory.length;
+    button('Discard changes',()=>{draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=-1;dirty=false;undoHistory.length=0;redoHistory.length=0;render();message('Draft discarded.');},menu).classList.add('designer-discard');root.querySelector('.designer-discard').disabled=!dirty;
     if(isAutomation)button('Save automation layouts',()=>persist(),actions,false);
     else {if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);button('Apply changes',()=>persist(true),actions,false);}
     const workspace=el('div',undefined,'designer-workspace'+(drawer?' has-drawer':''));root.append(workspace);
@@ -125,14 +144,23 @@ function createWallDesigner(isAutomation = false) {
     const title=el('div');title.append(el('h2','Wall preview'),el('span',layout.rows+' × '+layout.columns+' grid · '+layout.tiles.length+' streams','designer-meta'));previewHead.append(title);
     const gridSettings=el('details',undefined,'designer-settings');gridSettings.append(el('summary','Grid settings'));gridSettings.open=true;
     const canvasControls=el('div',undefined,'designer-canvas-controls');gridSettings.append(canvasControls);
-    const format=el('select');format.add(new Option('Landscape · 16:9','16:9'));format.add(new Option('Portrait · 9:16','9:16'));format.value=layout.aspectRatio||'16:9';
-    format.onchange=()=>{Object.assign(layout,wallLayoutPresets.transpose(layout));layout.aspectRatio=format.value;changed();};field('Screen format',format,canvasControls);
+    const dragMode=el('select');dragMode.add(new Option('Move tiles','tiles'));dragMode.add(new Option('Reposition images','images'));dragMode.value=panImage?'images':'tiles';dragMode.onchange=()=>{panImage=dragMode.value==='images';board.classList.toggle('pan-images',panImage);};field('Drag action',dragMode,canvasControls);
+    const format=el('select');format.add(new Option('Landscape','16:9'));format.add(new Option('Portrait','9:16'));format.value=layout.aspectRatio||'16:9';
+    format.onchange=()=>{Object.assign(layout,wallLayoutPresets.transpose(layout));layout.aspectRatio=format.value;layout.outputWidth=outputHeight;layout.outputHeight=outputWidth;changed();};field('Orientation',format,canvasControls);
+    const sizes=el('select');
+    for(const [w,h] of [[1280,720],[1920,1080],[2560,1440],[3840,2160],[1920,1200],[3440,1440],[1080,1920]])sizes.add(new Option(w+' × '+h,w+'x'+h));
+    sizes.add(new Option('Custom','custom'));sizes.value=[...sizes.options].some(o=>o.value===outputWidth+'x'+outputHeight)?outputWidth+'x'+outputHeight:'custom';
+    sizes.onchange=()=>{if(sizes.value==='custom'){custom.hidden=false;return;}[layout.outputWidth,layout.outputHeight]=sizes.value.split('x').map(Number);layout.aspectRatio=layout.outputHeight>layout.outputWidth?'9:16':'16:9';changed();};field('Output resolution',sizes,canvasControls);
+    const custom=el('div',undefined,'designer-grid-fields');custom.hidden=sizes.value!=='custom';canvasControls.append(custom);
+    const width=el('input'),height=el('input');
+    for(const [input,label,value] of [[width,'Pixels wide',outputWidth],[height,'Pixels high',outputHeight]]){input.type='number';input.min=240;input.max=16384;input.value=value;field(label,input,custom);}
+    button('Set size',()=>{const w=Number(width.value),h=Number(height.value);if(![w,h].every(n=>Number.isInteger(n)&&n>=240&&n<=16384)){message('Use dimensions from 240 to 16384 pixels.');return;}layout.outputWidth=w;layout.outputHeight=h;layout.aspectRatio=h>w?'9:16':'16:9';changed();},custom);
     const gridFields=el('div',undefined,'designer-grid-fields');canvasControls.append(gridFields);
     for(const [key,label] of [['rows','Rows'],['columns','Columns']]){
-      const input=el('input');input.type='number';input.min=1;input.max=isAutomation?6:4;input.value=layout[key];
+      const input=el('input');input.type='number';input.min=1;input.max=12;input.value=layout[key];
       input.onchange=()=>{
         const value=Number(input.value),old=layout[key];layout[key]=value;
-        if(!Number.isInteger(value)||value<1||value>(isAutomation?6:4)||layout.tiles.some((t,i)=>!validTile(t,i))){layout[key]=old;render();message('Remove or resize tiles before shrinking the grid.');return;}
+        if(!Number.isInteger(value)||value<1||value>(12)||layout.tiles.some((t,i)=>!validTile(t,i))){layout[key]=old;render();message('Remove or resize tiles before shrinking the grid.');return;}
         layout.rowWeights=[];layout.columnWeights=[];changed();
       };field(label,input,gridFields);
     }
@@ -150,17 +178,29 @@ function createWallDesigner(isAutomation = false) {
     }
     const stage=el('div',undefined,'designer-stage');preview.append(stage);
     board=el('div',undefined,'designer-board');board.setAttribute('aria-label','Stream wall layout preview');
-    board.style.backgroundImage='none';board.style.setProperty('--aspect',(layout.aspectRatio||'16:9').replace(':','/'));board.style.setProperty('--ratio',layout.aspectRatio==='9:16'?9/16:16/9);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
+    board.classList.toggle('pan-images',panImage);board.style.backgroundImage='none';board.style.setProperty('--aspect',outputWidth+'/'+outputHeight);board.style.setProperty('--ratio',outputWidth/outputHeight);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
     board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,proportions.cell(proportions.rows,(e.clientY-bounds.top)/bounds.height),proportions.cell(proportions.columns,(e.clientX-bounds.left)/bounds.width));};
+    const cellAt=e=>{const b=board.getBoundingClientRect();return {row:Math.max(0,Math.min(layout.rows-1,proportions.cell(proportions.rows,(e.clientY-b.top)/b.height))),column:Math.max(0,Math.min(layout.columns-1,proportions.cell(proportions.columns,(e.clientX-b.left)/b.width)))};};
+    board.onpointerdown=e=>{
+      if(e.target!==board||e.button!==0)return;
+      if(armedCamera===null){selectedTile=-1;render();message('Choose an available camera, then click or drag across empty cells.');return;}
+      e.preventDefault();const start=cellAt(e);let end=start;
+      const ghost=el('div',undefined,'designer-placement');board.append(ghost);board.setPointerCapture(e.pointerId);
+      const region=()=>({cameraSlot:armedCamera,row:Math.min(start.row,end.row),column:Math.min(start.column,end.column),rowSpan:Math.abs(end.row-start.row)+1,columnSpan:Math.abs(end.column-start.column)+1});
+      const paint=()=>{const t=region();Object.assign(ghost.style,Object.fromEntries(Object.entries(proportions.bounds(t)).map(([k,v])=>[k,v*100+'%'])));ghost.classList.toggle('invalid',!validTile(t,-1));};paint();
+      board.onpointermove=m=>{end=cellAt(m);paint();};
+      const stop=()=>{board.onpointermove=null;board.onpointerup=null;board.onpointercancel=null;ghost.remove();};
+      board.onpointerup=()=>{const t=region();stop();addCamera(t.cameraSlot,t.row,t.column,t.rowSpan,t.columnSpan);};board.onpointercancel=stop;
+    };
     layout.tiles.forEach((tile,index)=>{
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
       const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
       const rect=proportions.bounds(tile);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
       const previewSlot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);
-      const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);
+      const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);image.dataset.tileIndex=index;image.addEventListener('load',sizeImages);
       const guide=el('span','','designer-aspect-guide');guide.hidden=index!==selectedTile;node.append(guide);
-      const updateGuide=r=>{const ratio=streamAspects.get(previewSlot);guide.textContent=ratio?'Picture fit '+Math.round(Math.min(r.width/r.height*(layout.aspectRatio==='9:16'?9/16:16/9)/ratio,ratio/(r.width/r.height*(layout.aspectRatio==='9:16'?9/16:16/9)))*100)+'%':'Load a preview for sizing';};
+      const updateGuide=r=>{const ratio=streamAspects.get(previewSlot);guide.textContent=ratio?'Picture fit '+Math.round(Math.min(r.width/r.height*(outputWidth/outputHeight)/ratio,ratio/(r.width/r.height*(outputWidth/outputHeight)))*100)+'%':'Load a preview for sizing';};
       image.onload=()=>{if(image.naturalWidth&&image.naturalHeight){streamAspects.set(previewSlot,image.naturalWidth/image.naturalHeight);image.style.visibility='';updateGuide(rect);}};updateGuide(rect);
       node.append(el('span',camera.name,'designer-caption'));
       if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot)){
@@ -169,30 +209,41 @@ function createWallDesigner(isAutomation = false) {
       }
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].map(overlay=>[overlay.camera.name,overlay]).filter(([,o])=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(overlays.length)node.append(el('span',overlays.map(([name])=>name+' overlay').join(' · '),'designer-overlay'));
-      const handle=el('span','↘','designer-resize');handle.setAttribute('aria-hidden','true');node.append(handle);
-      const right=el('span',undefined,'designer-edge right'),bottom=el('span',undefined,'designer-edge bottom');node.append(right,bottom);
-      node.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectedTile=index;drawer='tile';drawer='tile';render();}};
+      for(const edge of ['n','s','e','w','nw','ne','sw','se']){const handle=el('span',undefined,'designer-resize handle-'+edge);handle.dataset.edge=edge;handle.setAttribute('aria-hidden','true');node.append(handle);}
+      node.onkeydown=e=>{
+        if(e.key==='Enter'||e.key===' '){e.preventDefault();selectedTile=index;drawer='tile';render();root.querySelectorAll('.designer-tile')[index]?.focus();return;}
+        const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+        if(delta){e.preventDefault();selectedTile=index;drawer='tile';const [dx,dy]=delta;updateTile({...tile,...(e.shiftKey?{columnSpan:tile.columnSpan+dx,rowSpan:tile.rowSpan+dy}:{column:tile.column+dx,row:tile.row+dy})},index);root.querySelectorAll('.designer-tile')[index]?.focus();}
+      };
       node.onpointerdown=e=>{
         if(e.button!==0)return;e.preventDefault();selectedTile=index;drawer='tile';
-        const resize=[handle,right,bottom].includes(e.target),resizeX=e.target!==bottom,resizeY=e.target!==right,startX=e.clientX,startY=e.clientY,bounds=board.getBoundingClientRect();let candidate=copy(tile);
+        board.querySelectorAll('.designer-tile').forEach(n=>n.classList.toggle('selected',n===node));
+        const edge=e.target.dataset.edge||'',resize=!!edge,startX=e.clientX,startY=e.clientY,bounds=board.getBoundingClientRect();let candidate=copy(tile);
         node.setPointerCapture(e.pointerId);
         node.onpointermove=move=>{
-          const x=(move.clientX-bounds.left)/bounds.width,y=(move.clientY-bounds.top)/bounds.height;const dx=proportions.cell(proportions.columns,x)-proportions.cell(proportions.columns,(startX-bounds.left)/bounds.width),dy=proportions.cell(proportions.rows,y)-proportions.cell(proportions.rows,(startY-bounds.top)/bounds.height);
-          candidate={...tile,...(resize?{columnSpan:tile.columnSpan+(resizeX?dx:0),rowSpan:tile.rowSpan+(resizeY?dy:0)}:{column:tile.column+dx,row:tile.row+dy})};
+          if(panImage&&!resize){
+            const slackX=node.clientWidth-parseFloat(image.style.width),slackY=node.clientHeight-parseFloat(image.style.height);
+            candidate={...tile,horizontalPositionPercent:Math.abs(slackX)>1?Math.round(Math.max(0,Math.min(100,(tile.horizontalPositionPercent??50)+(move.clientX-startX)/slackX*100))):(tile.horizontalPositionPercent??50),verticalPositionPercent:Math.abs(slackY)>1?Math.round(Math.max(0,Math.min(100,(tile.verticalPositionPercent??50)+(move.clientY-startY)/slackY*100))):(tile.verticalPositionPercent??50)};
+            sizeImages(candidate,index);return;
+          }
+          const dx=proportions.cell(proportions.columns,(move.clientX-bounds.left)/bounds.width)-proportions.cell(proportions.columns,(startX-bounds.left)/bounds.width),dy=proportions.cell(proportions.rows,(move.clientY-bounds.top)/bounds.height)-proportions.cell(proportions.rows,(startY-bounds.top)/bounds.height);
+          candidate={...tile,...(resize?{column:tile.column+(edge.includes('w')?dx:0),row:tile.row+(edge.includes('n')?dy:0),columnSpan:tile.columnSpan+(edge.includes('e')?dx:edge.includes('w')?-dx:0),rowSpan:tile.rowSpan+(edge.includes('s')?dy:edge.includes('n')?-dy:0)}:{column:tile.column+dx,row:tile.row+dy})};
           const swap=layout.tiles.some((other,i)=>i!==index&&other.row===candidate.row&&other.column===candidate.column&&other.rowSpan===tile.rowSpan&&other.columnSpan===tile.columnSpan&&candidate.rowSpan===tile.rowSpan&&candidate.columnSpan===tile.columnSpan);
           node.classList.toggle('invalid',!validTile(candidate,index)&&!swap);
-          const rect=proportions.bounds(candidate);guide.hidden=false;updateGuide(rect);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
+          Object.assign(node.style,Object.fromEntries(Object.entries(proportions.bounds(candidate)).map(([k,v])=>[k,v*100+'%'])));
+          sizeImages(candidate,index);
         };
         node.onpointerup=()=>{node.onpointermove=null;if(JSON.stringify(candidate)===JSON.stringify(tile))render();else updateTile(candidate,index);};
         node.onpointercancel=()=>render();
       };board.append(node);
     });
     const previewFoot=el('div',undefined,'designer-preview-foot');preview.append(previewFoot);
-    previewFoot.append(el('span','Drag to move or swap. Use the corner handle to resize.'),el('span','Snapshot preview · '+(layout.aspectRatio||'16:9')));
+    const scaleLabel=el('span');previewFoot.append(el('span','Drag to move or swap · Edges resize · Arrows move · Shift + arrows resize'),scaleLabel);
+    observer=new ResizeObserver(()=>{scaleLabel.textContent=outputWidth+' × '+outputHeight+' · '+Math.round(board.clientWidth/outputWidth*100)+'% preview';sizeImages();});observer.observe(board);
     const side=el('aside',undefined,'designer-inspector');side.hidden=!drawer;workspace.append(side);
     button('Close panel',()=>{drawer='';render();},side).classList.add('designer-close');
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
-    sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Video stays uncropped and unstretched. Small tiles remain equal in size.','designer-help'));
+    sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Choose Original, Fit, Fill or Stretch per tile. Small tiles remain equal in size.','designer-help'));
     button('Fit tiles to streams',()=>{
       const targets={};
       for(const tile of layout.tiles){const slot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);const ratio=streamAspects.get(slot);
@@ -223,12 +274,24 @@ function createWallDesigner(isAutomation = false) {
         tilePanel.append(el('p','Your automation rule chooses the live camera.','designer-help'));
       }
       if(isAutomation&&tile.cameraSlot>0){for(const focusSlot of layout.focusSlots)button('Use as Focus '+(-focusSlot),()=>{const old=layout.tiles.find(t=>t.cameraSlot===focusSlot);old.cameraSlot=tile.cameraSlot;tile.cameraSlot=focusSlot;changed();},tilePanel);}
+      const sizing=el('select');for(const [value,label] of [['original','Original size (default)'],['fit','Fit · entire image'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'original';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);
+      const framing=el('div',undefined,'designer-framing');tilePanel.append(framing);
+      for(const [key,label,min,max,fallback] of [['zoomPercent','Zoom',25,400,100],['horizontalPositionPercent','Horizontal position',0,100,50],['verticalPositionPercent','Vertical position',0,100,50]]){
+        const input=el('input');input.type='range';input.min=min;input.max=max;input.step=1;input.value=tile[key]??fallback;
+        const wrapper=el('label'),caption=el('span',label+' · '+input.value+'%');input.setAttribute('aria-label',label);wrapper.append(caption,input);framing.append(wrapper);
+        input.oninput=()=>{tile[key]=Number(input.value);caption.textContent=label+' · '+input.value+'%';sizeImages();};
+        input.onchange=()=>{changed();root.querySelector('input[aria-label="'+label+'"]').focus();};
+      }
+      button('Reset image framing',()=>updateTile({...tile,zoomPercent:100,horizontalPositionPercent:50,verticalPositionPercent:50},selectedTile),framing);
       const exact=el('details');exact.append(el('summary','Exact position and size'));tilePanel.append(exact);const properties=el('div',undefined,'designer-properties');exact.append(properties);
       for(const [key,label,offset] of [['row','Row',1],['column','Column',1],['rowSpan','Height',0],['columnSpan','Width',0]]){
-        const input=el('input');input.type='number';input.min=1;input.max=isAutomation?6:4;input.value=tile[key]+offset;
+        const input=el('input');input.type='number';input.min=1;input.max=key==='row'||key==='rowSpan'?layout.rows:layout.columns;input.value=tile[key]+offset;
         input.onchange=()=>updateTile({...tile,[key]:Number(input.value)-offset},selectedTile);field(label,input,properties);
       }
 
+      tilePanel.append(el('p',Math.round(proportions.bounds(tile).width*outputWidth)+' × '+Math.round(proportions.bounds(tile).height*outputHeight)+' output pixels. Original uses source pixels, centered and clipped. Fit keeps the whole image; Fill crops; Stretch changes proportions.','designer-help'));
+      if((tile.sizing||'original')==='original'){const note=el('p','Source dimensions unavailable. Preview uses Fit until live camera dimensions arrive.','designer-help');note.dataset.dimensionsNote=tile.cameraSlot>0?tile.cameraSlot:(previewCameras.get(layout.id+":"+tile.cameraSlot)||0);note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));tilePanel.append(note);}
+      button('Fill available space',()=>{let best=tile;for(let r=1;r<=layout.rows-tile.row;r++)for(let c=1;c<=layout.columns-tile.column;c++){const t={...tile,rowSpan:r,columnSpan:c};if(r*c>best.rowSpan*best.columnSpan&&validTile(t,selectedTile))best=t;}updateTile(best,selectedTile);},tilePanel);
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].filter(o=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(overlays.length){const hosts=el('div',undefined,'designer-hosts');hosts.append(el('span','OVERLAYS','designer-eyebrow'));for(const o of overlays)hosts.append(el('span',o.camera.name,'designer-host'));tilePanel.append(hosts);}
       const remove=button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=-1;changed();},tilePanel);remove.classList.add('designer-danger');remove.disabled=(isAutomation&&layout.focusSlots.includes(tile.cameraSlot));
@@ -239,16 +302,15 @@ function createWallDesigner(isAutomation = false) {
     search.oninput=()=>{searchText=search.value;for(const item of library.querySelectorAll('.designer-camera'))item.hidden=!item.dataset.name.includes(searchText.toLowerCase());};
     const libraryHead=el('div');libraryHead.append(el('h3','Available streams'),el('span',String(available.length),'designer-count'));library.append(libraryHead);
     if(!available.length)library.append(el('p','All streams are on this layout. Add more from Streams.','designer-empty'));
-    else library.append(el('p','Drag onto the wall or select to add.','designer-help'));
+    else library.append(el('p','Choose a camera, then click or drag across empty cells. Or drag a camera onto the wall.','designer-help'));
     for(const camera of available){
       const node=button('',()=>{
-        for(let row=0;row<layout.rows;row++)for(let column=0;column<layout.columns;column++)if(validTile({cameraSlot:camera.slot,row,column,rowSpan:1,columnSpan:1},-1)){addCamera(camera.slot,row,column);return;}
-        message('No empty cell is available. Remove a tile or enlarge the grid.');
-      },library);node.classList.add('designer-camera');node.dataset.name=camera.name.toLowerCase();node.hidden=!node.dataset.name.includes(searchText.toLowerCase());node.setAttribute('aria-label','Add '+camera.name+' to layout');
+        armedCamera=armedCamera===camera.slot?null:camera.slot;render();message(armedCamera===null?'Placement canceled.':'Click or drag across empty cells for '+camera.name+'.');
+      },library);node.classList.add('designer-camera');node.classList.toggle('armed',armedCamera===camera.slot);node.setAttribute('aria-pressed',String(armedCamera===camera.slot));node.dataset.name=camera.name.toLowerCase();node.hidden=!node.dataset.name.includes(searchText.toLowerCase());node.setAttribute('aria-label','Add '+camera.name+' to layout');
       const thumb=el('img');thumb.alt='';dashboardUX.snapshot(thumb,camera.slot);thumb.draggable=false;thumb.onerror=()=>thumb.style.visibility='hidden';
       node.append(thumb,el('span',camera.name),el('span','+'));node.draggable=true;node.ondragstart=e=>e.dataTransfer.setData('text/plain',String(camera.slot));
     }
-    presets.hidden=drawer!=='presets';side.append(presets);
+    preview.insertBefore(canvasControls,stage);presets.hidden=drawer!=='presets';side.append(presets);
     gridSettings.hidden=drawer!=='advanced';side.append(gridSettings);
     if(isAutomation){
       const count=el('select');count.add(new Option('One focus tile','1'));count.add(new Option('Two focus tiles','2'));count.value=layout.focusSlots.length;
@@ -263,11 +325,11 @@ function createWallDesigner(isAutomation = false) {
     if(hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
   }
   window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-  return {isDirty:()=>dirty,active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
+  return {dimensions(cameras){streamDimensions=new Map((cameras||[]).filter(c=>c.width>0&&c.height>0).map(c=>[c.slot,c]));if(draft)sizeImages();},isDirty:()=>dirty,active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
     config=value;root=document.querySelector(isAutomation?'#automation-layout-editor':'#standard-layout-editor');
     if(!root)return;
     saved=copy(isAutomation?{layouts:value.automationViewLayouts,activeLayoutId:value.automationViewLayouts[0].id}:{layouts:value.layouts,activeLayoutId:value.activeLayoutId});
-    if(!dirty){draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=-1;undoHistory.length=0;}
+    if(!dirty){draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=-1;undoHistory.length=0;redoHistory.length=0;}
     render();
   }};
 }
@@ -276,6 +338,7 @@ const wallDesigner=(()=>{
   let tab='standard';
   function selectTab(value){tab=value;adminUi.collapseSections();for(const name of ['standard','automation']){document.querySelector('#'+name+'-layout-editor').hidden=name!==tab;document.querySelector('[data-layout-tab="'+name+'"]').setAttribute('aria-selected',String(name===tab));document.querySelector('[data-layout-tab="'+name+'"]').tabIndex=name===tab?0:-1;}}
   return {
+    dimensions(cameras){standardWallDesigner.dimensions(cameras);automationWallDesigner.dimensions(cameras);},
     isDirty:()=>standardWallDesigner.isDirty()||automationWallDesigner.isDirty(),active:()=>standardWallDesigner.active(),
     updateCameras(cameras){standardWallDesigner.updateCameras(cameras);automationWallDesigner.updateCameras(cameras);},
     openAutomation(){adminLayout.select('layouts');selectTab('automation');},

@@ -19,7 +19,8 @@ internal static class NativeVideoSurfaceLayout
         int sourceHeight,
         int zoomPercent,
         int horizontalPositionPercent,
-        int verticalPositionPercent)
+        int verticalPositionPercent,
+        string? wallSizing = null, double outputTileWidth = 0)
     {
         if (!OperatingSystem.IsWindows() || videoHost.Handle == IntPtr.Zero ||
             sourceWidth <= 0 || sourceHeight <= 0)
@@ -32,7 +33,8 @@ internal static class NativeVideoSurfaceLayout
 
         var viewportWidth = Math.Max(1, viewportRectangle.Right - viewportRectangle.Left);
         var viewportHeight = Math.Max(1, viewportRectangle.Bottom - viewportRectangle.Top);
-        var layout = DoorbellVideoTransform.CalculateLayout(
+        var layout = wallSizing is not null ? WallVideoTransform.Calculate(sourceWidth, sourceHeight,
+            viewportWidth, viewportHeight, wallSizing, outputTileWidth, zoomPercent, horizontalPositionPercent, verticalPositionPercent) : DoorbellVideoTransform.CalculateLayout(
             sourceWidth, sourceHeight, viewportWidth, viewportHeight,
             zoomPercent, horizontalPositionPercent, verticalPositionPercent);
 

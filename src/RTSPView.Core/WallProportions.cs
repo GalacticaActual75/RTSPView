@@ -19,7 +19,7 @@ public static class WallProportions
         }
         var rowGroups = Groups(layout.Rows, small.Select(t => t.Row));
         var columnGroups = Groups(layout.Columns, small.Select(t => t.Column));
-        var aspect = layout.AspectRatio == "9:16" ? 9d / 16 : 16d / 9;
+        var aspect = (double)layout.EffectiveWidth / layout.EffectiveHeight;
         double Score()
         {
             var score = 0d;

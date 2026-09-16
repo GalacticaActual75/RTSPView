@@ -17,7 +17,7 @@ public static class AutomationLayouts
     }
     public static void Validate(IReadOnlyList<WallLayout>? layouts)
     {
-        WallLayout.Validate(layouts, layouts?.FirstOrDefault()?.Id, 6, true);
+        WallLayout.Validate(layouts, layouts?.FirstOrDefault()?.Id, 12, true);
         foreach (var layout in layouts!)
             if (layout.FocusSlots is null || layout.FocusSlots.Length is < 1 or > 2 || layout.FocusSlots.Distinct().Count() != layout.FocusSlots.Length ||
                 layout.FocusSlots.Any(slot => !layout.Tiles.Any(t => t.CameraSlot == slot)) || layout.Tiles.Any(t => t.CameraSlot < 0 && !layout.FocusSlots.Contains(t.CameraSlot)))

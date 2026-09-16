@@ -7,6 +7,10 @@ public sealed record WallTile
     public int Column { get; init; }
     public int RowSpan { get; init; } = 1;
     public int ColumnSpan { get; init; } = 1;
+    public string Sizing { get; init; } = "original";
+    public int ZoomPercent { get; init; } = 100;
+    public int HorizontalPositionPercent { get; init; } = 50;
+    public int VerticalPositionPercent { get; init; } = 50;
 }
 
 public sealed record WallLayout
@@ -16,6 +20,10 @@ public sealed record WallLayout
     public int Rows { get; init; } = 3;
     public int Columns { get; init; } = 3;
     public string AspectRatio { get; init; } = "16:9";
+    public int OutputWidth { get; init; }
+    public int OutputHeight { get; init; }
+    public int EffectiveWidth => OutputWidth > 0 ? OutputWidth : AspectRatio == "9:16" ? 1080 : 1920;
+    public int EffectiveHeight => OutputHeight > 0 ? OutputHeight : AspectRatio == "9:16" ? 1920 : 1080;
     // Automation layouts use -1/-2 for unassigned focus tiles; positive IDs are migrated legacy positions.
     public double[] RowWeights { get; init; } = [];
     public double[] ColumnWeights { get; init; } = [];
@@ -23,14 +31,14 @@ public sealed record WallLayout
 
     public (double Width, double Height) Fit(double availableWidth, double availableHeight)
     {
-        var ratio = AspectRatio == "9:16" ? 9d / 16 : 16d / 9;
+        var ratio = (double)EffectiveWidth / EffectiveHeight;
         var width = Math.Min(Math.Max(0, availableWidth), Math.Max(0, availableHeight) * ratio);
         return (width, width / ratio);
     }
     public IReadOnlyList<WallTile> Tiles { get; init; } = Enumerable.Range(0, 9)
         .Select(i => new WallTile { CameraSlot = i + 1, Row = i / 3, Column = i % 3 }).ToArray();
 
-    public static void Validate(IReadOnlyList<WallLayout>? layouts, string? activeId, int maximumDimension = 4, bool allowFocusTiles = false)
+    public static void Validate(IReadOnlyList<WallLayout>? layouts, string? activeId, int maximumDimension = 12, bool allowFocusTiles = false)
     {
         if (layouts is null || layouts.Count is < 1 or > 32)
             throw new InvalidDataException("Keep between 1 and 32 saved layouts.");
@@ -42,6 +50,9 @@ public sealed record WallLayout
                 throw new InvalidDataException("Layouts need unique IDs and names of 1–80 characters.");
             if (layout.Rows < 1 || layout.Rows > maximumDimension || layout.Columns < 1 || layout.Columns > maximumDimension || layout.Tiles is null || layout.Tiles.Count > 16)
                 throw new InvalidDataException($"Layouts support 1–{maximumDimension} rows and columns and up to 16 camera tiles.");
+            if ((layout.OutputWidth != 0 || layout.OutputHeight != 0) &&
+                (layout.OutputWidth is < 240 or > 16384 || layout.OutputHeight is < 240 or > 16384))
+                throw new InvalidDataException("Output dimensions must both be between 240 and 16384 pixels.");
             if (layout.AspectRatio is not ("16:9" or "9:16"))
                 throw new InvalidDataException("Choose landscape (16:9) or portrait (9:16).");
             foreach (var (weights, count) in new[] { (layout.RowWeights, layout.Rows), (layout.ColumnWeights, layout.Columns) })
@@ -53,6 +64,10 @@ public sealed record WallLayout
             var cameras = new HashSet<int>();
             foreach (var tile in layout.Tiles)
             {
+                if (tile?.Sizing is not ("original" or "fit" or "fill" or "stretch"))
+                    throw new InvalidDataException("Choose original, fit, fill, or stretch for tile sizing.");
+                if (tile.ZoomPercent is < 25 or > 400 || tile.HorizontalPositionPercent is < 0 or > 100 || tile.VerticalPositionPercent is < 0 or > 100)
+                    throw new InvalidDataException("Tile zoom must be 25–400%; image positions must be 0–100%.");
                 if (tile is null || !(AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || StreamCatalog.IsOverlaySource(tile.CameraSlot) || (allowFocusTiles && tile.CameraSlot is -1 or -2)) || !cameras.Add(tile.CameraSlot))
                     throw new InvalidDataException("Each tile must reference a different main camera.");
                 if (tile.Row < 0 || tile.Column < 0 || tile.RowSpan < 1 || tile.ColumnSpan < 1 ||

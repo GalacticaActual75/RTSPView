@@ -24,6 +24,8 @@ public static class CameraWallPresentation
             if (placement is null) { tile.SetWallVisibility(false); continue; }
             Grid.SetRow(tile, placement.Row); Grid.SetColumn(tile, placement.Column);
             Grid.SetRowSpan(tile, placement.RowSpan); Grid.SetColumnSpan(tile, placement.ColumnSpan);
+            tile.SetWallSizing(focusedSlot.HasValue ? placement with { Sizing = "fit" } : placement,
+                focusedSlot.HasValue ? layout.EffectiveWidth : layout.EffectiveWidth * proportions.Columns.Skip(placement.Column).Take(placement.ColumnSpan).Sum());
             tile.SetWallVisibility(true);
         }
     }
