@@ -32,6 +32,7 @@ public partial class MainWindow
                 entry = (tile, camera);
             }
             else if (entry.Camera != camera) entry.Tile.Apply(camera);
+            entry.Tile.ApplyTileBorder(_settings.ShowTileBorders);
             _rawOverlaySources[source.Slot] = (entry.Tile, camera);
         }
         _allTiles = [.._tiles, DoorbellTile, GarageTile, .._additionalOverlays.Values.Select(e => e.Tile), .._rawOverlaySources.Values.Select(e => e.Tile)];

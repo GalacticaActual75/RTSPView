@@ -236,6 +236,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             ? settings with { Enabled = true }
             : settings;
 
+    public void ApplyTileBorder(bool visible) => TileBorder.BorderThickness = new Thickness(visible ? 1 : 0);
+
     public void ApplyOverlayPreferences(bool showCameraNames, bool showCameraStats)
     {
         _showCameraNames = showCameraNames;
@@ -277,36 +279,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void ApplyViewportEdgeSmoothing(DoorbellOverlaySettings overlay, double width, double height)
     {
-        var shape = overlay.ViewportShape;
         TileBorder.BorderThickness = new Thickness(0);
-        EllipticalViewportEdge.Visibility =
-            shape is DoorbellViewportShape.Circle or DoorbellViewportShape.Oval
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        RoundedViewportEdge.Visibility =
-            shape == DoorbellViewportShape.RoundedSquare
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        RoundedViewportEdge.CornerRadius =
-            new CornerRadius(Math.Max(1, Math.Min(width, height) * 0.22));
-        CustomViewportEdge.Visibility = Visibility.Collapsed;
-        CustomViewportEdge.Data = null;
-        CustomViewportEdge.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
-        CustomViewportEdge.RenderTransform = new System.Windows.Media.RotateTransform(
-            Math.Clamp(overlay.CustomViewportRotationDegrees, -180, 180));
-        if (shape != DoorbellViewportShape.Custom) return;
-        try
+        EllipticalViewportEdge.Visibility = RoundedViewportEdge.Visibility = CustomViewportEdge.Visibility = Visibility.Collapsed;
+        var geometry = OverlayViewportGeometry.Create(overlay, width, height);
+        var drawing = new System.Windows.Media.DrawingGroup();
+        drawing.Children.Add(new System.Windows.Media.GeometryDrawing(System.Windows.Media.Brushes.Transparent, null,
+            new System.Windows.Media.RectangleGeometry(new Rect(0, 0, width, height))));
+        drawing.Children.Add(new System.Windows.Media.GeometryDrawing(System.Windows.Media.Brushes.White, null, geometry));
+        OpacityMask = new System.Windows.Media.DrawingBrush(drawing)
         {
-            var geometry = System.Windows.Media.Geometry.Parse(overlay.CustomViewportPathData).GetFlattenedPathGeometry();
-            geometry.FillRule = System.Windows.Media.FillRule.EvenOdd;
-            foreach (var figure in geometry.Figures) figure.IsClosed = true;
-            CustomViewportEdge.Data = geometry;
-            CustomViewportEdge.Visibility = Visibility.Visible;
-        }
-        catch (Exception exception) when (exception is FormatException or InvalidOperationException)
-        {
-            CustomViewportEdge.Data = null;
-        }
+            ViewboxUnits = System.Windows.Media.BrushMappingMode.Absolute,
+            Viewbox = new Rect(0, 0, width, height),
+            Stretch = System.Windows.Media.Stretch.Fill
+        };
+        ViewportBorder.Data = geometry;
+        ViewportBorder.Visibility = overlay.ShowBorder ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void SetRestartButtonPlacement(RestartButtonPlacement placement)

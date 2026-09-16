@@ -29,6 +29,7 @@ public sealed record AppSettings
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;
     public bool ShowCameraStats { get; init; } = true;
+    public bool ShowTileBorders { get; init; } = true;
     public int[] DiagnosticsAutoOpenExcludedSlots { get; init; } = [];
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
     public SnapshotSettings Snapshots { get; init; } = new();
@@ -215,6 +216,7 @@ public sealed record DoorbellOverlaySettings
     public int ViewportHorizontalPositionPercent { get; init; }
     public int ViewportVerticalPositionPercent { get; init; } = 100;
     public int ViewportOpacityPercent { get; init; } = 100;
+    public bool ShowBorder { get; init; } = true;
     public DoorbellVideoSizing VideoSizing { get; init; } = DoorbellVideoSizing.Fit;
     public DoorbellViewportShape ViewportShape { get; init; } = DoorbellViewportShape.Native;
     public string CustomViewportSourceName { get; init; } = string.Empty;
@@ -244,6 +246,7 @@ public sealed record DisplaySettings
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;
     public bool ShowCameraStats { get; init; } = true;
+    public bool ShowTileBorders { get; init; } = true;
     public int[] DiagnosticsAutoOpenExcludedSlots { get; init; } = [];
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
 }

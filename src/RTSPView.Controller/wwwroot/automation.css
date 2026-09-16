@@ -57,7 +57,7 @@
 .automation-connection { font-size: 13px; margin: 8px 0 24px; }
 #automationForm .automation-rule-list { border: 0; padding: 0; margin: 24px 0; }
 #automationForm .automation-rule-list > legend { padding: 0; font-size: 18px; }
-#automationForm .automation-rule { padding: 14px 18px; margin: 12px 0; background: var(--bg, #0c121a); }
+#automationForm .automation-rule { padding: 14px 18px; margin: 12px 0; background: var(--panel, #172131); }
 .rule-summary { font-size: 15px; }
 .rule-summary-name { font-weight: 600; }
 .rule-summary-description { display: block; margin: 6px 0 0 18px; font-size: 13px; font-weight: 400; color: var(--muted); }

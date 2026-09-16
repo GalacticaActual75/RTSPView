@@ -520,12 +520,13 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
             MouseCursorHideSeconds = Math.Clamp(display.MouseCursorHideSeconds, 1, 30),
             ShowCameraNames = display.ShowCameraNames,
             ShowCameraStats = display.ShowCameraStats,
+            ShowTileBorders = display.ShowTileBorders,
             DiagnosticsAutoOpenExcludedSlots = display.DiagnosticsAutoOpenExcludedSlots,
             KeepViewerAlwaysOnTop = display.KeepViewerAlwaysOnTop
         }).Normalize();
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", "Display settings changed from web admin");
-        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop });
+        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, ShowTileBorders = updated.ShowTileBorders, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop });
     }
     finally { configGate.Release(); }
 }).RequireAuthorization();

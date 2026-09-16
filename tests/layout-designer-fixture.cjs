@@ -6,12 +6,21 @@ const root = path.resolve(__dirname, '../src/RTSPView.Controller/wwwroot');
 const slots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
 const camera = (slot,name) => ({slot,name,enabled:true,rtspUrl:'',transport:1,networkCacheMilliseconds:1000,startupTimeoutSeconds:20,watchdogTimeoutSeconds:20,maximumReconnectBackoffSeconds:30,lowLatency:false,decodeAudio:false});
 const overlay = (slot,name,hostCameraSlot) => ({hostCameraSlot,camera:camera(slot,name),viewportShape:0,viewportWidthPercent:50,viewportHeightPercent:50,viewportHorizontalPositionPercent:0,viewportVerticalPositionPercent:100,viewportOpacityPercent:100,zoomPercent:100,imageHorizontalPositionPercent:50,imageVerticalPositionPercent:50,customViewportPathData:'',customViewportSourceName:'',customViewportViewBoxX:0,customViewportViewBoxY:0,customViewportViewBoxWidth:1,customViewportViewBoxHeight:1,customViewportRotationDegrees:0});
-let config = {schemaVersion:15,cameraCount:9,cameras:slots.map((slot,i)=>camera(slot,'Camera '+(i+1))),doorbellOverlay:overlay(10,'Doorbell',2),garageOverlay:overlay(11,'Garage',3),additionalOverlays:[overlay(12,'Patio',1)],layouts:[{id:'default',name:'Default',rows:3,columns:3,tiles:slots.slice(0,9).map((cameraSlot,i)=>({cameraSlot,row:Math.floor(i/3),column:i%3,rowSpan:1,columnSpan:1}))}],activeLayoutId:'default',startFullScreen:true,preferredMonitor:0,hideMouseCursor:true,mouseCursorHideSeconds:3,showCameraNames:true,showCameraStats:true,keepViewerAlwaysOnTop:true};
+let config = {schemaVersion:15,cameraCount:9,cameras:slots.map((slot,i)=>camera(slot,'Camera '+(i+1))),doorbellOverlay:overlay(10,'Doorbell',2),garageOverlay:overlay(11,'Garage',3),additionalOverlays:[overlay(12,'Patio',1)],layouts:[{id:'default',name:'Default',rows:3,columns:3,tiles:slots.slice(0,9).map((cameraSlot,i)=>({cameraSlot,row:Math.floor(i/3),column:i%3,rowSpan:1,columnSpan:1}))}],activeLayoutId:'default',startFullScreen:true,preferredMonitor:0,hideMouseCursor:true,mouseCursorHideSeconds:3,showCameraNames:true,showCameraStats:true,showTileBorders:true,keepViewerAlwaysOnTop:true};
 config.automationViewLayouts = [{id:'focus',name:'One large camera',rows:3,columns:3,focusSlots:[-1],tiles:[{cameraSlot:-1,row:0,column:0,rowSpan:2,columnSpan:2},{cameraSlot:2,row:0,column:2,rowSpan:1,columnSpan:1},{cameraSlot:3,row:1,column:2,rowSpan:1,columnSpan:1}]}];
 config.deletedOverlaySlots=[]; config.deletedCameraSlots=[];
+const schedules=Object.fromEntries(['viewer','host'].map(action=>[action,{settings:{enabled:action==='host',action,mode:'weekly',intervalHours:24,time:'03:00',days:[0]},nextRun:'2026-10-01T03:00:00Z',result:'Schedule saved.'}]));
 http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');res.setHeader('Cache-Control','no-store');
   const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
+  if(url.pathname==='/api/restart-schedule'){
+    if(req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);if(data.settings.enabled&&data.settings.action==='host'&&!data.hostAcknowledged){res.statusCode=400;return json({error:'Acknowledgment required'});}schedules[data.settings.action].settings=data.settings;}
+    return json({schedules,timeZone:'UTC',timeZoneId:'UTC',serverTime:new Date().toISOString()});
+  }
+  if(url.pathname==='/api/dependencies/pawnio')return json({available:true,pawnInstalled:true,state:'ready',message:'Ready.'});
+  if(url.pathname==='/api/temperatures')return json({settings:{showWarnings:false,cpuWarningEnabled:false,gpuWarningEnabled:false,cpuMaxC:90,gpuMaxC:85},cpuC:null,gpuC:null});
+  if(url.pathname==='/api/display'&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;Object.assign(config,JSON.parse(body));return json(config);}
+  if(['/api/doorbell','/api/garage','/api/overlays/12'].includes(url.pathname)&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);if(url.pathname==='/api/doorbell')config.doorbellOverlay=data;else if(url.pathname==='/api/garage')config.garageOverlay=data;else config.additionalOverlays[0]=data;return json(data);}
   if(url.pathname==='/api/session')return json({authenticated:true,csrfToken:'fixture'});
   if(url.pathname==='/api/status')return json({hostname:'Isolated layout preview',lanAddresses:['localhost'],version:'1.0.31-beta.7',currentTime:new Date().toISOString()});
   if(url.pathname==='/api/config')return json(config);

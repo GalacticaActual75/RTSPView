@@ -4,7 +4,7 @@
     <Grid>
     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
     <Grid x:Name="WallViewport" Background="Black">
-    <Grid x:Name="WallGrid" Background="Black" HorizontalAlignment="Center" VerticalAlignment="Center">
+    <Grid x:Name="WallGrid" Background="Black" UseLayoutRounding="True" SnapsToDevicePixels="True" HorizontalAlignment="Center" VerticalAlignment="Center">
     </Grid>
     </Grid>
     <local:WallDiagnosticsPanel x:Name="DiagnosticsPanel" Grid.Column="1"/>

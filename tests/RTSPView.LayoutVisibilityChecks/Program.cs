@@ -21,6 +21,7 @@ internal static class Program
         {
             try
             {
+                OverlayEdgeChecks.Run();
                 await SetLayout(9);
                 Check(9, "startup 3x3 hides seven unused status windows");
                 NativeBackgroundChecks.Run(tiles[0]);

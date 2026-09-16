@@ -19,9 +19,12 @@ const dependencyUi = (()=>{
     try{
       const state=await api('/api/dependencies/pawnio');if(current!==revision)return;
       const active=['starting','enabling','downloading','installing','update-installing'].includes(state.state);
+      panel.querySelector('[data-helper]').hidden=!!state.available;
+      panel.querySelector('[data-install]').hidden=!!state.pawnInstalled;
+      panel.querySelector('.actions').hidden=!!state.available&&!!state.pawnInstalled;
       panel.querySelector('[data-helper]').disabled=active||state.available;
       panel.querySelector('[data-install]').disabled=active||!state.available||state.pawnInstalled;
-      panel.querySelector('[data-dependency-status]').textContent=(state.pawnInstalled?'PawnIO installed. ':'')+state.message;
+      panel.querySelector('[data-dependency-status]').textContent=(state.available?'Maintenance helper enabled. ':'')+(state.pawnInstalled?'PawnIO installed. ':'')+state.message;
     }catch{if(current===revision){for(const button of panel.querySelectorAll('button'))button.disabled=true;panel.querySelector('[data-dependency-status]').textContent='Host dependency status unavailable. Reconnect to the Controller.';}}
     finally{loading=false;}
   }

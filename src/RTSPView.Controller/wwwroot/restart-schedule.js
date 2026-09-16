@@ -25,15 +25,15 @@ const restartScheduleUi = (() => {
         <dl class="restart-status"><div><dt>Next restart (host time)</dt><dd data-status="next">—</dd></div><div><dt>Last attempt (host time)</dt><dd data-status="last">—</dd></div><div><dt>Last result</dt><dd data-status="last-result">No attempts yet.</dd></div></dl>
         <p class="restart-current" role="status"></p><p class="restart-message" role="status">Loading…</p>`;
       section.querySelector('.restart-schedules').append(form);
-      form.addEventListener('change',()=>{updateFields(action);message(action,'Unsaved changes.');});
+      form.addEventListener('change',event=>{if(event.target.name!=='hostAcknowledged'&&form.elements.hostAcknowledged){form.dataset.acknowledged='false';form.elements.hostAcknowledged.checked=false;}updateFields(action);message(action,'Unsaved changes.');});
       form.querySelector('.restart-skip').onclick=()=>skip(action);
-      form.addEventListener('input',()=>{form.dataset.dirty='true';message(action,'Unsaved changes — Apply changes updates this restart schedule');});
+      form.addEventListener('input',event=>{if(event.target.name!=='hostAcknowledged'&&form.elements.hostAcknowledged){form.dataset.acknowledged='false';form.elements.hostAcknowledged.checked=false;updateFields(action);}form.dataset.dirty='true';message(action,'Unsaved changes — Apply changes updates this restart schedule');});
       form.onsubmit=async event=>{
         event.preventDefault(); const e=form.elements;
         const settings={enabled:e.enabled.checked,action,mode:e.mode.value,intervalHours:Number(e.intervalHours.value),time:e.time.value,days:[...form.querySelectorAll('[name=days]:checked')].map(input=>Number(input.value))};
         if(settings.mode==='weekly'&&!settings.days.length){message(action,'Select at least one weekday.');return;}
         const saved=await mutate(action,'/api/restart-schedule','PUT',{settings,hostAcknowledged:!!e.hostAcknowledged?.checked});
-        if(saved){form.dataset.dirty='false';message(action,'Applied — restart schedule updated.');if(e.hostAcknowledged)e.hostAcknowledged.checked=false;}
+        if(saved){form.dataset.dirty='false';message(action,'Applied — restart schedule updated.');if(e.hostAcknowledged){form.dataset.acknowledged=String(e.enabled.checked);e.hostAcknowledged.checked=e.enabled.checked;updateFields(action);}}
       };
       updateFields(action);
     }
@@ -48,7 +48,7 @@ const restartScheduleUi = (() => {
     const form=forms[action],e=form.elements;
     for(const section of form.querySelectorAll('[data-mode]'))section.hidden=section.dataset.mode!==e.mode.value;
     e.intervalHours.required=e.mode.value==='interval';e.time.required=e.mode.value==='weekly';
-    if(action==='host'){form.querySelector('.restart-host-warning').hidden=!e.enabled.checked;e.hostAcknowledged.required=e.enabled.checked;}
+    if(action==='host'){form.querySelector('.restart-host-warning').hidden=!e.enabled.checked||form.dataset.acknowledged==='true';e.hostAcknowledged.required=e.enabled.checked&&form.dataset.acknowledged!=='true';}
   }
   function render(result){
     latest=result.schedules;
@@ -71,7 +71,7 @@ const restartScheduleUi = (() => {
       const result=await api('/api/restart-schedule');
       for(const [action,form] of Object.entries(forms)){
         const s=result.schedules[action].settings,e=form.elements;
-        e.enabled.checked=s.enabled;e.mode.value=s.mode;e.intervalHours.value=s.intervalHours;e.time.value=s.time;
+        if(e.hostAcknowledged){form.dataset.acknowledged=String(s.enabled);e.hostAcknowledged.checked=s.enabled;}e.enabled.checked=s.enabled;e.mode.value=s.mode;e.intervalHours.value=s.intervalHours;e.time.value=s.time;
         for(const input of form.querySelectorAll('[name=days]'))input.checked=s.days.includes(Number(input.value));
         form.querySelector('.restart-fields').disabled=false;updateFields(action);message(action,'');
       }

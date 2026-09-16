@@ -2,6 +2,14 @@ function createWallDesigner(isAutomation = false) {
   let config, saved, draft, selectedId, selectedTile = -1, previous, dirty = false, busy = false;
   let root, board, status, observer, armedCamera = null;
   const redoHistory=[];
+  function fitPreview(){
+    if(!board||!root?.getClientRects().length)return;
+    const stage=board.parentElement,foot=root.querySelector('.designer-preview-foot');
+    const padding=parseFloat(getComputedStyle(stage).paddingTop)+parseFloat(getComputedStyle(stage).paddingBottom);
+    const available=Math.max(120,window.innerHeight-(stage.getBoundingClientRect().top+window.scrollY)-padding-(foot?.offsetHeight||45)-45);
+    const [w,h]=resolution(current());board.style.maxWidth=(available*w/h)+'px';
+  }
+  window.addEventListener('resize',fitPreview);
   const resolution = l => [l.outputWidth || (l.aspectRatio === '9:16' ? 1080 : 1920), l.outputHeight || (l.aspectRatio === '9:16' ? 1920 : 1080)];
   let streamDimensions = new Map(), panImage = false;
   function sizeImages(candidate=null, candidateIndex=-1) {
@@ -117,7 +125,7 @@ function createWallDesigner(isAutomation = false) {
     field('Saved layout',layouts,picker);
     const layoutTools=el('div',undefined,'designer-layout-tools');picker.append(layoutTools);
     const badge=el('span',dirty?'Unsaved changes':!isAutomation&&selectedId===saved.activeLayoutId?'On wall':'Saved','designer-badge'+(dirty?' draft':''));layoutTools.append(badge);
-    const manage=el('details',undefined,'designer-menu');const manageSummary=el('summary','⋯');manageSummary.setAttribute('aria-label','Manage layout');manageSummary.title='Manage layout';manage.append(manageSummary);layoutTools.append(manage);
+    const manage=el('details',undefined,'designer-menu');const manageSummary=el('summary','Manage layout');manageSummary.setAttribute('aria-label','Manage layout');manageSummary.title='Manage layout';manage.append(manageSummary);layoutTools.append(manage);
     const menu=el('div',undefined,'designer-popover');manage.append(menu);
     const name=el('input');name.value=layout.name;name.maxLength=80;
     name.oninput=()=>{layout.name=name.value.trim();dirty=true;badge.textContent='Unsaved changes';badge.classList.add('draft');root.querySelector('.designer-discard').disabled=false;layouts.selectedOptions[0].textContent=layout.name;message('Unsaved changes.');};field('Layout name',name,menu);
@@ -239,7 +247,7 @@ function createWallDesigner(isAutomation = false) {
     });
     const previewFoot=el('div',undefined,'designer-preview-foot');preview.append(previewFoot);
     const scaleLabel=el('span');previewFoot.append(el('span','Drag to move or swap · Edges resize · Arrows move · Shift + arrows resize'),scaleLabel);
-    observer=new ResizeObserver(()=>{scaleLabel.textContent=outputWidth+' × '+outputHeight+' · '+Math.round(board.clientWidth/outputWidth*100)+'% preview';sizeImages();});observer.observe(board);
+    observer=new ResizeObserver(()=>{fitPreview();scaleLabel.textContent=outputWidth+' × '+outputHeight+' · '+Math.round(board.clientWidth/outputWidth*100)+'% preview';sizeImages();});observer.observe(board);observer.observe(root);requestAnimationFrame(fitPreview);
     const side=el('aside',undefined,'designer-inspector');side.hidden=!drawer;workspace.append(side);
     button('Close panel',()=>{drawer='';render();},side).classList.add('designer-close');
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
@@ -262,7 +270,7 @@ function createWallDesigner(isAutomation = false) {
         field((axis==='rows'?'Row ':'Column ')+(index+1)+' (%)',input,details);
       });
     }
-    const tilePanel=el('div');tilePanel.hidden=drawer!=='tile';side.append(tilePanel);
+    const tilePanel=el('div',undefined,'designer-tile-panel');tilePanel.hidden=drawer!=='tile';side.append(tilePanel);
     const tile=layout.tiles[selectedTile];
     if(tile){
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Unavailable camera '+tile.cameraSlot};
@@ -273,7 +281,7 @@ function createWallDesigner(isAutomation = false) {
         pick.value=previewCameras.get(layout.id+':'+tile.cameraSlot)||0;pick.onchange=()=>{previewCameras.set(layout.id+':'+tile.cameraSlot,Number(pick.value));render();};field('Preview camera only',pick,tilePanel);
         tilePanel.append(el('p','Your automation rule chooses the live camera.','designer-help'));
       }
-      if(isAutomation&&tile.cameraSlot>0){for(const focusSlot of layout.focusSlots)button('Use as Focus '+(-focusSlot),()=>{const old=layout.tiles.find(t=>t.cameraSlot===focusSlot);old.cameraSlot=tile.cameraSlot;tile.cameraSlot=focusSlot;changed();},tilePanel);}
+      if(isAutomation&&tile.cameraSlot>0){const focusActions=el('div',undefined,'designer-focus-actions');tilePanel.append(focusActions);for(const focusSlot of layout.focusSlots)button('Use as Focus '+(-focusSlot),()=>{const old=layout.tiles.find(t=>t.cameraSlot===focusSlot);old.cameraSlot=tile.cameraSlot;tile.cameraSlot=focusSlot;changed();},focusActions);}
       const sizing=el('select');for(const [value,label] of [['original','Original size (default)'],['fit','Fit · entire image'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'original';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);
       const framing=el('div',undefined,'designer-framing');tilePanel.append(framing);
       for(const [key,label,min,max,fallback] of [['zoomPercent','Zoom',25,400,100],['horizontalPositionPercent','Horizontal position',0,100,50],['verticalPositionPercent','Vertical position',0,100,50]]){

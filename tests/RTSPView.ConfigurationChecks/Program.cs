@@ -6,6 +6,11 @@ var root = Path.Combine(Path.GetTempPath(), "RTSPView-ConfigurationChecks", Guid
 Directory.CreateDirectory(root);
 try
 {
+    var borderStore = new JsonSettingsStore(Path.Combine(root, "borders.json"));
+    await borderStore.SaveAsync(new AppSettings { ShowTileBorders = false, DoorbellOverlay = new() { ShowBorder = false } });
+    var borders = await borderStore.LoadAsync();
+    Check(!borders.ShowTileBorders && !borders.DoorbellOverlay.ShowBorder && borders.GarageOverlay.ShowBorder, "independent wall and overlay border preferences persist");
+    Check(new AppSettings().ShowTileBorders && new DoorbellOverlaySettings().ShowBorder, "legacy border defaults are preserved");
     StreamActivityChecks.Run();
     OverlayGeometryChecks.Run();
     WallProportionsChecks.Run();

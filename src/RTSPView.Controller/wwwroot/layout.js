@@ -168,7 +168,7 @@ const adminLayout = (() => {
       };
       for (const title of placement.querySelectorAll('.overlay-group-title')) title.remove();
       makeGroup('Placement', ['hostCameraSlot','viewportWidthPercent','viewportHeightPercent','viewportHorizontalPositionPercent','viewportVerticalPositionPercent']);
-      makeGroup('Appearance',['viewportOpacityPercent']);
+      makeGroup('Appearance',['viewportOpacityPercent','showBorder']);
       const shape = makeGroup('Shape / Mask',['viewportShape']);
       shape.append(placement.querySelector('.open-shape-editor'),placement.querySelector('.custom-viewport-upload'));
       makeGroup('Framing',['zoomPercent','imageHorizontalPositionPercent','imageVerticalPositionPercent']);

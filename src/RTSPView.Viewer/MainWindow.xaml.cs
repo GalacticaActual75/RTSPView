@@ -444,7 +444,7 @@ public partial class MainWindow : Window
             ShowInTaskbar = false,
             ShowActivated = false,
             WindowStartupLocation = WindowStartupLocation.Manual,
-            Background = System.Windows.Media.Brushes.Black,
+            Background = System.Windows.Media.Brushes.Transparent,
             BorderBrush = System.Windows.Media.Brushes.Black,
             BorderThickness = new Thickness(0),
             Content = tile,
@@ -558,7 +558,7 @@ public partial class MainWindow : Window
             overlayWindow.Top = origin.Y / scale.DpiScaleY;
             overlayWindow.Width = Math.Max(1, WallGrid.ActualWidth);
             overlayWindow.Height = Math.Max(1, WallGrid.ActualHeight);
-            var plain = overlay with { ViewportShape = DoorbellViewportShape.Native };
+            var plain = overlay with { ViewportShape = DoorbellViewportShape.Native, ShowBorder = false };
             overlayTile.ApplyVideoSizing(100, 50, 50, overlayWindow.Width, overlayWindow.Height);
             overlayTile.ApplyViewportEdgeSmoothing(plain, overlayWindow.Width, overlayWindow.Height);
             OverlayWindowOpacity.Apply(overlayWindow, 100);
@@ -605,7 +605,8 @@ public partial class MainWindow : Window
         overlayWindow.Topmost = false;
         if (!overlayWindow.IsVisible) overlayWindow.Show();
         ShowOverlayWindowHierarchy(overlayWindow, overlayTile);
-        ApplyOverlayWindowRegion(overlayWindow, overlay, bounds.Width, bounds.Height, dpi);
+        // The composited alpha mask preserves partial edge pixels; a Win32 region would discard them.
+        SetWindowRgn(new WindowInteropHelper(overlayWindow).Handle, IntPtr.Zero, true);
         BringOverlayWindowToFront(overlayWindow);
     }
 
@@ -1064,6 +1065,7 @@ public partial class MainWindow : Window
     private void ApplyOverlayPreferences()
     {
         foreach (var tile in _allTiles) tile.ApplyOverlayPreferences(_settings.ShowCameraNames, _settings.ShowCameraStats);
+        foreach (var tile in _tiles.Concat(_rawOverlaySources.Values.Select(source => source.Tile))) tile.ApplyTileBorder(_settings.ShowTileBorders);
     }
 
     protected override void OnClosing(CancelEventArgs e)

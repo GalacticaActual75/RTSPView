@@ -25,6 +25,7 @@
         <Path x:Name="CustomViewportEdge" Margin="-1.5" Stretch="Fill" Stroke="#E6000000" StrokeThickness="3" Fill="Transparent" IsHitTestVisible="False" SnapsToDevicePixels="False" Visibility="Collapsed" Panel.ZIndex="20"/>
       </Grid>
     </vlc:VideoView>
+    <Path x:Name="ViewportBorder" Stroke="#24272B" StrokeThickness="2" IsHitTestVisible="False" Visibility="Collapsed" Panel.ZIndex="50"/>
    </Grid>
   </Border>
 </UserControl>
