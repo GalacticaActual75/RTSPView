@@ -105,7 +105,7 @@ public static class AutomationConfiguration
     {
         var saved = settings.Layouts.Single(l => l.Id == settings.ActiveLayoutId);
         var others = settings.Cameras.Take(settings.CameraCount).Where(c => c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl) && c.Slot != slot).Select(c => c.Slot).ToArray();
-        if (others.Length == 0) return saved with { Rows = 1, Columns = 1, Tiles = [new() { CameraSlot = slot }] };
+        if (others.Length == 0) return saved with { RowWeights = [], ColumnWeights = [], Rows = 1, Columns = 1, Tiles = [new() { CameraSlot = slot }] };
         var columns = (int)Math.Ceiling(Math.Sqrt(others.Length + 4));
         var rows = (int)Math.Ceiling((others.Length + 4d) / columns);
         if (saved.AspectRatio == "9:16") (rows, columns) = (columns, rows);
@@ -116,7 +116,7 @@ public static class AutomationConfiguration
                 if (row >= 2 || column >= 2) tiles.Add(new() { CameraSlot = others[index++], Row = row, Column = column });
         // Runtime-only geometry supports up to 16 streams plus the larger focus tile.
         // It is never written into the user's saved layout collection.
-        return saved with { Rows = rows, Columns = columns, Tiles = tiles };
+        return saved with { RowWeights = [], ColumnWeights = [], Rows = rows, Columns = columns, Tiles = tiles };
     }
 }
 

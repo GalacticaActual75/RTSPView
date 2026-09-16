@@ -451,3 +451,19 @@ Select **Focused layout**, your saved layout, and **Camera that detected the
 person** to follow detections. With takeover enabled and dynamic Focus 2, the
 newest detecting stream fills Focus 1 and the previous still-active stream fills
 Focus 2. A fixed Focus 2 selection continues to take precedence.
+
+### Optional feed sizing (beta development)
+
+In either layout editor, open **Sizing**. **Fit tiles to streams** uses loaded
+snapshot proportions (choose preview streams for automation focus tiles first)
+to propose less letterboxing while keeping small tiles equal. It leaves the
+arrangement unchanged if no improvement is found. **Row heights** and **Column
+widths** allow fine shared-track adjustments in 0.5% steps; linked tracks move
+together, so tiles cannot overlap. Selected tiles show a picture-fit percentage.
+
+Changes remain in the draft until saved or applied. Use **Undo edit** or **Reset
+sizing** to return to the previous or automatic proportions. Existing layouts,
+including the standard 3x3, retain their original sizing. The viewer uses the
+same saved proportions as the editor and continues fitting whole video frames
+without cropping or stretching. Focus sizing stays fixed when automation changes
+streams, avoiding unexpected rearrangement of the surrounding feeds.

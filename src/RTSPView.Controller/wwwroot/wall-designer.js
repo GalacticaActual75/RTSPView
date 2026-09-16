@@ -1,7 +1,7 @@
 function createWallDesigner(isAutomation = false) {
   let config, saved, draft, selectedId, selectedTile = -1, previous, dirty = false, busy = false;
   let root, board, status;
-  const previewCameras = new Map(), undoHistory = [];
+  const streamAspects = new Map(), previewCameras = new Map(), undoHistory = [];
   let checkpoint, drawer = '', searchText = '';
   function toggleDrawer(value) { drawer = drawer === value ? '' : value; render(); }
   const copy = value => JSON.parse(JSON.stringify(value));
@@ -21,6 +21,11 @@ function createWallDesigner(isAutomation = false) {
   }
   function message(text) { status.textContent = text; }
   function changed() {
+    const layout=current(),small=layout.tiles.filter(t=>t.rowSpan===1&&t.columnSpan===1);
+    for(const [key,position] of [['rowWeights','row'],['columnWeights','column']])if(layout[key]?.length){
+      const linked=[...new Set(small.map(t=>t[position]))];
+      if(linked.length){const mean=linked.reduce((n,i)=>n+layout[key][i],0)/linked.length;for(const i of linked)layout[key][i]=mean;}
+    }
     if(checkpoint){undoHistory.push(checkpoint);if(undoHistory.length>50)undoHistory.shift();}
     dirty = true; render(); message(isAutomation ? 'Unsaved automation layout. Save when ready.' : 'Unsaved draft. Apply when ready to change the wall.');
   }
@@ -51,6 +56,7 @@ function createWallDesigner(isAutomation = false) {
   function preset(id) {
     const layout=current();
     const slots=config.cameras.map(camera=>camera.slot);if(isAutomation)slots.unshift(...(id==='dual'?[-1,-2]:[-1]));
+    layout.rowWeights=[];layout.columnWeights=[];
     Object.assign(layout,wallLayoutPresets.create(id,layout.aspectRatio||'16:9',slots));
     if(isAutomation)layout.focusSlots=layout.tiles.filter(t=>t.cameraSlot<0).map(t=>t.cameraSlot);
     selectedTile=-1;changed();
@@ -107,7 +113,7 @@ function createWallDesigner(isAutomation = false) {
     },menu);deleteButton.disabled=isAutomation?draft.layouts.length===1:selectedId===saved.activeLayoutId;deleteButton.classList.add('designer-danger');
     const revert=button('Revert last save',()=>persist(false,true),menu);revert.disabled=!previous;
     const actions=el('div',undefined,'designer-actions');top.append(actions);
-    for(const [id,label] of [['add','Add camera'],['presets','Presets'],['advanced','Advanced'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
+    for(const [id,label] of [['add','Add camera'],['presets','Presets'],['sizing','Sizing'],['advanced','Advanced'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
 
     button('Undo edit',()=>{const state=undoHistory.pop();if(!state)return;draft=state.draft;selectedId=state.selectedId;selectedTile=state.selectedTile;dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();message('Last layout edit undone.');},actions).disabled=!undoHistory.length;
     button('Discard changes',()=>{draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=-1;dirty=false;undoHistory.length=0;render();message('Draft discarded.');},menu).classList.add('designer-discard');root.querySelector('.designer-discard').disabled=!dirty;
@@ -127,7 +133,7 @@ function createWallDesigner(isAutomation = false) {
       input.onchange=()=>{
         const value=Number(input.value),old=layout[key];layout[key]=value;
         if(!Number.isInteger(value)||value<1||value>(isAutomation?6:4)||layout.tiles.some((t,i)=>!validTile(t,i))){layout[key]=old;render();message('Remove or resize tiles before shrinking the grid.');return;}
-        changed();
+        layout.rowWeights=[];layout.columnWeights=[];changed();
       };field(label,input,gridFields);
     }
     const presets=el('details',undefined,'designer-preset-library');presets.open=true;
@@ -153,6 +159,9 @@ function createWallDesigner(isAutomation = false) {
       const rect=proportions.bounds(tile);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
       const previewSlot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);
       const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);
+      const guide=el('span','','designer-aspect-guide');guide.hidden=index!==selectedTile;node.append(guide);
+      const updateGuide=r=>{const ratio=streamAspects.get(previewSlot);guide.textContent=ratio?'Picture fit '+Math.round(Math.min(r.width/r.height*(layout.aspectRatio==='9:16'?9/16:16/9)/ratio,ratio/(r.width/r.height*(layout.aspectRatio==='9:16'?9/16:16/9)))*100)+'%':'Load a preview for sizing';};
+      image.onload=()=>{if(image.naturalWidth&&image.naturalHeight){streamAspects.set(previewSlot,image.naturalWidth/image.naturalHeight);image.style.visibility='';updateGuide(rect);}};updateGuide(rect);
       node.append(el('span',camera.name,'designer-caption'));
       if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot)){
         node.append(el('span','Chosen by automation','designer-overlay'));
@@ -172,7 +181,7 @@ function createWallDesigner(isAutomation = false) {
           candidate={...tile,...(resize?{columnSpan:tile.columnSpan+(resizeX?dx:0),rowSpan:tile.rowSpan+(resizeY?dy:0)}:{column:tile.column+dx,row:tile.row+dy})};
           const swap=layout.tiles.some((other,i)=>i!==index&&other.row===candidate.row&&other.column===candidate.column&&other.rowSpan===tile.rowSpan&&other.columnSpan===tile.columnSpan&&candidate.rowSpan===tile.rowSpan&&candidate.columnSpan===tile.columnSpan);
           node.classList.toggle('invalid',!validTile(candidate,index)&&!swap);
-          const rect=proportions.bounds(candidate);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
+          const rect=proportions.bounds(candidate);guide.hidden=false;updateGuide(rect);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
         };
         node.onpointerup=()=>{node.onpointermove=null;if(JSON.stringify(candidate)===JSON.stringify(tile))render();else updateTile(candidate,index);};
         node.onpointercancel=()=>render();
@@ -182,6 +191,26 @@ function createWallDesigner(isAutomation = false) {
     previewFoot.append(el('span','Drag to move or swap. Use the corner handle to resize.'),el('span','Snapshot preview · '+(layout.aspectRatio||'16:9')));
     const side=el('aside',undefined,'designer-inspector');side.hidden=!drawer;workspace.append(side);
     button('Close panel',()=>{drawer='';render();},side).classList.add('designer-close');
+    const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
+    sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Video stays uncropped and unstretched. Small tiles remain equal in size.','designer-help'));
+    button('Fit tiles to streams',()=>{
+      const targets={};
+      for(const tile of layout.tiles){const slot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);const ratio=streamAspects.get(slot);
+        if(!ratio){message('Load each stream preview and choose preview streams for focus tiles before fitting.');return;}targets[tile.cameraSlot]=ratio;}
+      const fit=wallProportions.fit(layout,targets);
+      if(JSON.stringify(fit.rows)===JSON.stringify(proportions.rows)&&JSON.stringify(fit.columns)===JSON.stringify(proportions.columns)){message('This arrangement is already the best fit found while keeping small tiles equal. No changes made.');return;}
+      layout.rowWeights=fit.rows;layout.columnWeights=fit.columns;changed();message('Fit preview ready. Compare the wall, Undo if needed, then Save or Apply.');
+    },sizing);
+    button('Reset sizing',()=>{layout.rowWeights=[];layout.columnWeights=[];changed();},sizing);
+    sizing.append(el('p','Fine sizing adjusts shared grid tracks in 0.5% steps. Linked tracks move together to keep small tiles equal. Positions and stream assignments stay in their grid cells.','designer-help'));
+    for(const axis of ['rows','columns']){
+      const details=el('details');details.append(el('summary',axis==='rows'?'Row heights':'Column widths'));sizing.append(details);
+      proportions[axis].forEach((value,index)=>{
+        const input=el('input');input.type='number';input.min='2';input.max='98';input.step='.5';input.value=(value*100).toFixed(2);
+        input.onchange=()=>{const next=wallProportions.adjust(layout,axis,index,Number(input.value)/100);if(!next){render();message('These tracks are linked or the requested size leaves too little space.');return;}Object.assign(layout,next);changed();};
+        field((axis==='rows'?'Row ':'Column ')+(index+1)+' (%)',input,details);
+      });
+    }
     const tilePanel=el('div');tilePanel.hidden=drawer!=='tile';side.append(tilePanel);
     const tile=layout.tiles[selectedTile];
     if(tile){

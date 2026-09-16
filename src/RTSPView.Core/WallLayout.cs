@@ -17,6 +17,8 @@ public sealed record WallLayout
     public int Columns { get; init; } = 3;
     public string AspectRatio { get; init; } = "16:9";
     // Automation layouts use -1/-2 for unassigned focus tiles; positive IDs are migrated legacy positions.
+    public double[] RowWeights { get; init; } = [];
+    public double[] ColumnWeights { get; init; } = [];
     public int[] FocusSlots { get; init; } = [];
 
     public (double Width, double Height) Fit(double availableWidth, double availableHeight)
@@ -42,6 +44,11 @@ public sealed record WallLayout
                 throw new InvalidDataException($"Layouts support 1–{maximumDimension} rows and columns and up to 16 camera tiles.");
             if (layout.AspectRatio is not ("16:9" or "9:16"))
                 throw new InvalidDataException("Choose landscape (16:9) or portrait (9:16).");
+            foreach (var (weights, count) in new[] { (layout.RowWeights, layout.Rows), (layout.ColumnWeights, layout.Columns) })
+                if (weights is null || (weights.Length != 0 && (weights.Length != count || weights.Any(w => !double.IsFinite(w) || w < .02 || w > 1) || Math.Abs(weights.Sum() - 1) > .00001)))
+                    throw new InvalidDataException("Custom row and column sizes must be positive proportions totaling 100%.");
+            if ((layout.RowWeights.Length == 0) != (layout.ColumnWeights.Length == 0))
+                throw new InvalidDataException("Custom sizing needs both row and column proportions.");
             var occupied = new HashSet<(int, int)>();
             var cameras = new HashSet<int>();
             foreach (var tile in layout.Tiles)

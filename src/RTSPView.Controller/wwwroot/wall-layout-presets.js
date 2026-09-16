@@ -17,7 +17,7 @@ const wallLayoutPresets = (() => {
     {id:'strip',name:'Strip',rows:1,columns:4,tiles:grid(1,4)}
   ];
   function transpose(layout) {
-    return {...layout,rows:layout.columns,columns:layout.rows,tiles:layout.tiles.map(t=>({...t,row:t.column,column:t.row,rowSpan:t.columnSpan,columnSpan:t.rowSpan}))};
+    return {...layout,...(layout.rowWeights?{rowWeights:layout.columnWeights,columnWeights:layout.rowWeights}:{}),rows:layout.columns,columns:layout.rows,tiles:layout.tiles.map(t=>({...t,row:t.column,column:t.row,rowSpan:t.columnSpan,columnSpan:t.rowSpan}))};
   }
   function get(id,aspectRatio='16:9') {
     const item=catalog.find(p=>p.id===id);

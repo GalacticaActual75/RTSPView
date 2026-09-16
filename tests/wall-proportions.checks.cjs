@@ -16,3 +16,15 @@ for(const preset of presets.catalog)for(const format of ['16:9','9:16']){
 console.log('PASS preview proportions: unchanged 3x3, native parity, landscape/portrait bounds and pointer cells');
 
 const eight=balance(presets.get('focus-eight'));assert.equal(presets.get('focus-eight').tiles.length,8);for(const t of presets.get('focus-eight').tiles){const b=eight.bounds(t);assert(Math.abs(b.width-b.height)<1e-10,'focus plus seven must have no 16:9 letterboxing');}
+
+const custom={...mixed,rowWeights:[.2,.2,.3,.3],columnWeights:[.25,.25,.25,.25]};
+assert.deepEqual(balance(custom).rows,custom.rowWeights,'saved proportions used verbatim');
+const adjusted=balance.adjust(custom,'rows',2,.305);assert(adjusted);assert.equal(adjusted.rowWeights[2],adjusted.rowWeights[3]);assert(Math.abs(adjusted.rowWeights.reduce((a,b)=>a+b,0)-1)<1e-10);
+assert.equal(balance.adjust(presets.get('3'),'rows',0,.4),null,'all linked rows cannot break equal tiles');
+assert.equal(balance.adjust(custom,'rows',2,.6),null,'oversized group rejected');
+assert.deepEqual(presets.transpose(presets.transpose(custom)),custom,'custom sizing survives orientation roundtrip');
+const fitLayout={rows:2,columns:2,aspectRatio:'16:9',tiles:[{cameraSlot:1,row:0,column:0,rowSpan:2,columnSpan:1},{cameraSlot:2,row:0,column:1,rowSpan:2,columnSpan:1}]};
+const ratios={1:4/3,2:16/9},fit=balance.fit(fitLayout,ratios),initial=balance(fitLayout);
+const waste=p=>fitLayout.tiles.reduce((n,t)=>{const r=p.bounds(t),a=16/9*r.width/r.height;return n+r.width*r.height*(1-Math.min(a/ratios[t.cameraSlot],ratios[t.cameraSlot]/a));},0);
+assert(waste(fit)<=waste(initial)+1e-8,'fit must not increase total letterboxing');
+console.log('PASS optional sizing, linked fine adjustment, fit safety, and transpose');

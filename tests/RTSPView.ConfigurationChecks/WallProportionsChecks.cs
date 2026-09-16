@@ -24,6 +24,19 @@ internal static class WallProportionsChecks
             foreach(var axis in new[]{result.Rows,result.Columns})
                 if(Math.Abs(axis.Sum()-1)>1e-10 || axis.Any(v=>!double.IsFinite(v)||v<=0)) throw new Exception("Invalid track bounds");
         }
+        var custom = layout with { RowWeights = [.2,.2,.3,.3], ColumnWeights = [.25,.25,.5] };
+        WallLayout.Validate([custom], custom.Id);
+        var roundtrip = System.Text.Json.JsonSerializer.Deserialize<WallLayout>(System.Text.Json.JsonSerializer.Serialize(custom))!;
+        var exact = WallProportions.Calculate(roundtrip);
+        if (!exact.Rows.SequenceEqual(custom.RowWeights) || !exact.Columns.SequenceEqual(custom.ColumnWeights)) throw new Exception("Saved native sizing differs from editor proportions");
+        foreach (var invalid in new[] {custom with {RowWeights=[.5,.5]},custom with {RowWeights=[0,.2,.3,.5]},custom with {ColumnWeights=[]}})
+        {
+            try {WallLayout.Validate([invalid],invalid.Id);throw new Exception("Invalid custom sizing accepted");}
+            catch (InvalidDataException) { }
+        }
+        var template = AutomationLayouts.Defaults()[0] with {RowWeights=[.2,.2,.3,.3],ColumnWeights=[.25,.25,.5]};
+        var resolved = AutomationLayouts.Resolve(new AppSettings(),template,[]);
+        if (!WallProportions.Calculate(resolved).Rows.SequenceEqual(template.RowWeights)) throw new Exception("Empty focus changed custom sizing");
         var normalized = (new AppSettings { DiagnosticsAutoOpenExcludedSlots = [1,17,17,-1,49] }).Normalize();
         if (!normalized.DiagnosticsAutoOpenExcludedSlots.SequenceEqual(new[]{1,17})) throw new Exception("Invalid diagnostics exclusions normalization");
         Console.WriteLine("PASS balanced tile proportions, unchanged 3x3, browser parity and diagnostics exclusions");

@@ -162,3 +162,7 @@ label{line-height:1.5}a{color:#8ec2ff}.secondary[href]{display:inline-flex;align
 
 /* Keep rule actions separated even when the rules list is empty. */
 .automation-edit-layouts { margin-bottom: 16px; }
+
+.designer-aspect-guide{position:absolute;bottom:28px;left:6px;background:#07111ce8;color:#b7e5ff;padding:3px 6px;font-size:11px;pointer-events:none;z-index:3}
+
+.designer-sizing>button{margin:0 8px 8px 0}

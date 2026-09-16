@@ -6,6 +6,8 @@ public static class WallProportions
 {
     public static (double[] Rows, double[] Columns) Calculate(WallLayout layout)
     {
+        if (layout.RowWeights.Length == layout.Rows && layout.ColumnWeights.Length == layout.Columns)
+            return (layout.RowWeights.ToArray(), layout.ColumnWeights.ToArray());
         var rows = Enumerable.Repeat(1d / layout.Rows, layout.Rows).ToArray();
         var columns = Enumerable.Repeat(1d / layout.Columns, layout.Columns).ToArray();
         var small = layout.Tiles.Where(t => t.RowSpan == 1 && t.ColumnSpan == 1).ToArray();
