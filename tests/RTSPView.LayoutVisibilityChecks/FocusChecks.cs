@@ -10,6 +10,16 @@ internal static class FocusChecks
 {
     public static async Task Run(Grid wall, CameraTile[] tiles)
     {
+        var standardAppearance = new WallLayout { BackgroundColor = "#123456", BorderColor = "#abcdef", ShowTileBorders = false };
+        var automationAppearance = AutomationLayouts.Defaults()[0] with { BackgroundColor = "#654321", BorderColor = "#fedcba", ShowTileBorders = true };
+        foreach (var appearance in new[] { standardAppearance, automationAppearance, standardAppearance, new WallLayout() })
+        {
+            CameraWallPresentation.Apply(wall, tiles, appearance, null, false);
+            var border = (Border)tiles[0].FindName("TileBorder");
+            Check(border.BorderThickness == new Thickness(appearance.ShowTileBorders == true ? 1 : 0), "layout border preference restores across automation transitions");
+            Check(((System.Windows.Media.SolidColorBrush)wall.Background).Color.ToString().Equals("#FF" + appearance.BackgroundColor[1..], StringComparison.OrdinalIgnoreCase), "layout canvas background restores across automation transitions");
+            Check(((System.Windows.Media.SolidColorBrush)border.BorderBrush).Color.ToString().Equals("#FF" + appearance.BorderColor[1..], StringComparison.OrdinalIgnoreCase), "layout border color restores across automation transitions");
+        }
         var layout = new WallLayout { Rows = 2, Columns = 3, Tiles = [
             new WallTile { CameraSlot = 1, ColumnSpan = 2, RowSpan = 2 },
             new WallTile { CameraSlot = 2, Column = 2 },

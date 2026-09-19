@@ -64,6 +64,11 @@ jobs:
           dotnet run --project tests/RTSPView.LayoutVisibilityChecks -c Release
           if ($LASTEXITCODE -ne 0) { throw "Native tile background or layout regression." }
 
+      - name: Check stream editor drafts and theme
+        run: |
+          dotnet run --project tests/RTSPView.UiChecks -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Native stream editor regression." }
+
       - name: Check update helper failure reporting
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
 

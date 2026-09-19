@@ -139,13 +139,13 @@ function createWallDesigner(isAutomation = false) {
     },menu);deleteButton.disabled=isAutomation?draft.layouts.length===1:selectedId===saved.activeLayoutId;deleteButton.classList.add('designer-danger');
     const revert=button('Revert last save',()=>persist(false,true),menu);revert.disabled=!previous;
     const actions=el('div',undefined,'designer-actions');top.append(actions);
-    for(const [id,label] of [['add','Add camera'],['presets','Presets'],['sizing','Sizing'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
+    for(const [id,label] of [['add','Add camera'],['presets','Presets'],['sizing','Sizing'],['advanced','Canvas settings'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
 
-    button('Undo edit',()=>{const state=undoHistory.pop();if(!state)return;redoHistory.push(copy({draft,selectedId,selectedTile}));draft=state.draft;selectedId=state.selectedId;selectedTile=state.selectedTile;dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();message('Last layout edit undone.');},actions).disabled=!undoHistory.length;
-    button('Redo edit',()=>{const state=redoHistory.pop();if(!state)return;undoHistory.push(copy({draft,selectedId,selectedTile}));({draft,selectedId,selectedTile}=state);dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();},actions).disabled=!redoHistory.length;
+    button('Undo',()=>{const state=undoHistory.pop();if(!state)return;redoHistory.push(copy({draft,selectedId,selectedTile}));draft=state.draft;selectedId=state.selectedId;selectedTile=state.selectedTile;dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();message('Last layout edit undone.');},actions).disabled=!undoHistory.length;
+    button('Redo',()=>{const state=redoHistory.pop();if(!state)return;undoHistory.push(copy({draft,selectedId,selectedTile}));({draft,selectedId,selectedTile}=state);dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();},actions).disabled=!redoHistory.length;
     button('Discard changes',()=>{draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=-1;dirty=false;undoHistory.length=0;redoHistory.length=0;render();message('Draft discarded.');},menu).classList.add('designer-discard');root.querySelector('.designer-discard').disabled=!dirty;
     if(isAutomation)button('Save automation layouts',()=>persist(),actions,false);
-    else {if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);button('Apply changes',()=>persist(true),actions,false);}
+    else {if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);button('Apply to wall',()=>persist(true),actions,false);}
     const workspace=el('div',undefined,'designer-workspace'+(drawer?' has-drawer':''));root.append(workspace);
     const preview=el('section',undefined,'designer-preview');workspace.append(preview);
     const previewHead=el('div',undefined,'designer-preview-head');preview.append(previewHead);
@@ -164,6 +164,15 @@ function createWallDesigner(isAutomation = false) {
     for(const [input,label,value] of [[width,'Pixels wide',outputWidth],[height,'Pixels high',outputHeight]]){input.type='number';input.min=240;input.max=16384;input.value=value;field(label,input,custom);}
     button('Set size',()=>{const w=Number(width.value),h=Number(height.value);if(![w,h].every(n=>Number.isInteger(n)&&n>=240&&n<=16384)){message('Use dimensions from 240 to 16384 pixels.');return;}layout.outputWidth=w;layout.outputHeight=h;layout.aspectRatio=h>w?'9:16':'16:9';changed();},custom);
     const gridFields=el('div',undefined,'designer-grid-fields');canvasControls.append(gridFields);
+    const appearance=el('div',undefined,'designer-canvas-appearance');canvasControls.append(appearance);
+    const borderless=el('input');borderless.type='checkbox';borderless.checked=!(layout.showTileBorders??config.showTileBorders??true);
+    borderless.onchange=()=>{layout.showTileBorders=!borderless.checked;changed();};field('Borderless view',borderless,appearance);
+    for(const [key,label,fallback] of [['borderColor','Border color','#24272b'],['backgroundColor','Background color','#000000']]){
+      const color=el('input');color.type='color';color.value=layout[key]||fallback;color.disabled=key==='borderColor'&&borderless.checked;
+      color.onchange=()=>{layout[key]=color.value;changed();};field(label,color,appearance);
+    }
+    button('Use display border setting',()=>{layout.showTileBorders=null;changed();},appearance);
+    appearance.append(el('p','Background fills empty canvas space and letterboxing. Black bars encoded into a camera image are part of the video.','designer-help'));
     for(const [key,label] of [['rows','Rows'],['columns','Columns']]){
       const input=el('input');input.type='number';input.min=1;input.max=12;input.value=layout[key];
       input.onchange=()=>{
@@ -186,6 +195,10 @@ function createWallDesigner(isAutomation = false) {
     }
     const stage=el('div',undefined,'designer-stage');preview.append(stage);
     board=el('div',undefined,'designer-board');board.setAttribute('aria-label','Stream wall layout preview');
+    board.style.backgroundColor=layout.backgroundColor||'#000000';
+    board.style.setProperty('--canvas-background',layout.backgroundColor||'#000000');
+    board.style.setProperty('--canvas-border',layout.borderColor||'#24272b');
+    board.style.setProperty('--canvas-border-width',(layout.showTileBorders??config.showTileBorders??true)?'1px':'0px');
     board.classList.toggle('pan-images',panImage);board.style.backgroundImage='none';board.style.setProperty('--aspect',outputWidth+'/'+outputHeight);board.style.setProperty('--ratio',outputWidth/outputHeight);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
     board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,proportions.cell(proportions.rows,(e.clientY-bounds.top)/bounds.height),proportions.cell(proportions.columns,(e.clientX-bounds.left)/bounds.width));};
     const cellAt=e=>{const b=board.getBoundingClientRect();return {row:Math.max(0,Math.min(layout.rows-1,proportions.cell(proportions.rows,(e.clientY-b.top)/b.height))),column:Math.max(0,Math.min(layout.columns-1,proportions.cell(proportions.columns,(e.clientX-b.left)/b.width)))};};
@@ -318,7 +331,7 @@ function createWallDesigner(isAutomation = false) {
       const thumb=el('img');thumb.alt='';dashboardUX.snapshot(thumb,camera.slot);thumb.draggable=false;thumb.onerror=()=>thumb.style.visibility='hidden';
       node.append(thumb,el('span',camera.name),el('span','+'));node.draggable=true;node.ondragstart=e=>e.dataTransfer.setData('text/plain',String(camera.slot));
     }
-    preview.insertBefore(canvasControls,stage);presets.hidden=drawer!=='presets';side.append(presets);
+    const mode=dragMode.closest('label');previewHead.append(mode);presets.hidden=drawer!=='presets';side.append(presets);
     gridSettings.hidden=drawer!=='advanced';side.append(gridSettings);
     if(isAutomation){
       const count=el('select');count.add(new Option('One focus tile','1'));count.add(new Option('Two focus tiles','2'));count.value=layout.focusSlots.length;
@@ -333,7 +346,7 @@ function createWallDesigner(isAutomation = false) {
     if(hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
   }
   window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-  return {dimensions(cameras){streamDimensions=new Map((cameras||[]).filter(c=>c.width>0&&c.height>0).map(c=>[c.slot,c]));if(draft)sizeImages();},isDirty:()=>dirty,active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
+  return {dimensions(cameras){streamDimensions=new Map((cameras||[]).filter(c=>c.width>0&&c.height>0).map(c=>[c.slot,c]));if(draft)sizeImages();},isDirty:()=>dirty,savedLayouts:()=>saved?.layouts||[],active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
     config=value;root=document.querySelector(isAutomation?'#automation-layout-editor':'#standard-layout-editor');
     if(!root)return;
     saved=copy(isAutomation?{layouts:value.automationViewLayouts,activeLayoutId:value.automationViewLayouts[0].id}:{layouts:value.layouts,activeLayoutId:value.activeLayoutId});
@@ -344,10 +357,10 @@ function createWallDesigner(isAutomation = false) {
 const standardWallDesigner=createWallDesigner(), automationWallDesigner=createWallDesigner(true);
 const wallDesigner=(()=>{
   let tab='standard';
-  function selectTab(value){tab=value;adminUi.collapseSections();for(const name of ['standard','automation']){document.querySelector('#'+name+'-layout-editor').hidden=name!==tab;document.querySelector('[data-layout-tab="'+name+'"]').setAttribute('aria-selected',String(name===tab));document.querySelector('[data-layout-tab="'+name+'"]').tabIndex=name===tab?0:-1;}}
+  function selectTab(value){tab=value;for(const name of ['standard','automation']){document.querySelector('#'+name+'-layout-editor').hidden=name!==tab;document.querySelector('[data-layout-tab="'+name+'"]').setAttribute('aria-selected',String(name===tab));document.querySelector('[data-layout-tab="'+name+'"]').tabIndex=name===tab?0:-1;}}
   return {
     dimensions(cameras){standardWallDesigner.dimensions(cameras);automationWallDesigner.dimensions(cameras);},
-    isDirty:()=>standardWallDesigner.isDirty()||automationWallDesigner.isDirty(),active:()=>standardWallDesigner.active(),
+    savedLayouts:()=>standardWallDesigner.savedLayouts(),isDirty:()=>standardWallDesigner.isDirty()||automationWallDesigner.isDirty(),active:()=>standardWallDesigner.active(),
     updateCameras(cameras){standardWallDesigner.updateCameras(cameras);automationWallDesigner.updateCameras(cameras);},
     openAutomation(){adminLayout.select('layouts');selectTab('automation');},
     load(value){const page=document.querySelector('#page-layouts');if(!document.querySelector('#standard-layout-editor')){const nav=document.createElement('nav');nav.className='system-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Layout type');for(const [id,label] of [['standard','Standard View layouts'],['automation','Automation layouts']]){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.layoutTab=id;b.id='layout-tab-'+id;b.setAttribute('role','tab');b.setAttribute('aria-controls',id+'-layout-editor');b.onkeydown=e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?'standard':e.key==='End'?'automation':id==='standard'?'automation':'standard';selectTab(next);document.querySelector('[data-layout-tab="'+next+'"]').focus();}};b.onclick=()=>selectTab(id);nav.append(b);}page.append(nav);for(const id of ['standard','automation']){const panel=document.createElement('section');panel.id=id+'-layout-editor';panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby','layout-tab-'+id);panel.tabIndex=0;page.append(panel);}}

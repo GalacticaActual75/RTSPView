@@ -42,8 +42,22 @@ public sealed class JsonSettingsStore
         }
         var temporary = _path + ".tmp";
         await WriteAsync(temporary, normalized, cancellationToken);
-        if (File.Exists(_path)) File.Replace(temporary, _path, BackupPath, true);
-        else File.Move(temporary, _path);
+        // Windows readers from the Viewer, Controller or an older process may
+        // briefly deny replacement. Keep the complete temporary file and retry
+        // the atomic swap; never delete the live settings as a workaround.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                if (File.Exists(_path)) File.Replace(temporary, _path, BackupPath, true);
+                else File.Move(temporary, _path);
+                break;
+            }
+            catch (IOException error) when (IsSharingViolation(error) && attempt < 20)
+            {
+                await Task.Delay(50, cancellationToken);
+            }
+        }
     }
 
     public async Task ExportWithoutCredentialsAsync(AppSettings settings, string destination, CancellationToken cancellationToken = default)
@@ -113,7 +127,10 @@ public sealed class JsonSettingsStore
 
     private static async Task<AppSettings> ReadAndValidateAsync(string path, CancellationToken cancellationToken)
     {
-        await using var stream = File.OpenRead(path);
+        // Permit an atomic settings replacement while this reader finishes its
+        // consistent snapshot of the old file.
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
         var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("Configuration is empty.");
         return Validate(settings);
@@ -150,4 +167,6 @@ public sealed class JsonSettingsStore
         await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken);
         await stream.FlushAsync(cancellationToken);
     }
+
+    public static bool IsSharingViolation(IOException error) => (error.HResult & 0xffff) is 32 or 33;
 }

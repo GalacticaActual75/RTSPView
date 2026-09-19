@@ -238,6 +238,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void ApplyTileBorder(bool visible) => TileBorder.BorderThickness = new Thickness(visible ? 1 : 0);
 
+    private uint _wallBackgroundColor;
+    public void ApplyWallAppearance(WallLayout layout, bool defaultBorders = true)
+    {
+        var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(layout.BackgroundColor);
+        var brush = new System.Windows.Media.SolidColorBrush(color);
+        Background = TileBorder.Background = VideoView.Background = CompositedCanvas.Background = brush;
+        TileBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(
+            (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(layout.BorderColor));
+        ApplyTileBorder(layout.ShowTileBorders ?? defaultBorders);
+        var nativeColor = (uint)(color.R | color.G << 8 | color.B << 16);
+        var changed = _wallBackgroundColor != nativeColor;
+        _wallBackgroundColor = nativeColor;
+        EnsureNativeVideoBackground(changed);
+    }
+
     public void ApplyOverlayPreferences(bool showCameraNames, bool showCameraStats)
     {
         _showCameraNames = showCameraNames;
@@ -373,7 +388,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     }
 
     private nint ColorNativeVideoBackground(nint handle, int message, nint wParam, nint lParam, ref bool handled) =>
-        NativeVideoBackgroundGuard.ColorHostBackground(_nativeVideoHandle, message, wParam, lParam, ref handled);
+        NativeVideoBackgroundGuard.ColorHostBackground(_nativeVideoHandle, message, wParam, lParam, ref handled, _wallBackgroundColor);
 
     private void ResumeNativeStart()
     {

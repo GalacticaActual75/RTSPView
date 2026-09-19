@@ -10,17 +10,19 @@ internal static class NativeVideoBackgroundGuard
 
     // Supply the STATIC host's background brush through its parent. Do not
     // intercept WM_PAINT/WM_ERASEBKGND on a live decoder's target window.
-    public static nint ColorHostBackground(nint videoHost, int message, nint dc, nint control, ref bool handled)
+    public static nint ColorHostBackground(nint videoHost, int message, nint dc, nint control, ref bool handled, uint color = 0)
     {
         if (message != 0x0138 || videoHost == nint.Zero || control != videoHost) return nint.Zero;
-        SetBkColor(dc, 0);
+        SetBkColor(dc, color);
+        SetDCBrushColor(dc, color);
         handled = true;
-        return GetStockObject(4);
+        return GetStockObject(18); // DC_BRUSH: per-device-context color, no shared class brush mutation.
     }
 
     public static nint GetHostParent(nint videoHost) => GetParent(videoHost);
     [DllImport("user32.dll")] private static extern nint GetParent(nint handle);
     [DllImport("gdi32.dll")] private static extern uint SetBkColor(nint dc, uint color);
+    [DllImport("gdi32.dll")] private static extern uint SetDCBrushColor(nint dc, uint color);
     public static void Apply(bool forceRedraw = false)
     {
         if (!OperatingSystem.IsWindows()) return;

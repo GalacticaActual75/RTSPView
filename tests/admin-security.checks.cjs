@@ -31,6 +31,11 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  const appearanceLayouts=config.layouts.map(l=>({...l,borderColor:'#ff0000',backgroundColor:'#123456',showTileBorders:false}));
+  const appearanceSave=await request(a,'/api/layouts','PUT',{layouts:appearanceLayouts,activeLayoutId:config.activeLayoutId});
+  assert.equal(appearanceSave.status,200,'real layout appearance API saves: '+appearanceSave.text);
+  assert.deepEqual((await request(a,'/api/config')).json.layouts,appearanceLayouts,'layout appearance survives API reload');
+  assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore initial layouts');
   assert.equal((await request(a,'/api/display','PUT',{...config,diagnosticsAutoOpenExcludedSlots:[1,17]})).status,200);
   assert.deepEqual((await request(a,'/api/config')).json.diagnosticsAutoOpenExcludedSlots,[1,17],'diagnostics exclusions persist');
   const addedStream=(await request(a,'/api/cameras','POST')).json;

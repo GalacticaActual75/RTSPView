@@ -1,18 +1,14 @@
 /* Presentation only: retain the existing forms, API handlers and preview math. */
 const adminLayout = (() => {
   let current = 'overview';
-  let fitQueued = false;
-  let fitWall = false;
   const pages = {};
   function init() {
-    const css = document.createElement('link');
-    css.rel = 'stylesheet'; css.href = 'layout.css?v=dashboard2'; css.onload = fitOverview; document.head.append(css);
     const main = document.querySelector('main');
     const banner = main.previousElementSibling;
     banner.remove();
     document.querySelector('header .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
-    for (const [id, title] of Object.entries({overview:'Overview', cameras:'Streams', layouts:'Layouts',overlays:'Overlays', automation:'Automation', system:'System'})) {
+    for (const [id, title] of Object.entries({overview:'Monitor', cameras:'Streams', layouts:'Layouts',overlays:'Overlays', automation:'Automation', system:'Settings'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
       button.dataset.page = id; button.onclick = () => select(id); nav.append(button);
       const page = document.createElement('section'); page.id = 'page-' + id; page.className = 'admin-page'; page.setAttribute('aria-label', title);
@@ -24,20 +20,13 @@ const adminLayout = (() => {
     for (const button of nav.children) mobileNav.add(new Option(button.textContent, button.dataset.page));
     mobileNav.onchange = () => select(mobileNav.value); header.insertBefore(mobileNav, document.querySelector('#logout'));
     new ResizeObserver(() => {
-      document.documentElement.style.setProperty('--admin-header-height', header.offsetHeight + 'px'); fitOverview();
+      document.documentElement.style.setProperty('--admin-header-height', header.offsetHeight + 'px');
     }).observe(header);
     const stats = document.querySelector('#stats');
     const performance = document.createElement('details'); performance.className = 'performance';
     performance.innerHTML = '<summary>Detailed performance</summary>';
-    performance.addEventListener('toggle', fitOverview);
     const extra = document.createElement('div'); extra.id = 'extraStats'; extra.className = 'stats'; performance.append(extra);
-    const overviewHead = document.createElement('div'); overviewHead.className = 'section-title';
-    overviewHead.title = 'Select a snapshot to enlarge it. Configure opens settings.';
-    const sizeLabel = document.createElement('label'); sizeLabel.className = 'overview-density';
-    sizeLabel.innerHTML = 'Grid density<select aria-label="Dashboard grid density"><option value="large">Comfortable</option><option value="fit">Compact</option></select>';
-    sizeLabel.querySelector('select').onchange = event => {fitWall = event.target.value === 'fit'; document.querySelector('#cameras').classList.toggle('compact-density',fitWall); fitOverview();};
-    overviewHead.append(performance, sizeLabel);
-    pages.overview.append(stats, overviewHead);
+    pages.overview.append(stats, performance);
     const cameraGrid = document.querySelector('#cameras');
     cameraGrid.previousElementSibling.querySelector('h2').remove();
     const cameraHeader = cameraGrid.previousElementSibling;
@@ -77,12 +66,11 @@ const adminLayout = (() => {
     // Commands from camera cards must remain visible outside the System page.
     document.body.append(document.querySelector('#controlState'));
     toggles(document.querySelector('#displayForm'));
-    adminUi.init();
-    window.addEventListener('resize', fitOverview);
+    adminUi.init();workspace.init();
     select('overview');
   }
   function select(id) {
-    if (id !== current) adminUi.collapseSections();
+
     current = id;
     document.querySelector('.mobile-nav').value = id;
     document.querySelector('main').dataset.page = id;
@@ -90,37 +78,18 @@ const adminLayout = (() => {
     for (const button of document.querySelectorAll('[data-page]')) {
       button.setAttribute('aria-current', button.dataset.page === id ? 'page' : 'false');
     }
-    if (id === 'overview' || id === 'cameras') pages[id].append(document.querySelector('#cameras'));
-    document.querySelector('.hero h1').textContent = {overview:'Overview',cameras:'Streams',layouts:'Layouts',overlays:'Overlays',automation:'Automation',system:'System'}[id];
-    adminUi.page(id);
+
+    document.querySelector('.hero h1').textContent = {overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Overlays',automation:'Automation',system:'Settings'}[id];
+    adminUi.page(id);workspace.sync();
     window.dispatchEvent(new Event('resize'));
     window.scrollTo({top:0, behavior:'instant'});
-    fitOverview();
+
   }
   function metrics() {
     const stats = document.querySelector('#stats');
     stats.firstElementChild.dataset.tone = stats.firstElementChild.querySelector('b').textContent === 'Connected' ? 'healthy' : 'error';
     document.querySelector('#extraStats').replaceChildren(...[...stats.children].slice(4));
-    fitOverview();
-  }
-  function fitOverview() {
-    if (fitQueued || current !== 'overview') return;
-    fitQueued = true;
-    requestAnimationFrame(() => {
-      fitQueued = false;
-      if (current !== 'overview') return;
-      const grid = document.querySelector('#cameras'), card = grid?.querySelector('.camera-card'), image = card?.querySelector('.feed-thumbnail');
-      if (!image || !grid.offsetWidth) return;
-      const columns = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-      const rows = Math.ceil(grid.children.length / columns);
-      const gap = parseFloat(getComputedStyle(grid).rowGap) || 0;
-      const top = grid.getBoundingClientRect().top + window.scrollY;
-      const overhead = Math.max(...[...grid.children].map(tile => tile.getBoundingClientRect().height - tile.querySelector('.feed-thumbnail').getBoundingClientRect().height));
-      const available = (window.innerHeight - top - 24 - gap * (rows - 1)) / rows - overhead;
-      // On phones keep normal image proportions; on desktops fit three rows when readable.
-      const height = fitWall && columns === 3 ? Math.max(96, Math.min(image.clientWidth * 9 / 16, available)) : image.clientWidth * 9 / 16;
-      grid.style.setProperty('--overview-image-height', Math.floor(height) + 'px');
-    });
+
   }
   function toggles(root) {
     for (const input of root.querySelectorAll('input[type=checkbox]')) {
@@ -134,21 +103,17 @@ const adminLayout = (() => {
     form.querySelector('.switch input')?.setAttribute('aria-label', 'Enable ' + form.elements.name.value);
     const settings = form.querySelector('.camera-settings');
     if (!overlayMode) {
+      const streaming=document.createElement('details');streaming.innerHTML='<summary>Streaming</summary>';
+      const transport=form.elements.transport.closest('.two'),recovery=settings.querySelector('details');
+      transport.before(streaming);streaming.append(transport,recovery.querySelector('.checks'));
+      recovery.querySelector('summary').textContent='Recovery';
       const open = document.createElement('button'); open.type = 'button'; open.className = 'overview-open';
       const label = () => open.setAttribute('aria-label', `Enlarge snapshot of ${form.elements.name.value}`);
       label(); form.addEventListener('change', label);
-      open.onclick = () => {
-        select('cameras');
-        for (const other of document.querySelectorAll('#cameras .camera-settings')) other.open = other === settings;
-        requestAnimationFrame(() => {
-          form.scrollIntoView({block:'start', behavior:'instant'});
-          settings.querySelector('summary').focus({preventScroll:true});
-        });
-      };
-      const configure=document.createElement('button');configure.type='button';configure.className='overview-configure secondary';configure.textContent='Configure';configure.onclick=open.onclick;open.onclick=()=>dashboardUX.preview(form);form.append(open,configure);
+      const configure=document.createElement('button');configure.type='button';configure.className='overview-configure secondary';configure.textContent='Configure';configure.onclick=()=>workspace.openStream(Number(form.dataset.slot));open.onclick=()=>dashboardUX.preview(form);form.append(open,configure);
     }
     if (overlayMode) {
-      settings.open = false;
+      settings.open = true;
       const stream = form.querySelector('.camera-preview');
       const status = document.createElement('details'); status.className = 'inspector-section overlay-status';
       const heading = document.createElement('summary'); heading.textContent = 'Overlay status'; status.append(heading);
@@ -184,16 +149,16 @@ const adminLayout = (() => {
     let saved = snapshot();
     const actions = form.querySelector('.actions'), submit = actions.querySelector('[type=submit]'), state = actions.querySelector('.save-state');
     const discard = document.createElement('button'); discard.type = 'button'; discard.className = 'secondary'; discard.textContent = 'Discard'; actions.insertBefore(discard, submit);
-    submit.textContent='Apply changes';submit.title='Save this stream and apply it to the wall';state.setAttribute('role','status');
+    submit.textContent=overlayMode?'Apply to wall':'Save & apply';submit.title='Save this stream and apply it to the wall';state.setAttribute('role','status');
     const isDirty = () => saved.some(({el,value,checked}) => el.value !== value || el.checked !== checked);
-    const update = () => {const dirty = isDirty(); submit.hidden = discard.hidden = !dirty; form.dataset.dirty = String(dirty); state.textContent = dirty ? 'Unsaved changes' : 'Applied';};
+    const update = () => {const dirty = isDirty(); submit.hidden = discard.hidden = !dirty; form.dataset.dirty = String(dirty); state.textContent = dirty ? 'Unsaved changes' : ''; };
     form.addEventListener('input', update); form.addEventListener('change', update);
     discard.onclick = () => {
       for (const {el,value,checked} of saved) {el.value = value; el.checked = checked;}
       if (overlayMode) for (const name of ['viewportShape','hostCameraSlot']) form.elements[name].dispatchEvent(new Event('change',{bubbles:true}));
       form.dispatchEvent(new Event('input',{bubbles:true})); update();
     };
-    form.markSaved = () => {saved = snapshot(); update(); form.querySelector('.slot').textContent = form.elements.name.value;};
+    form.markSaved = () => {saved = snapshot(); update(); form.querySelector('.slot').textContent = form.elements.name.value; form.querySelector('.switch input')?.setAttribute('aria-label','Enable '+form.elements.name.value); if(form.closest('.stream-drawer'))document.querySelector('#streamEditorTitle').textContent=form.elements.name.value;};
     update();
   }
   window.addEventListener('beforeunload', event => {if(document.querySelector('[data-dirty="true"]')){event.preventDefault();event.returnValue='';}});
@@ -205,7 +170,7 @@ const adminLayout = (() => {
     document.title = beta ? 'RTSPView Beta Admin' : 'RTSPView Admin';
   }
   function selectOverlay(id) {
-    adminUi.collapseSections(pages.overlays);
+
     for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))grid.hidden=grid.id!==id;
     for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))button.setAttribute('aria-pressed',String(button.dataset.overlayTarget===id));
     window.dispatchEvent(new Event('resize'));

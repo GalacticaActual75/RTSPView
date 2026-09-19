@@ -6,6 +6,30 @@ RTSPView is a Windows viewer for RTSP streams: security cameras, encoder feeds, 
 
 RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast RTSP streams and optionally responding to its MQTT detection events. **Scrypted is not required:** you can use compatible RTSP streams directly from cameras, NVRs, or other sources without setting up MQTT automation.
 
+## Current releases and feature availability
+
+Release status checked against published GitHub releases on September 19, 2026:
+
+| Channel | Published version | Availability |
+| --- | --- | --- |
+| Stable | [1.0.42](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.42) | Includes shared diagnostics, MQTT person-detection automation, saved automation layouts with one or two focus tiles, detection takeover and zone filtering, temperature warnings, the optional maintenance helper, scheduled restarts, and original overlay sources in layouts. These are released features, not beta-only features. |
+| Beta | [1.0.43-beta.6](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43-beta.6) | Adds expanded layout sizing and framing, the redesigned dashboard and native stream editor, and per-layout borderless mode, border color and background color. |
+
+**1.0.43 is not yet a published stable release.** A draft release or code on the default branch does not mean those features have reached Stable. Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. This guide covers stable functionality unless a section explicitly says beta.
+
+### Finding controls in Stable and Beta
+
+| Task | Stable 1.0.42 | Beta 1.0.43-beta.6 |
+| --- | --- | --- |
+| Snapshot overview | Overview | Monitor, with active-layout and All streams views |
+| Edit a stream | Streams | Streams → Edit opens a side drawer; Save & apply commits changes |
+| Display and global border preferences | System → Viewer | Settings → Display |
+| LAN access and password | System → Network & security | Settings → Network & security |
+| Temperature reporting | System → Viewer | Settings → Diagnostics |
+| Updates, backups and maintenance | Corresponding tabs under System | Corresponding tabs under Settings |
+| Logs | System → Logs | Settings → Diagnostics |
+| Saved standard and automation layouts | Layouts | Layouts; Canvas settings contains output and appearance controls |
+
 ## Install and first setup
 
 Use Windows 10/11 x64 with a current graphics driver. Download the installer and checksum from this repository's Releases page, verify the checksum, and run the installer. Installation requires elevation; normal operation should use a standard Windows account.
@@ -17,15 +41,15 @@ Use Windows 10/11 x64 with a current graphics driver. Download the installer and
 3. Sign in with the initial password **`admin`**. The account name is also `admin`, but the login form asks only for the password.
 4. On the required password-change screen, enter **`admin` in Current password**, and enter your chosen replacement in **New password**. In version **1.0.33 and later**, there is no minimum length: the replacement must be nonblank, at most 1024 characters, different from the current password and not `admin`. Choose a password that is difficult to guess, especially before enabling LAN access.
 5. Submit the change, then **sign in again with your new password**. The initial password stops working and earlier sessions are revoked. No readable administrator password file is created. All administration remains blocked until the password change succeeds.
-6. Add your RTSP sources under **Cameras**, configure a layout and apply it. For administration from another computer or phone, follow [Enable LAN access](#access-the-admin-panel-from-the-lan) below; installation alone leaves administration local-only.
+6. Add your RTSP sources under **Streams**, configure a layout and apply it. For administration from another computer or phone, follow [Enable LAN access](#access-the-admin-panel-from-the-lan) below; installation alone leaves administration local-only.
 
 **Upgrading an existing host:** use your existing administrator password, not `admin`. If a password change is required, enter that existing password in Current password. If version 1.0.32 rejects your desired password or leaves you stuck in setup, manually install [the latest stable release](https://github.com/GalacticaActual75/RTSPView/releases/latest) over it before retrying. The password-policy fix is in 1.0.33; your existing streams/settings are retained.
 
 **Fresh installations have no camera URLs configured**, including every main camera, legacy camera field and overlay. Enter your own URLs after setup. Existing installations retain their streams and password, but legacy security state requires a password change after login. Back up before upgrading.
 
-The dashboard starts local-only on TCP 5080. After initial setup, use **System → LAN access** to enable HTTP access on your trusted private LAN. HTTPS is optional; see the LAN instructions below.
+The dashboard starts local-only on TCP 5080. After initial setup, use **System → Network & security → LAN access** (Beta: **Settings → Network & security**) to enable HTTP access on your trusted private LAN. HTTPS is optional; see the LAN instructions below.
 
-## Shared camera diagnostics (beta)
+## Shared camera diagnostics
 
 The Viewer reserves a diagnostics strip beside the video wall. Main-feed and
 overlay errors stack in this panel, labeled by camera name, feed type and slot;
@@ -43,7 +67,7 @@ and errors now appear here instead of over the video; main-camera name labels
 still follow the name-display preference. Hidden, configured overlay feeds can
 also report connection problems while being kept ready for automation.
 
-## MQTT person-detection automation (beta)
+## MQTT person-detection automation
 
 The [RTSPview connector development preview](plugins/scrypted-rtspview/README.md)
 adds Scrypted camera-stream and MQTT setup through pairing and sync. It requires
@@ -54,8 +78,8 @@ Open the top-level **Automation** tab to configure the broker and person-detecti
 Saved rules collapse to a summary; click a rule to expand and edit it. New rules
 stay open, and validation expands any rule that needs attention.
 Rules are shown first; connection settings, event discovery and troubleshooting
-are expandable sections. Across administration pages, opening a category closes
-its peers at the same level. Refreshing starts with categories collapsed.
+are expandable sections. In Stable, opening a category closes its peers at the
+same level. The redesigned Beta uses independent inspectors and disclosure controls.
 An **Entered topic (not observed)** option is a saved or typed topic that discovery
 has not received during the listening session; it does not confirm event support.
 The Controller maintains the MQTT connection even with the browser closed; the
@@ -166,7 +190,7 @@ second position dynamically (empty until another camera is active).
 If a focused camera also has a regular tile, that regular position stays empty
 while the camera is focused, so it is not displayed twice. Existing saved focus
 positions migrate to unassigned Focus tiles without moving their geometry.
-Custom templates support up to 16 tiles on a 6×6 grid and cannot be deleted while
+Stable custom templates support up to 16 tiles on a 6×6 grid (Beta: 12×12) and cannot be deleted while
 a rule references them. Clear timing and focus priority remain unchanged.
 
 Both standard and automation layouts balance row heights and column widths for
@@ -178,7 +202,7 @@ three cameras down the right and four across the bottom. Its tiles all have 16:9
 proportions on a landscape wall. In automation layouts the large tile is a Focus
 tile; in standard layouts it is an assigned camera.
 
-Under **System → Viewer → Diagnostics automatic opening**, select cameras to
+Under **System → Viewer → Diagnostics automatic opening** (Beta: **Settings → Display**), select cameras to
 exclude from automatically opening the fullscreen diagnostics panel. Excluded
 camera warnings, counts and statistics remain available in manual diagnostics;
 issues on other cameras still open the panel normally. Settings persist across
@@ -221,23 +245,42 @@ other overlays. Manual double-clicks dismiss active and pending automation episo
 and retain the usual focus/restore control. Expiry still restores the wall if the
 Controller or broker goes offline.
 
-Focused-layout targets must be enabled main streams. Fullscreen can also target a
-configured overlay. Old rules without an action field remain **Show overlay** rules.
+Focused-layout and fullscreen targets can include enabled main streams and
+configured original overlay sources. Old rules without an action field remain **Show overlay** rules.
+
+### Following detections between streams
+
+In a rule, choose **Allow a newer detection to take over** to let a fresh
+person-detection episode on another stream replace its fullscreen or focused view
+before the clear timer expires. Repeated detections renew the existing episode
+without stealing focus back. Existing rules default to holding their view.
+When the winning episode expires, another still-active rule may resume; the
+standard layout returns after all relevant episodes expire. Manual dismissal
+still applies to the current episodes.
+
+Choose **Any detection-enabled stream** to use the stream/topic/zone mappings
+configured across rules, including disabled rules. Configure mappings using
+Selected streams first; unmapped RTSP feeds cannot trigger automation. Each
+stream must have a consistent topic and zone mapping across rules in this mode.
+Select **Focused layout**, your saved layout, and **Camera that detected the
+person** to follow detections. With takeover enabled and dynamic Focus 2, the
+newest detecting stream fills Focus 1 and the previous still-active stream fills
+Focus 2. A fixed Focus 2 selection continues to take precedence.
 
 ## Temperature monitoring and optional maintenance helper
 
-Under **System → Viewer → Temperature reporting**, enable CPU/GPU warnings and choose a maximum for each sensor. The master warning switch turns all temperature warnings off. Above the selected maximum, the live wall shows a large red warning on a smoked background. Unavailable or stale readings do not trigger an alarm.
+Under **System → Viewer → Temperature reporting** (Beta: **Settings → Diagnostics**), enable CPU/GPU warnings and choose a maximum for each sensor. The master warning switch turns all temperature warnings off. Above the selected maximum, the live wall shows a large red warning on a smoked background. Unavailable or stale readings do not trigger an alarm.
 
 CPU temperatures may require [PawnIO](https://pawnio.eu/). LibreHardwareMonitor is bundled with RTSPView; sensor support still depends on the hardware and drivers. Error 1060 for the PawnIO service means that dependency is missing.
 
-1. Install this beta under the default, administrator-protected **Program Files** folder.
+1. Install RTSPView under the default, administrator-protected **Program Files** folder. The maintenance helper is included in Stable 1.0.42.
 2. In Temperature reporting, select **Enable maintenance helper** and approve the Windows administrator prompt on the host once. Keep UAC enabled; no UAC bypass is needed.
 3. Select **Install PawnIO on host** and confirm. The helper downloads the pinned official PawnIO 2.2.0 installer and verifies its SHA-256 before running it. The viewer stays open; temperature readings pause during installation and resume afterward.
 4. Follow the progress message. If Windows requires a restart, restart the host when convenient; RTSPView does not reboot it automatically. A successful driver installation does not guarantee that every CPU/GPU exposes a temperature sensor.
 
 The optional **RTSPViewMaintenance** Windows service runs as LocalSystem and uses the RTSPView product icon. It accepts only dependency/update status, preparation and installation commands, and reads temperature sensors. It has no network listener: a local named pipe allows the Windows user who enabled it, with authenticated web administration providing remote access through the Controller. It cannot execute arbitrary commands, paths or download URLs. The Controller and Viewer continue running as the signed-in user. Enabling it for a different Windows account requires administrator approval again.
 
-**RTSPView updates without repeated UAC prompts:** after installing this build and enabling the helper once, confirmed updates from the web panel or wall badge use the helper when the target installer supports service updates. The helper independently looks up the exact confirmed Stable/Beta release in the official repository, downloads to an administrator-protected folder, and verifies the checksum. A separate worker survives replacement of the helper, installs the update, preserves the existing startup-task settings, and restarts the wall in the authorized user's session. Keep that user signed in during installation. Normal update confirmation and channel selection still apply; changing the channel never installs anything automatically.
+**RTSPView updates without repeated UAC prompts:** after installing RTSPView and enabling the helper once, confirmed updates from the web panel or wall badge use the helper when the target installer supports service updates. The helper independently looks up the exact confirmed Stable/Beta release in the official repository, downloads to an administrator-protected folder, and verifies the checksum. A separate worker survives replacement of the helper, installs the update, preserves the existing startup-task settings, and restarts the wall in the authorized user's session. Keep that user signed in during installation. Normal update confirmation and channel selection still apply; changing the channel never installs anything automatically.
 
 Installing this capability initially still uses the current update/UAC path. Hosts without an enabled compatible helper, and older target installers (including older stable releases), continue to request Windows approval. UAC remains enabled. An interrupted service update reports its failure; check the installed version before retrying. No actual host restart is performed automatically.
 
@@ -248,9 +291,9 @@ The helper is bundled but is not enabled automatically. To disable it, stop **RT
 **Version 1.0.34 adds a built-in LAN switch. No certificates, environment variables or manual firewall commands are needed for normal trusted-LAN use.**
 
 1. On the RTSPView host, open **http://127.0.0.1:5080**, sign in, and finish the required first-time password change.
-2. Open **System → LAN access**, turn on the **Enable LAN access** toggle, and click **Save LAN access**.
+2. Open **System → Network & security → LAN access** (Beta: **Settings → Network & security**), turn on the **Enable LAN access** toggle, and click **Save LAN access**.
 3. Accept the Windows administrator approval prompt **on the RTSPView host**. If asked, set that host's trusted connection to **Private** under Windows Settings → Network & Internet → your connection's properties, then try again. The app does not automatically mark an unfamiliar network as trusted.
-4. Wait a few seconds for the listener to update. The System tab lists clickable **`http://HOST-IP:5080`** addresses. Open one from another computer or phone on the same LAN and sign in with your admin password. Use **HTTP and port 5080** for this mode, not HTTPS or port 5081.
+4. Wait a few seconds for the listener to update. The LAN access panel lists clickable **`http://HOST-IP:5080`** addresses. Open one from another computer or phone on the same LAN and sign in with your admin password. Use **HTTP and port 5080** for this mode, not HTTPS or port 5081.
 
 The switch saves its setting in `lan-access.json` alongside `settings.json`, allows the host's current LAN IP addresses/hostname, and configures a Windows firewall rule for **Private networks and LocalSubnet only**. The application also rejects off-subnet connections in this mode. Local access stays available, and the Viewer/streams do not restart. A brief browser disconnect while the web listener changes is normal. Approval cancelled or firewall setup failed? LAN access stays off and the panel explains the error.
 
@@ -258,13 +301,13 @@ The switch saves its setting in `lan-access.json` alongside `settings.json`, all
 
 To turn LAN access off, clear the switch and save. No administrator prompt is needed for disabling: the listener returns to loopback and remote requests are blocked. A remote browser will lose access; re-enable locally on the host if needed. The scoped firewall rule remains dormant for the next enable and is removed on uninstall.
 
-If another device cannot connect, check that both devices are on the same LAN, the host's network profile is Private, and Wi-Fi client/guest isolation is not blocking them. Use an address shown in the panel; `localhost` and `127.0.0.1` on your phone/laptop refer to that device, not the RTSPView host. VPNs or multiple adapters may produce several addresses—choose the one reachable from your device. Update installation still requires Windows approval on the host.
+If another device cannot connect, check that both devices are on the same LAN, the host's network profile is Private, and Wi-Fi client/guest isolation is not blocking them. Use an address shown in the panel; `localhost` and `127.0.0.1` on your phone/laptop refer to that device, not the RTSPView host. VPNs or multiple adapters may produce several addresses—choose the one reachable from your device. Update installation requires Windows approval on the host unless the optional maintenance helper is enabled and the target installer supports service updates.
 
 ## What RTSPView does
 
 RTSPView turns a Windows display into a wall of live RTSP video. The desktop Viewer plays the video; the browser dashboard configures the wall and shows status and snapshot previews. A source does not need to be a physical camera: any compatible RTSP video stream can fill a main slot or an overlay. Playback depends on the source codec and LibVLC support. RTSPView is intended for live viewing, not recording or NVR playback.
 
-The dashboard currently calls stream slots **Cameras** and the display a **Camera wall**. These are interface labels, not restrictions on the source: substitute your encoder, rebroadcast or other RTSP feed wherever the guide says camera.
+The dashboard calls source entries **Streams**; some controls still use camera terminology. These are interface labels, not restrictions on the source: substitute your encoder, rebroadcast or other RTSP feed wherever the guide says camera.
 
 | Feature | What you can do |
 | --- | --- |
@@ -274,25 +317,103 @@ The dashboard currently calls stream slots **Cameras** and the display a **Camer
 | Overlay styling | Adjust shape, size, placement, opacity, zoom and pan; draw a custom mask or import supported SVG paths. |
 | Dedicated display | Choose a monitor, launch full screen, keep the viewer on top and hide the idle mouse cursor. |
 | Stream resilience | Request hardware decoding, reconnect failed or stalled streams, and restart individual streams or the whole viewer. Actual capacity depends on resolution, frame rate, codecs and hardware. |
-| Administration | Check stream health, view logs, manage updates, change the admin password and export/import configuration. |
+| Administration | Check stream health, view logs, manage Stable/Beta updates, change the admin password and export/import configuration. |
+| Diagnostics | Inspect simultaneous main-stream and overlay errors in a shared panel; restart one feed and choose which warnings automatically open it. |
+| MQTT automation | Show overlays, focus one stream or activate a saved one/two-focus layout; filter by zone, test rules and optionally follow newer detections. |
+| Temperature monitoring | Read supported CPU/GPU sensors and show configurable warnings. The optional maintenance helper can install the PawnIO dependency. |
+| Maintenance | Schedule Viewer or host restarts; use the optional helper for compatible updates after one-time administrator approval. |
+| Source management | Delete/reuse stream slots without renumbering others; use original overlay feeds in standard or automation layouts. |
 
 ## Set up streams and layouts
 
-1. Open **Cameras** after completing the initial password change. Enter a descriptive stream name and its RTSP URL, enable the slot, and choose **Save camera**. Use the URL supplied by your camera, encoder or RTSP server; no network discovery or preconfigured camera addresses are provided.
-2. Use **Add camera** when you need more than the initial nine entries, up to 16. An enabled camera also needs an assignment in the active layout to appear on the wall.
+1. Open **Streams** after completing the initial password change. Enter a descriptive stream name and its RTSP URL, enable the slot, and choose **Save stream** (Beta: **Save & apply**). Use the URL supplied by your camera, encoder or RTSP server; no network discovery or preconfigured camera addresses are provided.
+2. Use **Add stream** when you need more than the initial nine entries, up to 16. An enabled camera also needs an assignment in the active layout to appear on the wall.
 3. Open **Layouts**, choose **Landscape · 16:9** or **Portrait · 9:16**, and pick a starting preset. Presets include Single, Split, Quad, Six, Nine, Sixteen, Featured, Sidebar, Cinema, Dual focus, Center stage and Strip.
-4. Assign cameras, drag tiles to move or swap them, and use a tile's corner handle to resize it. The grid supports one to four rows and columns. Layout previews use snapshots; watch the desktop Viewer for live video.
+4. Assign cameras, drag tiles to move or swap them, and use a tile's corner handle to resize it. Stable standard layouts support one to four rows and columns; automation templates support up to six. Beta expands both to twelve. Layout previews use snapshots; watch the desktop Viewer for live video.
 5. Choose **Apply to wall** to save and display the draft. Edits stay in draft until applied. Under **Manage layout**, duplicate and name a layout to keep an alternative; **Save layout** saves an inactive layout without switching the wall. **Discard changes** abandons the draft. The active layout cannot be deleted.
 
 Camera settings save per slot and apply live. Changing layout geometry or overlay placement does not require reinstalling the application.
 
+### Stream lifecycle and snapshot previews
+
+Streams can be removed with **Delete stream**. Deletion clears its connection and
+layout placements without renumbering other streams; Add stream reuses removed
+slots. Remove automation references or change a configured overlay's host first
+if deletion reports a dependency.
+
+Use **Delete overlay** on the Overlays tab to remove an overlay, including Doorbell
+or Garage. This clears its connection, shape and framing and removes its original
+stream entry. Remove references in automation rules and layouts first; the delete
+action reports these dependencies. Other overlay IDs stay unchanged, and **Add
+overlay** reuses deleted slots.
+
+Configured overlay feeds also appear in Streams as **(overlay source)** entries
+and in both layout editors. These share their source connection settings with
+Overlays, but layout playback uses the complete original frame, with no overlay
+crop, shape, zoom or opacity. Edit the shared connection through **Edit source in
+Overlays**. Overlay presentation and layout playback can coexist; the additional
+original-stream player stays connected and decodes in the background, ready for
+focus and layout changes. Stable displays the full frame with aspect-fit sizing;
+Beta also offers the selected layout tile's framing controls. This player uses
+software decoding; configured overlay sources therefore add background CPU
+and network load even when their original streams are not currently visible.
+
+Enabled, configured main streams connect and keep decoding even when they are not
+assigned to the current layout. Layouts control visibility; disable a stream to
+stop its background playback. Unassigned streams retain native decoding and the
+configured hardware-decoding preference, and still consume network and decoder
+resources. They can provide snapshots and be shown by automation without waiting
+for their first connection.
+
+Browser previews automatically request fresh snapshots about every 15 seconds
+while visible in the active tab. Captures run one at a time, so large grids or
+slow streams can take longer. Preview age is separate from stream health; failed
+refreshes retain the previous image. These previews are not live video.
+
+## Expanded layout sizing and appearance (Beta 1.0.43-beta.6)
+
+These controls are available in the published beta, not Stable 1.0.42. Both **Standard View layouts** and **Automation layouts** support up to 16 tiles on a grid of up to 12 rows and 12 columns. Each saved layout can use a preset or custom output resolution; custom dimensions range from 240 to 16384 pixels per axis.
+
+### Redesigned workspaces
+
+Beta replaces Overview with a dedicated **Monitor** snapshot board and saved-layout switcher. **Streams** has search and a focused editing drawer; closing the drawer keeps its draft until saved or discarded. **Overlays** has Position, Appearance, Shape, Image and Connection inspectors, with one shape editor for presets, drawing and SVG import. **Settings** groups Display, Network & security, Updates, Backups, Maintenance, Diagnostics and About. The Windows viewer has a simpler toolbar and a separate stream editor.
+
+### Canvas settings
+
+Open **Layouts**, select the standard or automation layout, then **Canvas settings**:
+
+- **Borderless view** hides camera-tile borders for that layout.
+- **Border color** sets the tile-border color when borders are enabled.
+- **Background color** fills empty canvas space and letterboxed areas in the Viewer and browser previews. Black bars encoded into the camera footage remain part of the video.
+- **Use display border setting** restores inheritance from the global Display preference. Existing layouts keep that preference until overridden.
+
+Standard and automation layouts save these settings independently. Use **Apply to wall** for the active standard layout, **Save layout** for an inactive standard layout, or **Save automation layouts** for an automation template. When automation clears, the standard layout's appearance returns. Floating picture-in-picture overlay borders remain separately controlled.
+
+### Tile framing and sizing
+
+Select a tile to choose **Original**, **Fit**, **Fill**, or **Stretch**, plus zoom and horizontal/vertical picture position. Fit preserves the full frame; Fill can crop; Stretch can distort the source aspect ratio. Original scales relative to the saved output resolution. These controls affect the layout view without changing the camera's source stream.
+
+In either layout editor, open **Sizing**. **Fit tiles to streams** uses loaded
+snapshot proportions (choose preview streams for automation focus tiles first)
+to propose less letterboxing while keeping small tiles equal. It leaves the
+arrangement unchanged if no improvement is found. **Row heights** and **Column
+widths** allow fine shared-track adjustments in 0.5% steps; linked tracks move
+together, so tiles cannot overlap. Selected tiles show a picture-fit percentage.
+
+Changes remain in the draft until saved or applied. Use **Undo** or **Reset
+sizing** to return to the previous or automatic proportions. Existing layouts,
+including the standard 3x3, retain their original sizing. The viewer uses the
+same saved proportions as the editor; the selected tile framing mode determines
+whether video is fitted, cropped or stretched. Focus sizing stays fixed when automation changes
+streams, avoiding unexpected rearrangement of the surrounding feeds.
+
 ## Always-on-top and full-screen behavior
 
-**Keep viewer always on top is enabled by default.** In **System → Wall behavior**, clear **Keep viewer always on top** and choose **Save display settings** when you want to use other applications normally on the same monitor. While enabled, RTSPView periodically reasserts its topmost position, so a browser or another ordinary window can appear behind the camera wall even after you switch to it. This is intentional for a dedicated camera display.
+**Keep viewer always on top is enabled by default.** In **System → Viewer** (Beta: **Settings → Display**), clear **Keep viewer always on top** and choose **Apply changes** when you want to use other applications normally on the same monitor. While enabled, RTSPView periodically reasserts its topmost position, so a browser or another ordinary window can appear behind the camera wall even after you switch to it. This is intentional for a dedicated camera display.
 
 Always-on-top and full-screen mode are separate settings. **Exit full screen** restores the window border and local controls, but does **not** turn off always-on-top. To work comfortably on the same computer, disable always-on-top and exit full screen. **Launch full screen** controls the saved behavior; later configuration reloads can restore that saved mode, so clear it as well if you want the viewer to stay windowed.
 
-The System page provides immediate **Enter full screen** and **Exit full screen** commands. For a local escape from full screen, click the upper-right corner of the selected display **five times within three seconds**, then confirm. The click area is the upper-right 64 × 64 pixels. This gesture exits full screen; it does not stop the viewer or disable always-on-top. This is a display convenience, not a secure Windows kiosk lock.
+**System → Maintenance** (Beta: **Settings → Maintenance**) provides immediate **Enter full screen** and **Exit full screen** commands. For a local escape from full screen, click the upper-right corner of the selected display **five times within three seconds**, then confirm. The click area is the upper-right 64 × 64 pixels. This gesture exits full screen; it does not stop the viewer or disable always-on-top. This is a display convenience, not a secure Windows kiosk lock.
 
 **Preferred monitor** uses a zero-based display index: `0` selects the first display in Windows' enumerated list, `1` the next. Check the chosen screen after rearranging or reconnecting monitors. **Hide mouse cursor** hides the pointer after the configured idle time while in full screen; moving the pointer makes it available again.
 
@@ -318,11 +439,13 @@ The custom shape editor lets you draw a mask. SVG imports must be 256 KB or smal
 
 ## Stream tuning and everyday controls
 
+Under **System → Maintenance** (Beta: **Settings → Maintenance**), **Scheduled restarts** can restart the Viewer and Windows host independently, on selected weekdays at a host-local time or every X hours. The Controller must remain running. Host restarts have a 60-second countdown with cancellation in the admin panel; updates defer restarts and missed runs are skipped after startup or sleep. These host-specific schedules are excluded from configuration exports.
+
 Start with the default streaming settings. For an unreliable connection, try TCP and increase **Cache (ms)** to trade latency for smoother playback. **Startup timeout**, **Stall timeout** and **Maximum backoff** control connection/recovery timing; **Low latency** changes playback tuning. **Composite stream compatibility** forces TCP with a 3000 ms buffer and disables low-latency tuning for rebroadcast/composite streams. More streams and larger resolutions increase network, decoder and graphics load.
 
 Use **Restart stream** on a camera for a single-feed problem, **Restart all cameras** for all feeds, or **Restart viewer** for the display process. **Reboot host** restarts the entire host. The dashboard also shows health information and recent logs. Browser thumbnails and layout/overlay previews are snapshots, not full-motion browser video.
 
-**Show camera names** and **Show stream stats** control the information drawn over camera tiles. If hidden, diagnostic information appears during connection trouble and remains visible for 15 seconds after recovery. These text/status overlays are separate from picture-in-picture video overlays.
+**Show stream names** controls labels on the wall. Detailed statistics and connection/stale-video errors are shown in the shared diagnostics panel. These diagnostics are separate from picture-in-picture video overlays.
 
 If startup supervision was enabled during installation, RTSPView starts at sign-in and the Controller relaunches a missing Viewer. Closing only the viewer can therefore cause it to return. To stop the installed wall deliberately, run the **Stop RTSPView** shortcut with administrator rights; it stops supervision and the camera processes until a manual start or the next sign-in.
 
@@ -342,7 +465,7 @@ No environment variables are required. `.env.example` is a reference; the applic
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain RTSPView data) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
+| `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain the legacy SpotMonitor directory) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
 | `RTSPVIEW_GITHUB_REPOSITORY` | `GalacticaActual75/RTSPView` | Public GitHub release repository. No token/key is required or supported. |
 | `ASPNETCORE_URLS` | `http://127.0.0.1:5080` | Advanced binding override; disables the built-in LAN switch. HTTPS also requires certificate configuration. |
 | `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Host allowlist for externally configured bindings. The built-in LAN switch manages its own local hostname/IP allowlist. |
@@ -403,72 +526,3 @@ Docker is not supported: WPF requires an interactive Windows desktop and graphic
 See the [bridge release report](docs/bridge-release.md) for publication status and remaining validation limits. The [initial release audit](docs/release-readiness.md) and [history cleanup procedure](docs/history-cleanup.md) retain the detailed audit record.
 
 See the [branding audit](docs/branding-audit.md) for the cleanup and the compatibility identifiers retained for existing installations.
-
-
-Streams can be removed with **Delete stream**. Deletion clears its connection and
-layout placements without renumbering other streams; Add stream reuses removed
-slots. Remove automation references or change a configured overlay's host first
-if deletion reports a dependency.
-
-Use **Delete overlay** on the Overlays tab to remove an overlay, including Doorbell
-or Garage. This clears its connection, shape and framing and removes its original
-stream entry. Remove references in automation rules and layouts first; the delete
-action reports these dependencies. Other overlay IDs stay unchanged, and **Add
-overlay** reuses deleted slots.
-
-Configured overlay feeds also appear in Streams as **(overlay source)** entries
-and in both layout editors. These share their source connection settings with
-Overlays, but layout playback uses the complete original frame, with no overlay
-crop, shape, zoom or opacity. Edit the shared connection through **Edit source in
-Overlays**. Overlay presentation and layout playback can coexist; the additional
-original-stream player stays connected and decodes in the background, ready for
-focus and layout changes. It displays the full frame with aspect-fit sizing and
-uses software decoding; configured overlay sources therefore add background CPU
-and network load even when their original streams are not currently visible.
-
-Enabled, configured main streams connect and keep decoding even when they are not
-assigned to the current layout. Layouts control visibility; disable a stream to
-stop its background playback. Unassigned streams retain native decoding and the
-configured hardware-decoding preference, and still consume network and decoder
-resources. They can provide snapshots and be shown by automation without waiting
-for their first connection.
-
-Browser previews automatically request fresh snapshots about every 15 seconds
-while visible in the active tab. Captures run one at a time, so large grids or
-slow streams can take longer. Preview age is separate from stream health; failed
-refreshes retain the previous image. These previews are not live video.
-
-### Following detections between streams (beta)
-
-In a rule, choose **Allow a newer detection to take over** to let a fresh
-person-detection episode on another stream replace its fullscreen or focused view
-before the clear timer expires. Repeated detections renew the existing episode
-without stealing focus back. Existing rules default to holding their view.
-When the winning episode expires, another still-active rule may resume; the
-standard layout returns after all relevant episodes expire. Manual dismissal
-still applies to the current episodes.
-
-Choose **Any detection-enabled stream** to use the stream/topic/zone mappings
-configured across rules, including disabled rules. Configure mappings using
-Selected streams first; unmapped RTSP feeds cannot trigger automation. Each
-stream must have a consistent topic and zone mapping across rules in this mode.
-Select **Focused layout**, your saved layout, and **Camera that detected the
-person** to follow detections. With takeover enabled and dynamic Focus 2, the
-newest detecting stream fills Focus 1 and the previous still-active stream fills
-Focus 2. A fixed Focus 2 selection continues to take precedence.
-
-### Optional feed sizing (beta development)
-
-In either layout editor, open **Sizing**. **Fit tiles to streams** uses loaded
-snapshot proportions (choose preview streams for automation focus tiles first)
-to propose less letterboxing while keeping small tiles equal. It leaves the
-arrangement unchanged if no improvement is found. **Row heights** and **Column
-widths** allow fine shared-track adjustments in 0.5% steps; linked tracks move
-together, so tiles cannot overlap. Selected tiles show a picture-fit percentage.
-
-Changes remain in the draft until saved or applied. Use **Undo edit** or **Reset
-sizing** to return to the previous or automatic proportions. Existing layouts,
-including the standard 3x3, retain their original sizing. The viewer uses the
-same saved proportions as the editor and continues fitting whole video frames
-without cropping or stretching. Focus sizing stays fixed when automation changes
-streams, avoiding unexpected rearrangement of the surrounding feeds.

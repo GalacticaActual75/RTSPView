@@ -56,6 +56,15 @@ const viewportShapeEditor = (() => {
     const drawButton=dialog.querySelector('[data-action=draw]');drawButton.textContent='Free draw';
     const pointButton=document.createElement('button');pointButton.type='button';pointButton.className='secondary';pointButton.textContent='Point outline';drawButton.after(pointButton);
     const finishButton=document.createElement('button');finishButton.type='button';finishButton.className='secondary';finishButton.textContent='Close outline';finishButton.hidden=true;pointButton.after(finishButton);
+    const modes=document.createElement('div');modes.className='inspector-tabs';modes.setAttribute('role','group');modes.setAttribute('aria-label','Shape editor mode');
+    const importPanel=document.createElement('div');importPanel.hidden=true;
+    const uploadLabel=document.createElement('label');uploadLabel.textContent='SVG mask';const upload=document.createElement('input');upload.type='file';upload.accept='.svg,image/svg+xml';uploadLabel.append(upload);
+    const importNote=document.createElement('p');importNote.textContent='Path-based SVG · up to 256 KB';importPanel.append(uploadLabel,importNote);
+    const presetsPanel=dialog.querySelector('.shape-presets'),drawPanel=dialog.querySelector('.shape-tools');
+    dialog.querySelector('h2').after(modes);drawPanel.after(importPanel);
+    function selectMode(mode){presetsPanel.hidden=mode!=='presets';drawPanel.hidden=mode!=='draw';importPanel.hidden=mode!=='import';for(const b of modes.children)b.setAttribute('aria-pressed',String(b.dataset.mode===mode));armed=false;drawing=false;render();}
+    for(const [mode,title] of [['presets','Presets'],['draw','Draw'],['import','Import SVG']]){const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.mode=mode;b.textContent=title;b.onclick=()=>selectMode(mode);modes.append(b);}
+    upload.onchange=async()=>{if(!upload.files[0])return;upload.disabled=true;try{const custom=await extractCustomViewportSvg(upload.files[0]);remember();selected={id:5,name:custom.sourceName,path:custom.pathData,imported:custom,original:{x:custom.viewBoxX,y:custom.viewBoxY,width:custom.viewBoxWidth,height:custom.viewBoxHeight,rotation:0}};message.textContent='Preview ready. Use shape to add it to your overlay draft.';render();}catch(error){message.textContent=error.message;}finally{upload.disabled=false;}};
     function resize(){canvas.width=1600;canvas.height=900;canvas.style.aspectRatio='16 / 9'}
     resize();
     function viewport(){
@@ -119,11 +128,12 @@ const viewportShapeEditor = (() => {
     dialog.addEventListener('close',()=>{image.onload=null;image.onerror=null;overlayImage.onload=null;overlayImage.onerror=null;dialog.remove();form.querySelector('.open-shape-editor')?.focus()},{once:true});
     apply.onclick=()=>{
       if(!selected||!path)return;
-      if(selected.original){close();return}
+      if(selected.original&&!selected.imported){close();return}
       const set=(name,value)=>{form.elements[name].value=value;const range=form.querySelector(`[data-sync="${name}"]`);if(range)range.value=value};
       set('viewportShape',selected.id);
       if(selected.id===5){set('customViewportPathData',path);set('customViewportSourceName',selected.name);set('customViewportViewBoxX',0);set('customViewportViewBoxY',0);set('customViewportViewBoxWidth',1000);set('customViewportViewBoxHeight',1000);set('customViewportRotationDegrees',0)}
-      if(selected.placement){const p=selected.placement;set('viewportWidthPercent',p.width);set('viewportHeightPercent',p.height);set('viewportHorizontalPositionPercent',p.horizontal);set('viewportVerticalPositionPercent',p.vertical);set('customViewportViewBoxX',p.x);set('customViewportViewBoxY',p.y);set('customViewportViewBoxWidth',p.width*10);set('customViewportViewBoxHeight',p.height*10)}
+      if(selected.imported){const v=selected.original;set('customViewportViewBoxX',v.x);set('customViewportViewBoxY',v.y);set('customViewportViewBoxWidth',v.width);set('customViewportViewBoxHeight',v.height);}
+      else if(selected.placement){const p=selected.placement;set('viewportWidthPercent',p.width);set('viewportHeightPercent',p.height);set('viewportHorizontalPositionPercent',p.horizontal);set('viewportVerticalPositionPercent',p.vertical);set('customViewportViewBoxX',p.x);set('customViewportViewBoxY',p.y);set('customViewportViewBoxWidth',p.width*10);set('customViewportViewBoxHeight',p.height*10)}
       else if(selected.id===5&&aspect===1){const box=viewport();set('viewportHeightPercent',Math.max(10,Math.round(box.height/10)));set('viewportWidthPercent',Math.max(10,Math.round(box.width/10)))}
       form.elements.viewportShape.dispatchEvent(new Event('change',{bubbles:true}));form.dispatchEvent(new Event('input',{bubbles:true}));close();
     };
@@ -131,7 +141,8 @@ const viewportShapeEditor = (() => {
     if(current!==5)selected={id:current,name:Object.keys(presets).find(name=>presets[name]===current)};
     else if(form.elements.customViewportPathData.value)selected={id:5,name:form.elements.customViewportSourceName.value,path:form.elements.customViewportPathData.value,original:{x:Number(form.elements.customViewportViewBoxX.value),y:Number(form.elements.customViewportViewBoxY.value),width:num('customViewportViewBoxWidth',1),height:num('customViewportViewBoxHeight',1),rotation:Number(form.elements.customViewportRotationDegrees.value)}};
     image.onload=render;image.onerror=()=>{message.textContent='Background stream snapshot unavailable. Check the stream selected in Show over.'};image.src='/api/cameras/'+num('hostCameraSlot',2)+'/thumbnail?v='+Date.now();overlayImage.onload=render;overlayImage.src=form.querySelector('.feed-thumbnail').src;
-    dialog.showModal();message.textContent='Draw where the overlay should appear on background Stream '+num('hostCameraSlot',2)+'. The outline sets its size and position.';render();
+    dialog.querySelector('h2').parentElement.querySelector('p').textContent='Choose a shape for your overlay.';
+    dialog.showModal();message.textContent='Changes stay in the overlay draft until applied to the wall.';selectMode('presets');
   }
   return {open,outline,placement,pointOutline};
 })();

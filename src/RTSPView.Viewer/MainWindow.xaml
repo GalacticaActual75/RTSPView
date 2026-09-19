@@ -9,18 +9,15 @@
     </Grid>
     <local:WallDiagnosticsPanel x:Name="DiagnosticsPanel" Grid.Column="1"/>
     </Grid>
-    <Border x:Name="ControlBar" Grid.Row="1" Background="#15171A" Padding="12">
+    <Border x:Name="ControlBar" Grid.Row="1" Background="{StaticResource ProductBackground}" BorderBrush="{StaticResource ProductLine}" BorderThickness="0,1,0,0" Padding="16,8">
       <WrapPanel VerticalAlignment="Center" ItemHeight="40">
         <TextBlock VerticalAlignment="Center" Text="Stream" Margin="0,0,8,0"/>
         <ComboBox x:Name="SlotBox" Width="65" Height="32" SelectedIndex="0" SelectionChanged="SlotBox_SelectionChanged"></ComboBox>
-        <TextBox x:Name="UrlBox" Width="320" Height="32" Margin="10,0" Padding="8,5" Background="#24272B" Foreground="White" BorderBrush="#3B4046" ToolTip="RTSP URL"/>
-        <ComboBox x:Name="TransportBox" Width="90" Height="32" SelectedIndex="1"><ComboBoxItem>Auto</ComboBoxItem><ComboBoxItem>TCP</ComboBoxItem><ComboBoxItem>UDP</ComboBoxItem></ComboBox>
-        <Button Width="105" Height="32" Margin="10,0,0,0" Content="Save + Start" Click="SaveButton_Click" Background="#1976D2" Foreground="White" BorderThickness="0"/>
-        <Button Width="95" Height="32" Margin="8,0,0,0" Content="Restart" Click="RestartButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
-        <Button Width="105" Height="32" Margin="8,0,0,0" Content="Full Screen" Click="FullScreenButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
-        <Button x:Name="DiagnosticsButton" Width="120" Height="32" Margin="8,0,0,0" Content="Diagnostics" Click="DiagnosticsButton_Click" ToolTip="Open or close camera diagnostics" Background="#343A40" Foreground="White" BorderThickness="0"/>
-        <Button Width="105" Height="32" Margin="8,0,0,0" Content="Configure…" Click="ConfigureButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
-        <Button Width="130" Height="32" Margin="8,0,0,0" Content="Open web config" Click="OpenWebConfig_Click" ToolTip="Open local web configuration in your default browser" Background="#343A40" Foreground="White" BorderThickness="0"/>
+        <Button Style="{StaticResource ProductButton}" Width="120" Height="32" Margin="8,0,0,0" Content="Restart stream" Click="RestartButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
+        <Button Style="{StaticResource ProductButton}" Width="105" Height="32" Margin="8,0,0,0" Content="Full Screen" Click="FullScreenButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
+        <Button Style="{StaticResource ProductButton}" x:Name="DiagnosticsButton" Width="120" Height="32" Margin="8,0,0,0" Content="Diagnostics" Click="DiagnosticsButton_Click" ToolTip="Open or close camera diagnostics" Background="#343A40" Foreground="White" BorderThickness="0"/>
+        <Button Style="{StaticResource ProductButton}" Width="105" Height="32" Margin="8,0,0,0" Content="Streams…" Click="ConfigureButton_Click" Background="#343A40" Foreground="White" BorderThickness="0"/>
+        <Button Style="{StaticResource ProductButton}" Width="130" Height="32" Margin="8,0,0,0" Content="Open settings" Click="OpenWebConfig_Click" ToolTip="Open local web configuration in your default browser" Background="#343A40" Foreground="White" BorderThickness="0"/>
         <TextBlock x:Name="LanAddressText" MaxWidth="240" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="#B8C1CC" FontSize="12" Text="LAN IP: detecting…" TextTrimming="CharacterEllipsis"/>
       </WrapPanel>
     </Border>

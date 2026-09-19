@@ -1,6 +1,10 @@
 #define MyAppName "RTSPView"
 #define MyAppPublisher "RTSPView"
 #define MyAppVersion GetEnv("RTSPVIEW_VERSION")
+#define MyStageRoot GetEnv("RTSPVIEW_STAGE_DIR")
+#if MyStageRoot == ""
+  #define MyStageRoot "..\stage"
+#endif
 #if MyAppVersion == ""
   #define MyAppVersion "0.0.0-dev"
 #endif
@@ -43,9 +47,9 @@ Name: "autostart"; Description: "Start and supervise RTSPView when this user sig
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "..\stage\Controller\*"; DestDir: "{app}\Controller"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\stage\Viewer\*"; DestDir: "{app}\Viewer"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\stage\Maintenance\*"; DestDir: "{app}\Maintenance"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyStageRoot}\Controller\*"; DestDir: "{app}\Controller"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyStageRoot}\Viewer\*"; DestDir: "{app}\Viewer"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyStageRoot}\Maintenance\*"; DestDir: "{app}\Maintenance"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\deployment\Start-RTSPView.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\deployment\Run-Appliance.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\deployment\Stop-RTSPView.cmd"; DestDir: "{app}"; Flags: ignoreversion

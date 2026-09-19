@@ -29,6 +29,11 @@ internal static class NativeBackgroundChecks
             try { CheckPixel(host.Handle, 0x0318, 0xFFFFFF, "old host paint reproduces white background"); }
             finally { parent.AddHook(hook); }
             CheckPixel(host.Handle, 0x0318, 0, "native host paints black despite white parent");
+            tile.ApplyWallAppearance(new RTSPView.Core.WallLayout { BackgroundColor = "#123456", BorderColor = "#abcdef", ShowTileBorders = false });
+            CheckPixel(host.Handle, 0x0318, 0x563412, "native letterboxing paints selected layout background");
+            if (((Border)tile.FindName("TileBorder")).BorderThickness != new Thickness(0)) throw new Exception("Layout borderless override failed");
+            tile.ApplyWallAppearance(new RTSPView.Core.WallLayout());
+            CheckPixel(host.Handle, 0x0318, 0, "native background restores when layout changes");
             CheckPixel(host.Handle, 0x0014, 0xFFFFFF, "native erase leaves existing surface untouched");
             foreach (var message in new[] { 0x000F, 0x0014, 0x0318 })
             {

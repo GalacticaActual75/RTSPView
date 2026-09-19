@@ -22,11 +22,25 @@ http.createServer(async(req,res)=>{
   if(url.pathname==='/api/display'&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;Object.assign(config,JSON.parse(body));return json(config);}
   if(['/api/doorbell','/api/garage','/api/overlays/12'].includes(url.pathname)&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);if(url.pathname==='/api/doorbell')config.doorbellOverlay=data;else if(url.pathname==='/api/garage')config.garageOverlay=data;else config.additionalOverlays[0]=data;return json(data);}
   if(url.pathname==='/api/session')return json({authenticated:true,csrfToken:'fixture'});
-  if(url.pathname==='/api/status')return json({hostname:'Isolated layout preview',lanAddresses:['localhost'],version:'1.0.31-beta.7',currentTime:new Date().toISOString()});
+  if(url.pathname==='/api/status')return json({hostname:'Isolated beta preview',lanAddresses:['localhost'],version:'1.0.43-beta.6',currentTime:new Date().toISOString()});
+  if(/^\/api\/cameras\/\d+$/.test(url.pathname)&&req.method==='PUT'){
+    let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);
+    const index=config.cameras.findIndex(c=>c.slot===Number(url.pathname.split('/').at(-1)));
+    config.cameras[index]=data;return json(data);
+  }
+  if(url.pathname.endsWith('/thumbnail/refresh'))return json({message:'Synthetic snapshot captured.'});
+  if(url.pathname==='/api/network')return json({enabled:true,managed:true,addresses:['http://192.0.2.4:5080','http://192.0.2.148:5080'],message:'Example addresses for layout testing only.'});
+  if(url.pathname==='/api/snapshots/settings'&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;config.snapshots=JSON.parse(body);return json(config.snapshots);}
   if(url.pathname==='/api/config')return json(config);
-  if(url.pathname==='/api/automation')return json({settings:{enabled:false,host:'',port:1883,tls:false,authenticate:false,username:'',clientId:'fixture',rules:[]},hasPassword:false});
+  if(url.pathname==='/api/automation'){
+    if(req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;config.automation=JSON.parse(body);}
+    return json({settings:config.automation||{enabled:false,host:'',port:1883,tls:false,authenticate:false,username:'',clientId:'fixture',rules:[]},hasPassword:false});
+  }
   if(url.pathname==='/api/automation/status')return json({connection:'Disabled',rules:[]});
-  if(url.pathname==='/api/automation/layouts')return json({layouts:config.automationViewLayouts});
+  if(url.pathname==='/api/automation/layouts'){
+    if(req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;config.automationViewLayouts=JSON.parse(body).layouts;}
+    return json({layouts:config.automationViewLayouts});
+  }
 
   if(url.pathname==='/api/cameras'&&req.method==='POST'){
     if(config.cameraCount>=16){res.statusCode=400;return json({error:'The maximum of 16 cameras has been reached.'});}

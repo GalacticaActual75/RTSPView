@@ -5,8 +5,10 @@ namespace RTSPView.Viewer;
 
 public static class CameraWallPresentation
 {
-    public static void Apply(Grid grid, IReadOnlyList<CameraTile> tiles, WallLayout layout, int? focusedSlot)
+    public static void Apply(Grid grid, IReadOnlyList<CameraTile> tiles, WallLayout layout, int? focusedSlot, bool defaultBorders = true)
     {
+        grid.Background = new System.Windows.Media.SolidColorBrush(
+            (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(layout.BackgroundColor));
         grid.RowDefinitions.Clear();
         grid.ColumnDefinitions.Clear();
         var proportions = WallProportions.Calculate(layout);
@@ -21,6 +23,7 @@ public static class CameraWallPresentation
                 ? (focusedSlot == slot ? new WallTile { CameraSlot = slot } : null)
                 : layout.Tiles.FirstOrDefault(item => item.CameraSlot == slot);
             var tile = tiles[index];
+            tile.ApplyWallAppearance(layout, defaultBorders);
             if (placement is null) { tile.SetWallVisibility(false); continue; }
             Grid.SetRow(tile, placement.Row); Grid.SetColumn(tile, placement.Column);
             Grid.SetRowSpan(tile, placement.RowSpan); Grid.SetColumnSpan(tile, placement.ColumnSpan);
