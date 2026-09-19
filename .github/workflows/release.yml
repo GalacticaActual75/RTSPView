@@ -47,6 +47,10 @@ jobs:
           dotnet build RTSPView.sln -c Release --no-restore
           $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
           node tests/admin-security.checks.cjs
+          dotnet run --project tests/RTSPView.ConnectorChecks -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Connector pairing and import checks failed." }
+          node tests/connector-http.checks.cjs
+          if ($LASTEXITCODE -ne 0) { throw "Connector HTTP integration checks failed." }
           dotnet run --project tests/RTSPView.AutomationChecks -c Release
           if ($LASTEXITCODE -ne 0) { throw "MQTT automation checks failed." }
           dotnet run --project tests/RTSPView.LanAccessChecks -c Release

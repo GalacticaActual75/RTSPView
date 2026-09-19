@@ -11,7 +11,7 @@ internal static class Program
         Environment.SetEnvironmentVariable("RTSPVIEW_DATA_DIR", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "RTSPView-native-" + Guid.NewGuid().ToString("N")));
         var result = 1;
         var app = new Application();
-        app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/SpotMonitor.Viewer;component/ProductTheme.xaml", UriKind.Relative) });
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"/{typeof(CameraTile).Assembly.GetName().Name};component/ProductTheme.xaml", UriKind.Relative) });
         var wall = new Grid();
         for (var i = 0; i < 4; i++) { wall.RowDefinitions.Add(new()); wall.ColumnDefinitions.Add(new()); }
         var tiles = Enumerable.Range(0, 16).Select(_ => new CameraTile { Visibility = Visibility.Collapsed }).ToArray();

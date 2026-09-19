@@ -5,10 +5,20 @@ camera-wall viewer, to Scrypted without manually copying each camera URL and MQT
 topic. Select cameras in Scrypted, pair the connector with RTSPView, and sync their
 rebroadcast streams and MQTT connection settings.
 
-**Status: 0.1.0-beta.1, local development preview.** The plugin and corresponding
-RTSPView Controller changes are implemented and covered by local automated tests.
-They have not been published to npm or validated on a live Scrypted installation.
-An older RTSPView release without the connector endpoints cannot pair.
+**Status: 0.1.0-beta.1.** Requires RTSPView **1.0.43-beta.7 or newer**.
+The plugin and Controller integration are covered by automated tests; validation
+on a live Scrypted installation is still pending.
+
+## Install the beta
+
+The beta package is attached to the [RTSPView beta release](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43-beta.7).
+Public npm publication is pending maintainer sign-in. After publication, open
+Scrypted's **Install Plugins**, search for **scrypted-rtspview**, and install
+**RTSPview connector**. The [npm package page](https://www.npmjs.com/package/scrypted-rtspview)
+will show the published version when available.
+
+Install the matching RTSPView beta on your camera-wall computer, then follow
+**Pair and sync** below. Earlier RTSPView builds cannot pair with the connector.
 
 ## What it does
 
@@ -41,7 +51,7 @@ provide object detection, a broker, or an NVR.
 
 ## Pair and sync
 
-1. In RTSPView, open **System → Network & security → RTSPview connector** and select
+1. In RTSPView, open **Settings → Network & security → RTSPview connector** and select
    **Create pairing code**. The code expires in five minutes and can be used once.
 2. In the Scrypted plugin, set **RTSPView address** (for example,
    `http://viewer-host:5080`) and **Scrypted LAN hostname or IP**.
@@ -127,15 +137,17 @@ camera settings exposure, RTSP playback, detection delivery, and container netwo
 
 ## Publishing
 
-The proposed npm package name is `scrypted-rtspview`; ownership/availability and
-the distribution license must be confirmed before publication. This preview uses
-`UNLICENSED` and does not grant redistribution rights. No publishing workflow runs
-automatically.
+The npm package name is `scrypted-rtspview`. This beta retains the repository's
+reserved licensing status (`UNLICENSED`); no open-source license is granted.
+No publishing workflow runs automatically.
 
-After live validation and release review, build and publish using the maintainer's
-npm account. Use a beta dist-tag for preview releases. The package includes the
-`scrypted` keyword used by Scrypted's npm-backed plugin search. Verify actual search
-visibility and installability after npm indexing; indexing and ranking are external.
+Publish using the maintainer's npm account with `npm publish --access public --tag beta`.
+For this first beta-only release, also set
+`npm dist-tag add scrypted-rtspview@0.1.0-beta.1 latest`: Scrypted's normal install
+button resolves the default tag. The version remains explicitly a beta.
+The package includes the `scrypted` keyword used by Scrypted's npm-backed plugin
+search. Verify actual search visibility and installability after npm indexing;
+indexing and ranking are external. There is no separate catalog submission.
 
 ## Links
 

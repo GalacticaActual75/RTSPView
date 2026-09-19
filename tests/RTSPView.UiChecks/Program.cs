@@ -13,7 +13,7 @@ internal static class Program
     private static int Main()
     {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-        app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/SpotMonitor.Viewer;component/ProductTheme.xaml", UriKind.Relative) });
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"/{typeof(CameraTile).Assembly.GetName().Name};component/ProductTheme.xaml", UriKind.Relative) });
         var directory = Path.Combine(Path.GetTempPath(), "RTSPView-ui-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var settings = new AppSettings();

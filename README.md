@@ -69,10 +69,10 @@ also report connection problems while being kept ready for automation.
 
 ## MQTT person-detection automation
 
-The [RTSPview connector development preview](plugins/scrypted-rtspview/README.md)
+The [RTSPview connector beta](plugins/scrypted-rtspview/README.md)
 adds Scrypted camera-stream and MQTT setup through pairing and sync. It requires
-the matching Controller build and has not yet been published or tested on a live
-Scrypted server.
+RTSPView 1.0.43-beta.7 or newer. See the connector README for installation and npm
+publication status. Validation on a live Scrypted server is still pending.
 
 Open the top-level **Automation** tab to configure the broker and person-detection rules.
 Saved rules collapse to a summary; click a rule to expand and edit it. New rules
@@ -465,7 +465,7 @@ No environment variables are required. `.env.example` is a reference; the applic
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain the legacy SpotMonitor directory) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
+| `RTSPVIEW_DATA_DIR` | `%LOCALAPPDATA%\RTSPView` (existing installations retain their legacy data directory) | Settings, password hash, logs, thumbnails, update staging and cookie keys. Use a private absolute directory. |
 | `RTSPVIEW_GITHUB_REPOSITORY` | `GalacticaActual75/RTSPView` | Public GitHub release repository. No token/key is required or supported. |
 | `ASPNETCORE_URLS` | `http://127.0.0.1:5080` | Advanced binding override; disables the built-in LAN switch. HTTPS also requires certificate configuration. |
 | `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Host allowlist for externally configured bindings. The built-in LAN switch manages its own local hostname/IP allowlist. |
