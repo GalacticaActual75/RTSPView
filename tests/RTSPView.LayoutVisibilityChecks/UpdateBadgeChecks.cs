@@ -67,7 +67,7 @@ internal static class UpdateBadgeChecks
             control.Width=width;control.Measure(new Size(width,double.PositiveInfinity));control.Arrange(new Rect(0,0,width,control.DesiredSize.Height));control.UpdateLayout();
             Capture(control,$"viewer-controlbar-{width}.png");
             var content=(WrapPanel)control.Child;
-            var web=content.Children.OfType<Button>().Single(b=>b.Content?.ToString()=="Open web config");
+            var web=content.Children.OfType<Button>().Single(b=>b.Content?.ToString()=="Open settings");
             var point=web.TranslatePoint(new Point(),control);
             if(point.X<0||point.X+web.ActualWidth>width||point.Y+web.ActualHeight>control.ActualHeight)throw new Exception("Web configuration button clipped");
         }

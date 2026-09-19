@@ -1,9 +1,9 @@
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 let now=100000, calls=[],timers=[],fail=false,release;
-const document={hidden:false,head:{append(){}},addEventListener(){},createElement(){return {classList:{contains:()=>true,remove(){}},textContent:''}}};
+const document={hidden:false,head:{append(){}},addEventListener(){},createElement(){return {classList:{contains:()=>true,remove(){},toggle(){}},textContent:''}}};
 const context={document,innerHeight:800,innerWidth:1200,Date:class extends Date {static now(){return now;}},WeakMap,WeakSet,Map,URL:{createObjectURL:()=> 'blob:preview',revokeObjectURL(){}},setInterval(fn,ms){timers.push([fn,ms]);},api:async path=>{calls.push(path);if(release)await new Promise(r=>release=r);if(fail)throw Error('offline');},fetch:async()=>({ok:true,blob:async()=>({}),headers:{get:()=>new Date(now).toUTCString()}})};
 vm.createContext(context);vm.runInContext(fs.readFileSync('src/RTSPView.Controller/wwwroot/dashboard-ux.js','utf8')+';globalThis.ux=dashboardUX;',context);
-function image(onScreen=true){const label={isConnected:true,classList:{contains:()=>true,remove(){}},getClientRects:()=>onScreen?[{}]:[],getBoundingClientRect:()=>({top:0,left:0,bottom:100,right:100})};return {dataset:{},isConnected:true,_ageLabel:label};}
+function image(onScreen=true){const label={isConnected:true,classList:{contains:()=>true,remove(){},toggle(){}},getClientRects:()=>onScreen?[{}]:[],getBoundingClientRect:()=>({top:0,left:0,bottom:100,right:100})};return {dataset:{},isConnected:true,_ageLabel:label};}
 (async()=>{
 const a=image(),duplicate=image(),b=image(),off=image(false);for(const [img,slot] of [[a,1],[duplicate,1],[b,2],[off,3]])await context.ux.snapshot(img,slot);
 const tick=timers.find(t=>t[1]===750)[0];

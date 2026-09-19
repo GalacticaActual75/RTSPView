@@ -319,20 +319,7 @@ public partial class MainWindow : Window
     private void LoadEditor(int index)
     {
         var camera = _settings.Cameras[index];
-        UrlBox.Text = camera.RtspUrl;
-        TransportBox.SelectedIndex = (int)camera.Transport;
-    }
-
-    private async void SaveButton_Click(object sender, RoutedEventArgs e)
-    {
-        var index = Math.Max(0, SlotBox.SelectedIndex);
-        var cameras = _settings.Cameras.ToArray();
-        cameras[index] = cameras[index] with { RtspUrl = UrlBox.Text.Trim(), Transport = (RtspTransport)Math.Max(0, TransportBox.SelectedIndex), Enabled = true };
-        _settings = _settings with { Cameras = cameras };
-        await _settingsStore.SaveAsync(_settings);
-        _settingsLastWriteUtc = File.GetLastWriteTimeUtc(_settingsPath);
-        _tiles[index].Apply(cameras[index]);
-        _logger.Write("INFO", $"Camera {index + 1} configuration changed: {RtspUrlSanitizer.Redact(cameras[index].RtspUrl)}");
+        SlotBox.ToolTip = camera.Name;
     }
 
     private void RestartButton_Click(object sender, RoutedEventArgs e) => _tiles[Math.Max(0, SlotBox.SelectedIndex)].Start();

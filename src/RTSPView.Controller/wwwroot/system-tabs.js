@@ -33,15 +33,16 @@ const systemTabs = (() => {
   function init() {
     const page = document.querySelector('#page-system');
     const groups = [
-      ['viewer', 'Viewer', [document.querySelector('#displayForm'), document.querySelector('#snapshotForm'), document.querySelector('#temperatureForm')]],
+      ['viewer', 'Display', [document.querySelector('#displayForm'), document.querySelector('#snapshotForm')]],
       ['network', 'Network & security', [document.querySelector('#networkForm'), document.querySelector('#passwordForm')]],
-      ['updates', 'Updates', [document.querySelector('#updatePanel'), document.querySelector('.repository-link').closest('section')]],
+      ['updates', 'Updates', [document.querySelector('#updatePanel')]],
       ['backups', 'Backups', [document.querySelector('#configPanel')]],
       ['maintenance', 'Maintenance', [document.querySelector('#restartScheduleForm'), document.querySelector('.viewer-display-panel')]],
-      ['logs', 'Logs', [document.querySelector('#logView').closest('section')]]
+      ['logs', 'Diagnostics', [document.querySelector('#stats'),document.querySelector('.performance'),document.querySelector('#temperatureForm'),document.querySelector('#logView').closest('section')]],
+      ['about','About',[document.querySelector('.repository-link').closest('section'),document.querySelector('#host'),document.querySelector('#clock'),document.querySelector('#shareFeedback')]]
     ];
     const tablist = document.createElement('div');
-    tablist.className = 'system-tabs'; tablist.setAttribute('role', 'tablist'); tablist.setAttribute('aria-label', 'System settings');
+    tablist.className = 'system-tabs settings-nav'; tablist.setAttribute('aria-orientation','vertical'); tablist.setAttribute('role', 'tablist'); tablist.setAttribute('aria-label', 'System settings');
     const tabs = [], panels = [];
     function select(index, focus = false) {
       adminUi.collapseSections(page);
@@ -57,11 +58,11 @@ const systemTabs = (() => {
       tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', 'system-panel-' + id); tab.textContent = label;
       const panel = document.createElement('div'); panel.id = 'system-panel-' + id; panel.className = 'system-tab-panel';
       panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', tab.id); panel.tabIndex = 0;
-      panel.append(...cards); panels.push(panel); tabs.push(tab); tablist.append(tab);
+      panel.append(...cards.filter(Boolean)); panels.push(panel); tabs.push(tab); tablist.append(tab);
       tab.onclick = () => select(index);
       tab.onkeydown = event => {
         if (event.altKey || event.ctrlKey || event.metaKey) return;
-        const next = {ArrowRight:(index + 1) % groups.length, ArrowLeft:(index + groups.length - 1) % groups.length,
+        const next = {ArrowRight:(index + 1) % groups.length, ArrowDown:(index + 1) % groups.length, ArrowUp:(index + groups.length - 1) % groups.length, ArrowLeft:(index + groups.length - 1) % groups.length,
           Home:0, End:groups.length - 1}[event.key];
         if (next === undefined) return;
         event.preventDefault(); select(next, true);

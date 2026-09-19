@@ -23,7 +23,7 @@ public partial class ConfigurationWindow : Window
         InitializeComponent();
         _settings = settings.Normalize();
         _store = store;
-        SlotBox.ItemsSource = Enumerable.Range(1, _settings.CameraCount).ToArray();
+        SlotBox.ItemsSource = _settings.Cameras.Take(_settings.CameraCount).Select((camera, i) => $"{i + 1}  {camera.Name}").ToArray();
         SlotBox.SelectedIndex = 0;
         LoadSlot(0);
     }
@@ -50,6 +50,7 @@ public partial class ConfigurationWindow : Window
         BackoffBox.Text = camera.MaximumReconnectBackoffSeconds.ToString();
         LowLatencyBox.IsChecked = camera.LowLatency;
         AudioBox.IsChecked = camera.DecodeAudio;
+        CompositeBox.IsChecked = camera.CompositeStream;
         _loading = false;
     }
 
@@ -68,6 +69,7 @@ public partial class ConfigurationWindow : Window
             WatchdogTimeoutSeconds = Parse(WatchdogBox.Text, current.WatchdogTimeoutSeconds),
             MaximumReconnectBackoffSeconds = Parse(BackoffBox.Text, current.MaximumReconnectBackoffSeconds),
             LowLatency = LowLatencyBox.IsChecked == true,
+            CompositeStream = CompositeBox.IsChecked == true,
             DecodeAudio = AudioBox.IsChecked == true
         };
         _settings = (_settings with { Cameras = cameras }).Normalize();
@@ -90,8 +92,8 @@ public partial class ConfigurationWindow : Window
     {
         var dialog = new OpenFileDialog { Filter = "RTSPView configuration (*.json)|*.json|All files (*.*)|*.*" };
         if (dialog.ShowDialog(this) != true) return;
-        try { _settings = await _store.ImportAsync(dialog.FileName); SlotBox.SelectedIndex = 0; LoadSlot(0); }
-        catch (Exception exception) { MessageBox.Show(this, exception.Message, "Import failed", MessageBoxButton.OK, MessageBoxImage.Error); }
+        try { _loading = true; _settings = await _store.ImportAsync(dialog.FileName); SlotBox.ItemsSource = _settings.Cameras.Take(_settings.CameraCount).Select((camera, i) => $"{i + 1}  {camera.Name}").ToArray(); SlotBox.SelectedIndex = 0; LoadSlot(0); }
+        catch (Exception exception) { _loading = false; MessageBox.Show(this, exception.Message, "Import failed", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
     private async void ExportButton_Click(object sender, RoutedEventArgs e)

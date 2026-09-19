@@ -33,41 +33,9 @@ const adminUi = (() => {
         closeMenus(null, true); event.preventDefault();
       }
     });
-    // One expanded category per level and page. Nested editors retain their
-    // open ancestors, including when validation reveals a hidden field.
-    const scope = details => details.parentElement?.closest('details') || details.closest('.admin-page') || document;
-    const openSection = details => {
-      const parent = scope(details);
-      for (const other of parent.querySelectorAll('details[open]'))
-        if (other !== details && scope(other) === parent) { collapseSections(other); other.open = false; }
-      for (const button of parent.querySelectorAll('.settings-info[aria-expanded="true"]')) {
-        button.setAttribute('aria-expanded', 'false');
-        const content = document.getElementById(button.getAttribute('aria-controls'));
-        if (content) content.hidden = true;
-      }
-      details.open = true;
-    };
-    document.addEventListener('toggle', event => {
-      if (event.target.tagName === 'DETAILS' && event.target.open) openSection(event.target);
-      else if (event.target.tagName === 'DETAILS') collapseSections(event.target);
-    }, true);
-    let revealingInvalid = false;
     document.addEventListener('invalid', event => {
-      if (revealingInvalid) return;
-      revealingInvalid = true; setTimeout(() => { revealingInvalid = false; }, 0);
-      const parents = [];
-      for (let node = event.target.parentElement; node; node = node.parentElement)
-        if (node.tagName === 'DETAILS') parents.unshift(node);
-      parents.forEach(openSection);
-    }, true);
-    collapseSections();
-    window.addEventListener('pageshow', () => collapseSections());
-    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'admin-ui.css?v=diagnostics-exclusions1'; document.head.append(css);
-    const hero = document.querySelector('.hero');
-    const description = document.createElement('p'); description.id = 'pageDescription';
-    hero.querySelector('h1').after(description);
-    const metadata = document.createElement('div'); metadata.className = 'page-metadata';
-    metadata.append(document.querySelector('#host'), document.querySelector('#clock')); hero.append(metadata);
+      for(let p=event.target.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;
+    },true);
     const display = document.querySelector('#displayForm');
     display.querySelector('h2').textContent = 'Viewer / Wall Behavior';
     const help = {
@@ -99,7 +67,7 @@ const adminUi = (() => {
       button.setAttribute('aria-describedby',description.id); group.append(button,description);
     }
   }
-  function page(id) { document.querySelector('#pageDescription').textContent = descriptions[id]; }
+  function page(id) { document.title = 'RTSPView · '+({overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Overlays',automation:'Automation',system:'Settings'})[id]; }
   function host(status) {
     const target = document.querySelector('#host'); target.replaceChildren();
     for (const text of [status.hostname, 'v' + status.version]) {

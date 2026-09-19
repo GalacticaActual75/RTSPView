@@ -1,7 +1,5 @@
 /* Snapshot timestamps describe the displayed image, never the time it was fetched. */
 const dashboardUX = (() => {
-  const styles=document.createElement('link');styles.rel='stylesheet';styles.href='dashboard.css?v=1';document.head.append(styles);
-  document.addEventListener('DOMContentLoaded',()=>document.head.append(styles),{once:true});
   const stamp = new WeakMap();
   const failed = new WeakSet();
   const resources=new Map();
@@ -19,7 +17,8 @@ const dashboardUX = (() => {
     }
     label.textContent=(image._agePrefix||'')+age(image);
     label.title=stamp.get(image)?'Snapshot captured '+new Date(stamp.get(image)).toLocaleString()+' · not live video':'Snapshot preview · not live video';
-    label.classList.remove('stale');
+    const stale=!!stamp.get(image)&&Date.now()-stamp.get(image)>300000;
+    label.classList.toggle('stale',stale);if(stale)label.textContent+=' · Stale';
   }
   const attempted=new Map();let capturing=false;
   function visible(image) {
@@ -72,14 +71,10 @@ const dashboardUX = (() => {
       }
     }
     for(const select of document.querySelectorAll('select[name="hostCameraSlot"]'))for(const option of select.options){const camera=cameraInventory.find(c=>c.slot===Number(option.value));if(camera)option.textContent=camera.name+' · #'+camera.slot;}
+    workspace.sync();
   }
   function saved(camera) {if(camera.slot<10||camera.slot>25)automationUi.updateCamera(camera);const form=document.querySelector(`.camera-card[data-slot="${camera.slot}"]`);if(form){form.dataset.appliedEnabled=String(camera.enabled);form.dataset.appliedHost=form.elements.hostCameraSlot?.value||'';}const index=cameraInventory.findIndex(c=>c.slot===camera.slot);if(index>=0)cameraInventory[index]=camera;wallDesigner.updateCameras(cameraInventory);sync();}
   function health(t) {
-    let summary=document.querySelector('#cameraHealth');if(!summary){summary=document.createElement('section');summary.id='cameraHealth';summary.className='panel health-summary';document.querySelector('#stats').before(summary);}
-    const enabled=cameraInventory.filter(c=>c.enabled&&(!c.overlaySourceSlot||wallDesigner.active()?.tiles.some(t=>t.cameraSlot===c.slot))),connected=enabled.filter(c=>t.viewerConnected&&t.viewer?.cameras.some(v=>v.slot===c.slot&&v.state==='Live')).length;
-    const active=wallDesigner.active(),overlays=[...document.querySelectorAll('.camera-card')].filter(f=>f.dataset.kind!=='camera'&&f.dataset.appliedEnabled==='true'&&active?.tiles.some(tile=>tile.cameraSlot===Number(f.dataset.appliedHost))&&t.viewerConnected&&t.viewer?.cameras.some(c=>c.slot===Number(f.dataset.slot)&&c.state==='Live'&&!c.frameWarning)).length;
-    const problems=enabled.filter(c=>!t.viewerConnected||!t.viewer?.cameras.some(v=>v.slot===c.slot&&v.state==='Live'&&!v.frameWarning)).length;
-    summary.textContent=`${connected}/${enabled.length} streams connected · Active layout: ${active?.name||'None'} · ${overlays} connected always-visible overlays · ${problems} streams need attention`;
     for(const image of document.querySelectorAll('img[data-blob-url]'))caption(image);
   }
   function preview(form) {
@@ -89,7 +84,7 @@ const dashboardUX = (() => {
     const image=document.createElement('img');image.alt=title.textContent;image.src=form.querySelector('.feed-thumbnail').src;stamp.set(image,stamp.get(form.querySelector('.feed-thumbnail')));
     const refresh=document.createElement('button');refresh.textContent='Refresh snapshot';refresh.onclick=async()=>{refresh.disabled=true;refresh.textContent='Capturing snapshot…';try{await api(`/api/cameras/${form.dataset.slot}/thumbnail/refresh`,{method:'POST'});await snapshot(image,form.dataset.slot);await snapshot(form.querySelector('.feed-thumbnail'),form.dataset.slot);}catch(error){status.textContent=error.message;}finally{refresh.disabled=false;refresh.textContent='Refresh snapshot';}};
     const close=document.createElement('button');close.className='secondary';close.textContent='Close';close.onclick=()=>dialog.close();
-    dialog.append(title,status,image,refresh,close);document.body.append(dialog);caption(image);dialog.addEventListener('close',()=>{if(image.dataset.blobUrl)URL.revokeObjectURL(image.dataset.blobUrl);dialog.remove();});dialog.showModal();snapshot(image,form.dataset.slot);close.focus();
+    const edit=document.createElement('button');edit.className='secondary';edit.textContent='Edit stream';edit.onclick=()=>{dialog.close();workspace.openStream(Number(form.dataset.slot));};dialog.setAttribute('aria-label',title.textContent);dialog.append(title,status,image,refresh,edit,close);document.body.append(dialog);caption(image);dialog.addEventListener('close',()=>{if(image.dataset.blobUrl)URL.revokeObjectURL(image.dataset.blobUrl);dialog.remove();});dialog.showModal();snapshot(image,form.dataset.slot);close.focus();
   }
   function trackDisplay() {
     const form=document.querySelector('#displayForm');let baseline=new FormData(form);const state=document.querySelector('#displayState');
