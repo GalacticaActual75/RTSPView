@@ -5,7 +5,7 @@ camera-wall viewer, to Scrypted without manually copying each camera URL and MQT
 topic. Select cameras in Scrypted, pair the connector with RTSPView, and sync their
 rebroadcast streams and MQTT connection settings.
 
-**Status: 0.1.0-beta.1.** Requires RTSPView **1.0.43-beta.7 or newer**.
+**Status: 0.1.0-beta.2.** Requires RTSPView **1.0.43-beta.7 or newer**.
 The plugin and Controller integration are covered by automated tests; validation
 on a live Scrypted installation is still pending.
 
@@ -143,7 +143,7 @@ No publishing workflow runs automatically.
 
 Publish using the maintainer's npm account with `npm publish --access public --tag beta`.
 For this first beta-only release, also set
-`npm dist-tag add scrypted-rtspview@0.1.0-beta.1 latest`: Scrypted's normal install
+`npm dist-tag add scrypted-rtspview@0.1.0-beta.2 latest`: Scrypted's normal install
 button resolves the default tag. The version remains explicitly a beta.
 The package includes the `scrypted` keyword used by Scrypted's npm-backed plugin
 search. Verify actual search visibility and installability after npm indexing;

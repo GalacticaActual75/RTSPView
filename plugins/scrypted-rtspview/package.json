@@ -1,7 +1,7 @@
 {
   "name": "scrypted-rtspview",
-  "version": "0.1.0-beta.1",
-  "description": "RTSPview connector: sync Scrypted camera streams and MQTT configuration to RTSPView.",
+  "version": "0.1.0-beta.2",
+  "description": "Connect Scrypted to RTSPView. Automatically configure camera streams and MQTT settings for your camera wall.",
   "license": "UNLICENSED",
   "homepage": "https://github.com/GalacticaActual75/RTSPView",
   "repository": {
