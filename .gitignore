@@ -42,3 +42,17 @@ logs/
 beta/
 node_modules/
 HANDOFF.private.md
+# Private exports and local diagnostic material (never use these as public fixtures).
+RTSPView-config*.json
+SpotMonitor-config*.json
+appsettings.Local.json
+appsettings.*.local.json
+appsettings.Development.json
+launchSettings.json
+exports/
+backups/
+screenshots/
+debug-captures/
+local-certificates/
+private/
+update-channel.json

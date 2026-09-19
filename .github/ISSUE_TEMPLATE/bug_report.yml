@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a problem using a synthetic or redacted example.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue and any uploaded attachments are public. Do not upload camera
+        footage, configuration exports, credentials, IP addresses, hostnames,
+        personal paths, location labels, or host schedules. Use the synthetic
+        fixtures described in docs/privacy.md, or crop an image to the affected
+        control. Removing an attachment link does not necessarily delete the file.
+  - type: input
+    id: version
+    attributes:
+      label: RTSPView version and channel
+      placeholder: Version number and Stable or Beta
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected. Use invented camera names.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Reproduce using example.test URLs or the synthetic UI fixture if possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy review
+      options:
+        - label: I checked that this report and its attachments contain no private installation information or credentials.
+          required: true

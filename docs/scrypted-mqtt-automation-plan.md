@@ -49,7 +49,7 @@ outage/reconnect and disabling automation. Existing configuration, native
 layout/focus, and authenticated HTTP security checks also pass. The GUI was
 checked with a two-source rule, draft connection test, save, and reload.
 
-A source-camera walk test confirmed motion and person messages in Scrypted MQTT.
+Motion and person-event delivery should be verified in a private test environment.
 Live playback validation with the beta installed remains a separate step.
 
 ## Fullscreen and focused-layout actions
