@@ -11,6 +11,26 @@ try
     var borders = await borderStore.LoadAsync();
     Check(!borders.ShowTileBorders && !borders.DoorbellOverlay.ShowBorder && borders.GarageOverlay.ShowBorder, "independent wall and overlay border preferences persist");
     Check(new AppSettings().ShowTileBorders && new DoorbellOverlaySettings().ShowBorder, "legacy border defaults are preserved");
+    // A Viewer/settings reader can still hold the old file when Apply replaces it.
+    var busyPath = Path.Combine(root, "busy-settings.json");
+    var busyStore = new JsonSettingsStore(busyPath);
+    await busyStore.SaveAsync(new AppSettings());
+    using (var reader = File.OpenRead(busyPath))
+    {
+        var save = busyStore.SaveAsync(new AppSettings { Layouts = [new() { BorderColor = "#ff0000", BackgroundColor = "#123456" }] });
+        await Task.Delay(150);
+        reader.Dispose();
+        await save;
+    }
+    Check((await busyStore.LoadAsync()).Layouts[0].BorderColor == "#ff0000", "layout save survives a short-lived settings reader lock");
+    using (var reader = File.OpenRead(busyPath))
+    {
+        var rejected = false;
+        try { await busyStore.SaveAsync(new AppSettings { Layouts = [new() { BorderColor = "#00ff00" }] }); }
+        catch (IOException error) when (JsonSettingsStore.IsSharingViolation(error)) { rejected = true; }
+        Check(rejected, "persistent lock reports failure instead of silently applying");
+    }
+    Check((await busyStore.LoadAsync()).Layouts[0].BorderColor == "#ff0000", "failed replacement preserves the last applied layout");
     var appearance = new WallLayout { BackgroundColor = "#123456", BorderColor = "#abcdef", ShowTileBorders = false };
     var automationAppearance = AutomationLayouts.Defaults()[0] with { BackgroundColor = "#654321", BorderColor = "#fedcba", ShowTileBorders = true };
     await borderStore.SaveAsync(new AppSettings { Layouts = [appearance], AutomationViewLayouts = [automationAppearance] });

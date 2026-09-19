@@ -22,14 +22,14 @@ http.createServer(async(req,res)=>{
   if(url.pathname==='/api/display'&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;Object.assign(config,JSON.parse(body));return json(config);}
   if(['/api/doorbell','/api/garage','/api/overlays/12'].includes(url.pathname)&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);if(url.pathname==='/api/doorbell')config.doorbellOverlay=data;else if(url.pathname==='/api/garage')config.garageOverlay=data;else config.additionalOverlays[0]=data;return json(data);}
   if(url.pathname==='/api/session')return json({authenticated:true,csrfToken:'fixture'});
-  if(url.pathname==='/api/status')return json({hostname:'Isolated beta preview',lanAddresses:['localhost'],version:'1.0.43-beta.4',currentTime:new Date().toISOString()});
+  if(url.pathname==='/api/status')return json({hostname:'Isolated beta preview',lanAddresses:['localhost'],version:'1.0.43-beta.6',currentTime:new Date().toISOString()});
   if(/^\/api\/cameras\/\d+$/.test(url.pathname)&&req.method==='PUT'){
     let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);
     const index=config.cameras.findIndex(c=>c.slot===Number(url.pathname.split('/').at(-1)));
     config.cameras[index]=data;return json(data);
   }
   if(url.pathname.endsWith('/thumbnail/refresh'))return json({message:'Synthetic snapshot captured.'});
-  if(url.pathname==='/api/network')return json({enabled:false,managed:true,addresses:[],message:'Local preview only.'});
+  if(url.pathname==='/api/network')return json({enabled:true,managed:true,addresses:['http://192.0.2.4:5080','http://192.0.2.148:5080'],message:'Example addresses for layout testing only.'});
   if(url.pathname==='/api/snapshots/settings'&&req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;config.snapshots=JSON.parse(body);return json(config.snapshots);}
   if(url.pathname==='/api/config')return json(config);
   if(url.pathname==='/api/automation'){

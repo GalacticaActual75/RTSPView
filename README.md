@@ -13,13 +13,13 @@ Release status checked against published GitHub releases on September 19, 2026:
 | Channel | Published version | Availability |
 | --- | --- | --- |
 | Stable | [1.0.42](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.42) | Includes shared diagnostics, MQTT person-detection automation, saved automation layouts with one or two focus tiles, detection takeover and zone filtering, temperature warnings, the optional maintenance helper, scheduled restarts, and original overlay sources in layouts. These are released features, not beta-only features. |
-| Beta | [1.0.43-beta.5](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43-beta.5) | Adds expanded layout sizing and framing, the redesigned dashboard and native stream editor, and per-layout borderless mode, border color and background color. |
+| Beta | [1.0.43-beta.6](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43-beta.6) | Adds expanded layout sizing and framing, the redesigned dashboard and native stream editor, and per-layout borderless mode, border color and background color. |
 
 **1.0.43 is not yet a published stable release.** A draft release or code on the default branch does not mean those features have reached Stable. Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. This guide covers stable functionality unless a section explicitly says beta.
 
 ### Finding controls in Stable and Beta
 
-| Task | Stable 1.0.42 | Beta 1.0.43-beta.5 |
+| Task | Stable 1.0.42 | Beta 1.0.43-beta.6 |
 | --- | --- | --- |
 | Snapshot overview | Overview | Monitor, with active-layout and All streams views |
 | Edit a stream | Streams | Streams → Edit opens a side drawer; Save & apply commits changes |
@@ -365,7 +365,7 @@ while visible in the active tab. Captures run one at a time, so large grids or
 slow streams can take longer. Preview age is separate from stream health; failed
 refreshes retain the previous image. These previews are not live video.
 
-## Expanded layout sizing and appearance (Beta 1.0.43-beta.5)
+## Expanded layout sizing and appearance (Beta 1.0.43-beta.6)
 
 These controls are available in the published beta, not Stable 1.0.42. Both **Standard View layouts** and **Automation layouts** support up to 16 tiles on a grid of up to 12 rows and 12 columns. Each saved layout can use a preset or custom output resolution; custom dimensions range from 240 to 16384 pixels per axis.
 

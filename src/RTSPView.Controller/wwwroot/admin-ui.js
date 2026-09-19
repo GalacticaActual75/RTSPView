@@ -59,11 +59,14 @@ const adminUi = (() => {
     document.querySelector('#updateState').setAttribute('role', 'status');
     for (const [selector,label,help] of [
       ['[data-action="restart-cameras"]','Restart all streams','Reconnect every stream without restarting the viewer application.'],
-      ['[data-action="restart"]','Restart viewer application','Close and relaunch the viewer, including all streams.']
+      ['[data-action="enter-fullscreen"]','Enter full screen','Fill the selected display with the live wall.'],
+      ['[data-action="exit-fullscreen"]','Exit full screen','Return to a window. Always-on-top remains a separate setting.'],
+      ['[data-action="restart"]','Restart viewer application','Close and relaunch the viewer, including all streams.'],
+      ['[data-system="reboot"]','Reboot host','Restart Windows and interrupt all applications on this host.']
     ]) {
       const button = document.querySelector(selector), group = document.createElement('div'); group.className = 'restart-action';
       button.before(group); button.textContent = label;
-      const description = document.createElement('small'); description.id = button.dataset.action + '-help'; description.textContent = help;
+      const description = document.createElement('small'); description.id = (button.dataset.action || button.dataset.system) + '-help'; description.textContent = help;
       button.setAttribute('aria-describedby',description.id); group.append(button,description);
     }
   }

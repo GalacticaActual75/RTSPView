@@ -30,3 +30,26 @@ body #page-layouts .system-tabs button{flex:0 0 auto;border:0;border-bottom:2px 
 .designer-canvas-appearance input[type=color]{width:100%;height:38px;padding:3px}
 .designer-canvas-appearance label:has(input[type=checkbox]){flex-direction:row!important;align-items:center}
 .designer-canvas-appearance input[type=checkbox]{width:18px!important;min-height:18px!important}
+/* Keep URL actions and immediate maintenance commands readable at every width. */
+#networkAddresses{display:grid;gap:12px;margin:12px 0}
+.address-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.address-row a{min-width:0;overflow-wrap:anywhere}
+.address-row .copy-address{flex:0 0 auto}
+.clipboard-source{position:fixed;left:-10000px;top:0}
+.viewer-display-panel .control-buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:24px;align-items:start}
+.viewer-display-panel .restart-action{max-width:none;min-width:0;gap:10px}
+.viewer-display-panel .restart-action button{width:100%;min-height:40px;white-space:normal}
+.viewer-display-panel .restart-action small{line-height:1.5}
+.restart-schedules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
+.restart-schedule-card{min-width:0;padding:18px;border:1px solid var(--line);border-radius:6px}
+.restart-schedule-card>p{font-size:12px}
+.restart-schedule-card fieldset{margin:16px 0;padding:14px 0 0}
+.restart-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+.restart-days{display:flex;flex-wrap:wrap;gap:8px 16px}
+.restart-days label{display:flex;align-items:center;gap:6px;margin:0}
+.restart-days input{margin:0}
+.restart-status{display:grid;gap:10px;font-size:12px}
+.restart-status>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.restart-status dt{color:var(--muted)}.restart-status dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:1000px){.restart-schedules{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:480px){.restart-form-grid{grid-template-columns:minmax(0,1fr)}}

@@ -135,11 +135,15 @@ app.Use(async (context, next) =>
     try { await next(); }
     catch (Exception exception)
     {
-        auditLog.Write("ERROR", "Request failed: " + exception.GetType().Name);
+        var route = (context.GetEndpoint() as Microsoft.AspNetCore.Routing.RouteEndpoint)?.RoutePattern.RawText ?? "unknown route";
+        auditLog.Write("ERROR", $"Request failed: {exception.GetType().Name}; code=0x{exception.HResult:X8}; {context.Request.Method} {route}");
         if (context.Response.HasStarted) throw;
         context.Response.Clear();
-        context.Response.StatusCode = 500;
-        await context.Response.WriteAsJsonAsync(new { error = "Request failed. Check the server logs." });
+        var busySettings = exception is IOException io && JsonSettingsStore.IsSharingViolation(io);
+        context.Response.StatusCode = busySettings ? 503 : 500;
+        await context.Response.WriteAsJsonAsync(new { error = busySettings
+            ? "Settings are busy in another process. Your changes have not been applied; try Apply again."
+            : "Request failed. Check the server logs." });
     }
 });
 app.UseDefaultFiles();
