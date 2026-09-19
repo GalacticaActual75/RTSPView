@@ -1,0 +1,38 @@
+name: Check RTSPview connector
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'plugins/scrypted-rtspview/**'
+      - 'src/RTSPView.Controller/**'
+      - 'src/RTSPView.Core/**'
+      - 'tests/RTSPView.ConnectorChecks/**'
+      - 'tests/connector-http.checks.cjs'
+      - '.github/workflows/connector.yml'
+permissions:
+  contents: read
+jobs:
+  connector:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: plugins/scrypted-rtspview/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: npm ci
+        working-directory: plugins/scrypted-rtspview
+      - run: npm test
+        working-directory: plugins/scrypted-rtspview
+      - run: npm run build
+        working-directory: plugins/scrypted-rtspview
+      - run: npm run check:package
+        working-directory: plugins/scrypted-rtspview
+      - run: npm pack --dry-run
+        working-directory: plugins/scrypted-rtspview
+      - run: dotnet run --project tests/RTSPView.ConnectorChecks -c Release
+      - run: node tests/connector-http.checks.cjs

@@ -179,6 +179,8 @@ public sealed record AppSettings
         {
             Slot = slot,
             Name = string.IsNullOrWhiteSpace(camera.Name) ? defaultName : camera.Name.Trim(),
+            ScryptedId = camera.ScryptedId ?? "",
+            ScryptedTopic = camera.ScryptedTopic ?? "",
             NetworkCacheMilliseconds = Math.Clamp(camera.NetworkCacheMilliseconds, 100, 10_000),
             StartupTimeoutSeconds = Math.Clamp(camera.StartupTimeoutSeconds, 8, 120),
             WatchdogTimeoutSeconds = Math.Clamp(camera.WatchdogTimeoutSeconds, 8, 120),

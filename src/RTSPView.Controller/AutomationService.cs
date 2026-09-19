@@ -31,6 +31,7 @@ public sealed class AutomationService : BackgroundService
     public AutomationStatus Status => _status;
     public MqttDiagnostics Diagnostics { get; } = new();
     public object Configuration => new { settings = _stored.Settings, hasPassword = _stored.ProtectedPassword.Length > 0 };
+    public AutomationSettings CurrentSettings => _stored.Settings;
     public bool UsesCamera(int slot) => _stored.Settings.Rules.Any(r => r.Sources.Any(s => s.CameraSlot == slot) || (r.Action != AutomationAction.Overlay && (r.CameraSlot == slot || r.SecondCameraSlot == slot)));
     public bool UsesOverlay(int slot) => UsesCamera(slot) || UsesCamera(StreamCatalog.SourceSlot(slot)) || _stored.Settings.Rules.Any(r => r.Action == AutomationAction.Overlay && r.OverlaySlot == slot);
     public bool RequiresSecondFocus(string id) => _stored.Settings.Rules.Any(r => r.LayoutId == id && r.SecondCameraSlot != 0);

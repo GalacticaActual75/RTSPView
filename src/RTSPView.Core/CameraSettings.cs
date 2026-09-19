@@ -7,6 +7,9 @@ public sealed record CameraSettings
     public int Slot { get; init; } = 1;
     public string Name { get; init; } = "Camera 1";
     public string RtspUrl { get; init; } = string.Empty;
+    // Connector identity is independent of the viewer slot; retained through edits.
+    public string ScryptedId { get; init; } = "";
+    public string ScryptedTopic { get; init; } = "";
     public bool Enabled { get; init; } = true;
     public RtspTransport Transport { get; init; } = RtspTransport.Tcp;
     public bool LowLatency { get; init; }

@@ -45,6 +45,11 @@ also report connection problems while being kept ready for automation.
 
 ## MQTT person-detection automation (beta)
 
+The [RTSPview connector development preview](plugins/scrypted-rtspview/README.md)
+adds Scrypted camera-stream and MQTT setup through pairing and sync. It requires
+the matching Controller build and has not yet been published or tested on a live
+Scrypted server.
+
 Open the top-level **Automation** tab to configure the broker and person-detection rules.
 Saved rules collapse to a summary; click a rule to expand and edit it. New rules
 stay open, and validation expands any rule that needs attention.

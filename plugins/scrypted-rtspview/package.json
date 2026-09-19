@@ -1,0 +1,47 @@
+{
+  "name": "scrypted-rtspview",
+  "version": "0.1.0-beta.1",
+  "description": "RTSPview connector: sync Scrypted camera streams and MQTT configuration to RTSPView.",
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/GalacticaActual75/RTSPView",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GalacticaActual75/RTSPView.git",
+    "directory": "plugins/scrypted-rtspview"
+  },
+  "keywords": [
+    "scrypted",
+    "plugin",
+    "rtspview",
+    "mqtt",
+    "camera"
+  ],
+  "files": [
+    "dist/plugin.zip",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/sdk.cjs scrypted-webpack",
+    "check": "tsc --noEmit",
+    "check:package": "node scripts/check-package.cjs",
+    "test": "tsc --outDir test-dist --module commonjs && node --test test/*.cjs",
+    "prepublishOnly": "npm test && npm run build && npm run check:package",
+    "scrypted-deploy": "node scripts/sdk.cjs scrypted-deploy"
+  },
+  "scrypted": {
+    "rollup": true,
+    "name": "RTSPview connector",
+    "type": "API",
+    "interfaces": [
+      "Settings"
+    ]
+  },
+  "devDependencies": {
+    "@scrypted/sdk": "0.5.59",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.0"
+  }
+}

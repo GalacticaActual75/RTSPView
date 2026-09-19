@@ -266,7 +266,7 @@ const automationUi = (() => {
     if (suggest && !input.value && camera) {
       const known = [...new Set(savedRules.flatMap(r => r.sources).filter(s => s.cameraSlot === slot).map(s => s.topic))];
       const matches = discovered.filter(t => t.cameraName?.toLowerCase() === camera.name.toLowerCase());
-      if (known.length === 1 || matches.length === 1) { input.value = known.length === 1 ? known[0] : matches[0].topic; dirty = true; form.dataset.dirty = 'true'; }
+      if (known.length === 1 || camera.scryptedTopic || matches.length === 1) { input.value = known.length === 1 ? known[0] : camera.scryptedTopic || matches[0].topic; dirty = true; form.dataset.dirty = 'true'; }
     }
     const choices = discovered.map(t => ({value: t.topic, label: `${t.cameraName || 'Camera name unavailable'} · ${t.topic}${t.personSeen ? ' · Person observed' : ''}`}));
     if (input.value && !choices.some(c => c.value === input.value)) choices.unshift({value:input.value, label:'Configured topic (not seen in this discovery session) · ' + input.value});

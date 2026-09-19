@@ -192,6 +192,7 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseAuthorization();
+app.MapConnector(dataDirectory, configGate, settingsStore, () => security.SessionVersion, () => security.PasswordChangeRequired);
 
 app.MapGet("/api/session", (HttpContext context, ClaimsPrincipal user) =>
 {
@@ -327,8 +328,10 @@ app.MapPost("/api/automation/diagnostics/stop", async (AutomationService automat
 app.MapPut("/api/automation", async (AutomationRequest request, AutomationService automation, CancellationToken token) =>
 {
     if (request.Settings is null) return Results.BadRequest(new { error = "Automation settings are required." });
+    await configGate.WaitAsync(token);
     try { await automation.SaveAsync(request, token); }
     catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
+    finally { configGate.Release(); }
     auditLog.Write("AUTOMATION", "Automation settings saved");
     return Results.Ok(automation.Configuration);
 }).RequireAuthorization();
@@ -573,7 +576,9 @@ app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
         var settings = await settingsStore.LoadAsync();
         if (settings.DeletedCameraSlots.Contains(slot)) return Results.BadRequest(new { error = "This stream was deleted. Use Add stream to restore an available slot." });
         var cameras = settings.Cameras.ToArray();
-        cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)] = camera with { Slot = slot };
+        var previousCamera = cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)];
+        cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)] = camera with { Slot = slot,
+            ScryptedId = previousCamera.ScryptedId, ScryptedTopic = previousCamera.ScryptedTopic };
         await settingsStore.SaveAsync(settings with { Cameras = cameras });
         auditLog.Write("AUDIT", $"Camera {slot} configuration changed from web admin: {RtspUrlSanitizer.Redact(cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)].RtspUrl)}");
         return Results.Ok(cameras[Array.IndexOf(AppSettings.MainCameraSlots, slot)]);

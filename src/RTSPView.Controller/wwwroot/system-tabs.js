@@ -34,7 +34,7 @@ const systemTabs = (() => {
     const page = document.querySelector('#page-system');
     const groups = [
       ['viewer', 'Viewer', [document.querySelector('#displayForm'), document.querySelector('#snapshotForm'), document.querySelector('#temperatureForm')]],
-      ['network', 'Network & security', [document.querySelector('#networkForm'), document.querySelector('#passwordForm')]],
+      ['network', 'Network & security', [document.querySelector('#networkForm'), document.querySelector('#connectorPanel'), document.querySelector('#passwordForm')]],
       ['updates', 'Updates', [document.querySelector('#updatePanel'), document.querySelector('.repository-link').closest('section')]],
       ['backups', 'Backups', [document.querySelector('#configPanel')]],
       ['maintenance', 'Maintenance', [document.querySelector('#restartScheduleForm'), document.querySelector('.viewer-display-panel')]],
