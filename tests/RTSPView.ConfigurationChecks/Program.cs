@@ -11,6 +11,25 @@ try
     var borders = await borderStore.LoadAsync();
     Check(!borders.ShowTileBorders && !borders.DoorbellOverlay.ShowBorder && borders.GarageOverlay.ShowBorder, "independent wall and overlay border preferences persist");
     Check(new AppSettings().ShowTileBorders && new DoorbellOverlaySettings().ShowBorder, "legacy border defaults are preserved");
+    var appearance = new WallLayout { BackgroundColor = "#123456", BorderColor = "#abcdef", ShowTileBorders = false };
+    var automationAppearance = AutomationLayouts.Defaults()[0] with { BackgroundColor = "#654321", BorderColor = "#fedcba", ShowTileBorders = true };
+    await borderStore.SaveAsync(new AppSettings { Layouts = [appearance], AutomationViewLayouts = [automationAppearance] });
+    var appearanceLoaded = await borderStore.LoadAsync();
+    Check(appearanceLoaded.Layouts[0].BackgroundColor == "#123456" && appearanceLoaded.Layouts[0].BorderColor == "#abcdef" && appearanceLoaded.Layouts[0].ShowTileBorders == false, "standard layout appearance survives persistence");
+    var resolvedAppearance = AutomationLayouts.Resolve(appearanceLoaded, appearanceLoaded.AutomationViewLayouts[0], [1]);
+    Check(resolvedAppearance.BackgroundColor == "#654321" && resolvedAppearance.BorderColor == "#fedcba" && resolvedAppearance.ShowTileBorders == true, "automation appearance survives normalization, persistence and focus resolution");
+    Check(new WallLayout().ShowTileBorders is null && new WallLayout().BackgroundColor == "#000000", "legacy layouts inherit global borders and black background");
+    foreach (var invalidColor in new string[] { "red", "#fff", "#12345678", "#gggggg", "", null! })
+    {
+        var rejected = false;
+        try { WallLayout.Validate([appearance with { BackgroundColor = invalidColor }], appearance.Id); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "invalid layout background rejected");
+        rejected = false;
+        try { AutomationLayouts.Validate([automationAppearance with { BorderColor = invalidColor }]); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "invalid automation border rejected");
+    }
     StreamActivityChecks.Run();
     OverlayGeometryChecks.Run();
     WallProportionsChecks.Run();

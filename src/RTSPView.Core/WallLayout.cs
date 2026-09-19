@@ -22,6 +22,10 @@ public sealed record WallLayout
     public string AspectRatio { get; init; } = "16:9";
     public int OutputWidth { get; init; }
     public int OutputHeight { get; init; }
+    // Null preserves the installation's existing global border preference.
+    public bool? ShowTileBorders { get; init; }
+    public string BorderColor { get; init; } = "#24272B";
+    public string BackgroundColor { get; init; } = "#000000";
     public int EffectiveWidth => OutputWidth > 0 ? OutputWidth : AspectRatio == "9:16" ? 1080 : 1920;
     public int EffectiveHeight => OutputHeight > 0 ? OutputHeight : AspectRatio == "9:16" ? 1920 : 1080;
     // Automation layouts use -1/-2 for unassigned focus tiles; positive IDs are migrated legacy positions.
@@ -45,6 +49,8 @@ public sealed record WallLayout
         var ids = new HashSet<string>();
         foreach (var layout in layouts)
         {
+            if (layout is not null && (!IsColor(layout.BorderColor) || !IsColor(layout.BackgroundColor)))
+                throw new InvalidDataException("Layout colors must use six-digit hex values, for example #24272B.");
             if (layout is null || string.IsNullOrWhiteSpace(layout.Id) || layout.Id.Length > 64 || !ids.Add(layout.Id) ||
                 string.IsNullOrWhiteSpace(layout.Name) || layout.Name.Length > 80)
                 throw new InvalidDataException("Layouts need unique IDs and names of 1–80 characters.");
@@ -81,6 +87,9 @@ public sealed record WallLayout
         }
         if (activeId is null || !ids.Contains(activeId)) throw new InvalidDataException("Choose a saved layout to display.");
     }
+
+    private static bool IsColor(string? value) => value is { Length: 7 } && value[0] == '#' &&
+        value.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") < 0;
 }
 
 public sealed record WallLayoutsRequest

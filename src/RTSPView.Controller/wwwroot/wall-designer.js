@@ -164,6 +164,15 @@ function createWallDesigner(isAutomation = false) {
     for(const [input,label,value] of [[width,'Pixels wide',outputWidth],[height,'Pixels high',outputHeight]]){input.type='number';input.min=240;input.max=16384;input.value=value;field(label,input,custom);}
     button('Set size',()=>{const w=Number(width.value),h=Number(height.value);if(![w,h].every(n=>Number.isInteger(n)&&n>=240&&n<=16384)){message('Use dimensions from 240 to 16384 pixels.');return;}layout.outputWidth=w;layout.outputHeight=h;layout.aspectRatio=h>w?'9:16':'16:9';changed();},custom);
     const gridFields=el('div',undefined,'designer-grid-fields');canvasControls.append(gridFields);
+    const appearance=el('div',undefined,'designer-canvas-appearance');canvasControls.append(appearance);
+    const borderless=el('input');borderless.type='checkbox';borderless.checked=!(layout.showTileBorders??config.showTileBorders??true);
+    borderless.onchange=()=>{layout.showTileBorders=!borderless.checked;changed();};field('Borderless view',borderless,appearance);
+    for(const [key,label,fallback] of [['borderColor','Border color','#24272b'],['backgroundColor','Background color','#000000']]){
+      const color=el('input');color.type='color';color.value=layout[key]||fallback;color.disabled=key==='borderColor'&&borderless.checked;
+      color.onchange=()=>{layout[key]=color.value;changed();};field(label,color,appearance);
+    }
+    button('Use display border setting',()=>{layout.showTileBorders=null;changed();},appearance);
+    appearance.append(el('p','Background fills empty canvas space and letterboxing. Black bars encoded into a camera image are part of the video.','designer-help'));
     for(const [key,label] of [['rows','Rows'],['columns','Columns']]){
       const input=el('input');input.type='number';input.min=1;input.max=12;input.value=layout[key];
       input.onchange=()=>{
@@ -186,6 +195,10 @@ function createWallDesigner(isAutomation = false) {
     }
     const stage=el('div',undefined,'designer-stage');preview.append(stage);
     board=el('div',undefined,'designer-board');board.setAttribute('aria-label','Stream wall layout preview');
+    board.style.backgroundColor=layout.backgroundColor||'#000000';
+    board.style.setProperty('--canvas-background',layout.backgroundColor||'#000000');
+    board.style.setProperty('--canvas-border',layout.borderColor||'#24272b');
+    board.style.setProperty('--canvas-border-width',(layout.showTileBorders??config.showTileBorders??true)?'1px':'0px');
     board.classList.toggle('pan-images',panImage);board.style.backgroundImage='none';board.style.setProperty('--aspect',outputWidth+'/'+outputHeight);board.style.setProperty('--ratio',outputWidth/outputHeight);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
     board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,proportions.cell(proportions.rows,(e.clientY-bounds.top)/bounds.height),proportions.cell(proportions.columns,(e.clientX-bounds.left)/bounds.width));};
     const cellAt=e=>{const b=board.getBoundingClientRect();return {row:Math.max(0,Math.min(layout.rows-1,proportions.cell(proportions.rows,(e.clientY-b.top)/b.height))),column:Math.max(0,Math.min(layout.columns-1,proportions.cell(proportions.columns,(e.clientX-b.left)/b.width)))};};

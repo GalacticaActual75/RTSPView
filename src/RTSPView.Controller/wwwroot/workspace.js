@@ -111,6 +111,7 @@ const workspace = (() => {
       for(const layout of config?.layouts||[])picker.add(new Option(layout.name,layout.id));picker.value=active?.id||'';
       for(const item of document.querySelectorAll('[data-monitor-mode]'))item.setAttribute('aria-pressed',String(item.dataset.monitorMode===monitorMode));
       const board=$('#monitorBoard');board.replaceChildren();board.classList.toggle('all-streams',monitorMode==='all');
+      board.style.backgroundColor=monitorMode==='wall'?(active?.backgroundColor||'#000000'):'';
       const outputWidth=active?.outputWidth||(active?.aspectRatio==='9:16'?1080:1920),outputHeight=active?.outputHeight||(active?.aspectRatio==='9:16'?1920:1080);
       board.style.aspectRatio=monitorMode==='wall'?`${outputWidth}/${outputHeight}`:'';
       board.style.setProperty('--monitor-ratio',outputWidth/outputHeight);
@@ -119,6 +120,7 @@ const workspace = (() => {
       for(const tile of tiles){
         const camera=cameraInventory.find(c=>c.slot===tile.cameraSlot);if(!camera)continue;
         const card=button('',()=>showDetails(camera),'monitor-tile');card._tile=tile;
+        if(monitorMode==='wall')Object.assign(card.style,{background:active?.backgroundColor||'#000000',borderColor:active?.borderColor||'#24272b',borderWidth:(active?.showTileBorders??config?.showTileBorders??true)?'1px':'0px'});
         card.setAttribute('aria-label','View '+camera.name);card.dataset.cameraSlot=camera.slot;
         if(monitorMode==='wall'){const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});}
         const image=node('img');image.alt='';image.className='feed-thumbnail';

@@ -40,7 +40,7 @@ const adminUi = (() => {
     display.querySelector('h2').textContent = 'Viewer / Wall Behavior';
     const help = {
       startFullScreen: 'Start the viewer in full screen.', hideMouseCursor: 'Hide the cursor after inactivity.',
-      showTileBorders: 'Turn off for a seamless wall with no gaps between tiles.', showCameraNames: 'Display names on the wall.', showCameraStats: 'Show stream and decoder details.',
+      showTileBorders: 'Default for layouts that do not override borders in Canvas settings.', showCameraNames: 'Display names on the wall.', showCameraStats: 'Show stream and decoder details.',
       keepViewerAlwaysOnTop: 'Keep the viewer above other windows.'
     };
     for (const label of display.querySelectorAll('.display-toggle-grid label')) {

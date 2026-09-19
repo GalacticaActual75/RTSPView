@@ -272,7 +272,8 @@ public partial class MainWindow : Window
         if (_focusedSlot.HasValue && !_allTiles.Any(tile => tile.Slot == _focusedSlot)) _focusedSlot = null;
         foreach (var tile in _allTiles) tile.Focused = tile.Slot == EffectiveFocusedSlot;
         SizeWall();
-        CameraWallPresentation.Apply(WallGrid, [.._tiles, .._rawOverlaySources.Values.Select(e => e.Tile)], layout, EffectiveFocusedSlot);
+        CameraWallPresentation.Apply(WallGrid, [.._tiles, .._rawOverlaySources.Values.Select(e => e.Tile)], layout, EffectiveFocusedSlot, _settings.ShowTileBorders);
+        WallViewport.Background = WallGrid.Background;
         QueueOverlayLayouts();
     }
 
@@ -1052,7 +1053,7 @@ public partial class MainWindow : Window
     private void ApplyOverlayPreferences()
     {
         foreach (var tile in _allTiles) tile.ApplyOverlayPreferences(_settings.ShowCameraNames, _settings.ShowCameraStats);
-        foreach (var tile in _tiles.Concat(_rawOverlaySources.Values.Select(source => source.Tile))) tile.ApplyTileBorder(_settings.ShowTileBorders);
+        foreach (var tile in _tiles.Concat(_rawOverlaySources.Values.Select(source => source.Tile))) tile.ApplyWallAppearance(EffectiveLayout, _settings.ShowTileBorders);
     }
 
     protected override void OnClosing(CancelEventArgs e)
