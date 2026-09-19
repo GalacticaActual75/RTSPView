@@ -1,6 +1,15 @@
 name: Check RTSPview connector
 on:
   workflow_dispatch:
+  push:
+    branches: ['codex/beta']
+    paths:
+      - 'plugins/scrypted-rtspview/**'
+      - 'src/RTSPView.Controller/**'
+      - 'src/RTSPView.Core/**'
+      - 'tests/RTSPView.ConnectorChecks/**'
+      - 'tests/connector-http.checks.cjs'
+      - '.github/workflows/connector.yml'
   pull_request:
     paths:
       - 'plugins/scrypted-rtspview/**'
