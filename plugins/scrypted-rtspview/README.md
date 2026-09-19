@@ -12,10 +12,10 @@ on a live Scrypted installation is still pending.
 ## Install the beta
 
 The beta package is attached to the [RTSPView beta release](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43-beta.7).
-Public npm publication is pending maintainer sign-in. After publication, open
-Scrypted's **Install Plugins**, search for **scrypted-rtspview**, and install
+In Scrypted's **Install Plugins**, search for **scrypted-rtspview** and install
 **RTSPview connector**. The [npm package page](https://www.npmjs.com/package/scrypted-rtspview)
-will show the published version when available.
+lists the available versions. If npm search indexing has not updated yet, enter
+the exact package name `scrypted-rtspview` in Scrypted's plugin installation field.
 
 Install the matching RTSPView beta on your camera-wall computer, then follow
 **Pair and sync** below. Earlier RTSPView builds cannot pair with the connector.
