@@ -13,7 +13,7 @@ Release channels as of September 20, 2026:
 | Channel | Published version | Availability |
 | --- | --- | --- |
 | Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Promotes the beta dashboard, native stream editor, expanded layout/framing controls, per-layout appearance and Scrypted connector support. Adds intentional viewer exit, manual resume, optional fullscreen hover exit and viewer taskbar identity fixes. |
-| Beta | [1.0.44-beta.4](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.4) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
+| Beta | [1.0.44-beta.5](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.5) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
 
 Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. Unless marked beta, this guide describes stable 1.0.43. Tapo integration and numeric rule priorities require 1.0.44-beta.1 or newer; they are not in stable 1.0.43.
 
@@ -30,6 +30,8 @@ See [Tapo setup, overlay recipes and priority behavior](docs/tapo-automation.md)
 In **1.0.44-beta.2**, custom overlay masks also follow their host camera's Fit/Fill/Stretch/Original framing, zoom and pan across layouts. The mask and overlay video transform together and stay clipped to the host tile. Existing 16:9 editor calibration is retained; no additional setting is required.
 
 In **1.0.44-beta.4**, priority editing and guidance live in the Priority tab, and automation help uses the full panel width. **Quick actions** beside Sign out mirrors Maintenance. Restart viewer is disabled while stopped or starting; one full-screen button follows the viewer’s reported mode.
+
+In **1.0.44-beta.5**, each MQTT and Tapo rule has an On/Off switch. Apply or save to persist it. Tapo discovery buttons and hub rows have clearer spacing. **Remove Tapo account** clears RTSPView’s saved email/password and disables Tapo automation while keeping saved hubs and rules.
 
 ### Finding controls after upgrading
 

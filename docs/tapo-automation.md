@@ -1,4 +1,4 @@
-# Tapo sensor automations (1.0.44-beta.4)
+# Tapo sensor automations (1.0.44-beta.5)
 
 Configure direct Tapo access in **Automation → Tapo**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. This beta has automated reader, Controller, HTTP and native-viewer tests; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
 
@@ -53,7 +53,7 @@ Open/Closed reflects the hub's reported state. Missing sensors, failed hubs and 
 
 **Test open**, **Test closed** and **Test unavailable** apply a saved, enabled rule's selected state to the running viewer for ten seconds. They do not operate the sensor or hub. Normal polling resumes afterward; changing or disabling settings clears tests. Status indicates active rule conditions, which may be superseded by a higher-priority rule.
 
-## Rule switches and removing the account (beta branch)
+## Rule switches and removing the account (beta.5)
 
 Each MQTT and Tapo rule has an **Enable automation** On/Off switch. Apply or save the form to persist the change. Turning a rule off releases its effects without deleting its settings.
 
