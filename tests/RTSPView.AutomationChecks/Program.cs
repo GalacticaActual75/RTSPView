@@ -218,6 +218,12 @@ await Until(() => commands.Last().Automation?.Leases.Length == 1, "Original rule
 initial = commands.Last().Automation!.Leases[0];
 await Publish(rule.Sources[1].Topic, DateTimeOffset.UtcNow.AddMilliseconds(50));
 await Until(() => commands.Any(c => c.Automation?.Leases.Any(l => l.ExpiresAt > initial.ExpiresAt) == true), "Second source did not renew live lease");
+var beforePriority = commands.Last().Automation!.Leases.Single();
+await service.SaveAsync(new(connection with { Rules = [rule with { Priority = 1 }] }, null), default);
+await Until(() => commands.Last().Automation?.Leases.SingleOrDefault()?.Priority == 1, "Priority update did not reach viewer");
+Check(commands.Last().Automation!.Leases.Single().Id == beforePriority.Id && commands.Last().Automation!.Leases.Single().ExpiresAt == beforePriority.ExpiresAt,
+    "Priority save reset detection identity or deadline");
+Check(RuleStatus().GetProperty("lastEvent").ValueKind == JsonValueKind.String, "Priority save erased event history");
 await broker.StopAsync();
 await Until(() => commands.Last().Automation?.Leases.Length == 0, "Broker outage did not expire the existing lease");
 Check((await service.TestRuleAsync(rule.Id, 1, CancellationToken.None)).Success, "Rule test required a live broker");
@@ -260,9 +266,33 @@ Check(Diagnostics().GetProperty("messages").GetArrayLength() == 200, "Raw feed h
 await service.Diagnostics.StopAsync(CancellationToken.None);
 Check(Diagnostics().GetProperty("connection").GetString() == "Stopped", "Discovery did not stop");
 Check(Diagnostics().GetProperty("until").ValueKind == JsonValueKind.Null, "Discovery deadline not cleared");
+var staleRevision = AutomationRevision.For(service.CurrentSettings);
+await service.SaveAsync(new(connection with { Rules = [rule, otherRule with { CameraSlot = 2 }] }, null), default);
+try { await service.SaveAsync(new(connection, null, Revision: staleRevision), default); throw new Exception("Stale settings overwrote newer rules"); } catch (InvalidDataException) { }
+await new JsonSettingsStore(Path.Combine(directory, "settings.json")).SaveAsync(cameras with { Cameras = cameras.Cameras.Select(c => c.Slot == 2 ? c with { Enabled = false } : c).ToArray() });
+await Until(() => service.Status.Rules.Length == 2 && JsonSerializer.Serialize(service.Status.Rules).Contains("requires enabled"), "Invalid rule was not identified");
+Check(JsonSerializer.Serialize(await service.TestAsync(new(service.CurrentSettings, null), default)).Contains("\"success\":true"),
+    "Broker/subscription test incorrectly required an available viewer target");
+await Publish(rule.Sources[0].Topic, DateTimeOffset.UtcNow);
+await Until(() => commands.Last().Automation?.Leases.SingleOrDefault()?.RuleId == rule.Id, "An invalid rule stopped the valid rule");
+await service.SaveAsync(new(service.CurrentSettings with { Enabled = false }, null), default);
+await Until(() => service.Status.Connection == "Disabled", "Invalid reference prevented disabling integration");
 await service.StopAsync(CancellationToken.None);
+Check(new AutomationActivity(Path.Combine(directory, "mqtt-activity.json")).Entries.Length > 0, "MQTT activity did not survive restart");
+foreach (var backup in Directory.GetFiles(directory, "automation.json.bak*")) File.Delete(backup);
+await File.WriteAllTextAsync(Path.Combine(directory, "automation.json"), "{broken");
+using (var damaged = new AutomationService(directory, protection, new ViewerCommandClient(pipeName)))
+{
+    await damaged.StartAsync(default); await Task.Delay(700);
+    Check(damaged.Status.Connection == "Error" && damaged.Status.ConfigurationError is not null, "Load error became normal disabled state");
+    await damaged.SaveAsync(new(new(), null), default);
+    await Until(() => damaged.Status.Connection == "Disabled" && damaged.Status.ConfigurationError is null, "Explicit save did not recover load error");
+    Check(Directory.GetFiles(directory, "automation.json.invalid-*").Length == 1, "Damaged settings were overwritten without preserving a copy");
+    await damaged.StopAsync(default);
+}
 cancel.Cancel(); await pipeWorker; await broker.StopAsync();
 Console.WriteLine("PASS: person parsing, freshness, duplicate rejection, multi-camera OR renewal, shared overlays, manual override, expiry, validation, encrypted secrets, draft test, real MQTT → named pipe, retained state, broker outage, reconnect, and disable.");
 Console.WriteLine("Test artifacts: " + directory);
 Console.WriteLine("PASS: read-only discovery, Scrypted camera names, incomplete draft rules, person topics, credential privacy, bounded raw feed and stop.");
 Console.WriteLine("PASS: fullscreen/focused-layout actions, fixed and triggering targets, competing detections, priority, manual override, offline expiry, legacy rules, validation, and 1–16 landscape/portrait layouts.");
+Console.WriteLine("PASS review regressions: priority preserves episodes, stale saves rejected, invalid rules isolated, disable with missing targets, subscription test scope and persistent load-error recovery.");

@@ -2,7 +2,8 @@
 const automationUi = (() => {
   let form, rules, message, connection, inventory = [], overlays = [], loaded = false, dirty = false, busy = false, refreshing = false;
   let savedRules = [], discovered = [], diagnosticState = null, paused = false, clearedThrough = 0, diagnosticBusy = false;
-  let viewLayouts = [];
+  let viewLayouts = [], revision, savedEnabled = false;
+  function mark() { dirty = true; form.dataset.dirty = "true"; automationPresentation.pending(form, true, savedEnabled); }
   const uuid = () => '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
     (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16));
   function init() {
@@ -37,7 +38,7 @@ const automationUi = (() => {
       <label>Filter camera or topic<input class="mqtt-filter" type="search" placeholder="Camera name or topic"></label>
       <div class="mqtt-messages"></div></details></details>
       <div class="control-buttons automation-savebar"><button type="button" class="secondary automation-test">Test connection</button>
-      <button type="button" class="secondary automation-cancel">Cancel edits</button><button type="submit">Apply changes</button></div>
+      <button type="button" class="secondary automation-cancel">Discard changes</button><button type="submit">Save changes</button></div>
       <p class="automation-message" role="status"></p>`;
     rules = form.querySelector('.automation-rules'); message = form.querySelector('.automation-message'); connection = form.querySelector('.automation-connection');
     const broker = form.querySelector('.automation-fields');
@@ -47,9 +48,10 @@ const automationUi = (() => {
     form.querySelector('.automation-rule-list').after(brokerDetails);
     broker.append(form.querySelector('.automation-test'));
     document.querySelector('#page-automation').append(form);
+    automationPresentation.toggles(form);
     tapoUi.init(); automationTabs.init();
     const editLayouts=document.createElement('button');editLayouts.type='button';editLayouts.className='secondary automation-edit-layouts';editLayouts.textContent='Edit automation layouts';editLayouts.onclick=()=>wallDesigner.openAutomation();form.querySelector('.rules-intro').after(editLayouts);
-    const markDirty = e => { if (!e.target.closest('.mqtt-tools')) { dirty = true; form.dataset.dirty = 'true'; } };
+    const markDirty = e => { if (!e.target.closest('.mqtt-tools')) { mark(); form.dataset.dirty = 'true'; } };
     form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);
     form.querySelector('.mqtt-start').onclick = () => diagnostics(true);
     form.querySelector('.mqtt-stop').onclick = () => diagnostics(false);
@@ -57,7 +59,7 @@ const automationUi = (() => {
     form.querySelector('.mqtt-clear').onclick = () => { clearedThrough = Math.max(clearedThrough, ...(diagnosticState?.messages || []).map(m => m.id)); form.querySelector('.mqtt-messages').replaceChildren(); };
     form.querySelector('.mqtt-filter').oninput = () => { if (!paused) renderFeed(); };
     form.querySelector('.mqtt-feed').ontoggle = () => { if (!paused) renderFeed(); };
-    form.querySelector('.automation-add').onclick = () => { if (rules.children.length >= 32) return; addRule(); dirty = true; };
+    form.querySelector('.automation-add').onclick = () => { if (rules.children.length >= 32) return; addRule(); mark(); };
     form.querySelector('.automation-cancel').onclick = async () => { dirty = false; loaded = false; await load(); };
     form.querySelector('.automation-test').onclick = () => mutate(true);
     form.onsubmit = e => { e.preventDefault(); mutate(false); };
@@ -75,7 +77,7 @@ const automationUi = (() => {
     const select = optionSelect(inventory, source.cameraSlot, 'Source camera'); select.className = 'source-camera'; cameraLabel.append(select);
     const cameraColumn = document.createElement('div'); cameraColumn.append(cameraLabel);
     addCameraPreview(select, cameraColumn);
-    const zoneLabel = document.createElement('label'); zoneLabel.textContent = 'Required zone (optional)';
+    const zoneLabel = document.createElement('label'); zoneLabel.textContent = 'Zone filter (optional)';
     const zone = document.createElement('input'); zone.className = 'source-zone'; zone.maxLength = 100; zone.placeholder = 'Any zone'; zone.value = source.requiredZone || ''; zone.spellcheck = false;
     const zoneHelp = document.createElement('small'); zoneHelp.textContent = 'Exact Scrypted object zone name, e.g. MQTT. Blank accepts people anywhere.';
     zoneLabel.append(zone, zoneHelp); cameraColumn.append(zoneLabel);
@@ -85,10 +87,10 @@ const automationUi = (() => {
     const advanced = document.createElement('details'); advanced.innerHTML = '<summary>Advanced: exact MQTT topic</summary>';
     const manualLabel = document.createElement('label'); manualLabel.textContent = 'MQTT person-event topic';
     const input = document.createElement('input'); input.className = 'source-topic'; input.required = true; input.maxLength = 512; input.placeholder = 'scrypted/<device-id>/ObjectDetector'; input.value = source.topic || ''; input.spellcheck = false; manualLabel.append(input); advanced.append(manualLabel); topicLabel.append(advanced);
-    chooser.onchange = () => { input.value = chooser.value; advanced.open = !chooser.value; if (!chooser.value) input.focus(); dirty = true; };
+    chooser.onchange = () => { input.value = chooser.value; advanced.open = !chooser.value; if (!chooser.value) input.focus(); mark(); };
     input.oninput = () => updateSourceChoices(row, false);
     select.onchange = () => { input.value = ''; zone.value = ''; updateSourceChoices(row, true); row.querySelector('.source-connection').open = !input.value; };
-    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Remove source'; remove.onclick = () => { const card = row.closest('.automation-rule'); row.remove(); dirty = true; card.dispatchEvent(new Event('change', {bubbles:true})); };
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Remove source'; remove.onclick = () => { const card = row.closest('.automation-rule'); row.remove(); mark(); card.dispatchEvent(new Event('change', {bubbles:true})); };
     const eventDetails = document.createElement('details'); eventDetails.className = 'source-connection'; eventDetails.open = !source.topic;
     const eventSummary = document.createElement('summary'); eventSummary.textContent = 'Event connection'; eventDetails.append(eventSummary, topicLabel);
     const discover = document.createElement('button'); discover.type = 'button'; discover.className = 'secondary'; discover.textContent = 'Find camera events';
@@ -107,7 +109,7 @@ const automationUi = (() => {
       <p class="source-mode-help" hidden>Uses the stream/topic/zone mappings configured across your rules, including disabled rules. Add mappings with Selected streams first. RTSP feeds without detection mappings cannot trigger this rule.</p><div class="rule-sources"></div>
       <button type="button" class="secondary source-add">Add source camera</button>
       <h4>Then</h4><div class="automation-grid rule-action-grid">
-      <label>Action<select class="rule-action"><option value="0">Show overlay</option><option value="1">Fullscreen camera</option><option value="2">Focused layout</option></select></label>
+      <label>Action<select class="rule-action"><option value="0">Show overlay</option><option value="1">Fullscreen camera</option><option value="2">Automation layout</option></select></label>
       <label class="target-label"></label></div>
       <p class="target-help"></p>
       <h4>Keep it shown until</h4>
@@ -129,29 +131,33 @@ const automationUi = (() => {
     card.dataset.layoutTarget = rule.layoutId || '';card.dataset.secondCameraTarget=rule.secondCameraSlot||0;
     card.querySelector('.rule-action').value = rule.action || 0;
     renderActionTarget(card);
-    card.querySelector('.rule-action').onchange = () => { renderActionTarget(card); dirty = true; };
+    card.querySelector('.rule-action').onchange = () => { renderActionTarget(card); mark(); };
     for (const source of rule.sources.length ? rule.sources : [{}]) addSource(card.querySelector('.rule-sources'), source);
-    card.querySelector('.source-add').onclick = () => { if (card.querySelector('.rule-sources').children.length < 32) addSource(card.querySelector('.rule-sources')); dirty = true; card.dispatchEvent(new Event('change', {bubbles:true})); };
+    card.querySelector('.source-add').onclick = () => { if (card.querySelector('.rule-sources').children.length < 32) addSource(card.querySelector('.rule-sources')); mark(); card.dispatchEvent(new Event('change', {bubbles:true})); };
     const applySourceMode=()=>{
       const any=card.querySelector('.rule-source-mode').value==='any';
       card.querySelector('.rule-sources').hidden=any;card.querySelector('.source-add').hidden=any;
       card.querySelector('.source-mode-help').hidden=!any;
       for(const input of card.querySelectorAll('.rule-sources input,.rule-sources select'))input.disabled=any;
     };
-    card.querySelector('.rule-source-mode').onchange=()=>{applySourceMode();dirty=true;};applySourceMode();
-    card.querySelector('.rule-remove').onclick = () => { card.remove(); dirty = true; };
+    card.querySelector('.rule-source-mode').onchange=()=>{applySourceMode();mark();};applySourceMode();
+    card.querySelector('.rule-remove').onclick = () => { card.remove(); mark(); };
     const updateSummary = () => {
       const action = card.querySelector('.rule-action'), target = card.querySelector('.rule-target');
-      const name = document.createElement('span'); name.className = 'rule-summary-name'; name.textContent = card.querySelector('.rule-name').value.trim() || 'Unnamed rule';
-      const description = document.createElement('span'); description.className = 'rule-summary-description';
-      const sources = card.querySelector('.rule-source-mode').value==='any'?'any detection-enabled stream': 'any of '+[...card.querySelectorAll('.source-camera')].filter(s => s.value).length+' selected streams';
-      description.textContent = `When ${sources} detects a person: ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'}. Clear after ${card.querySelector('.rule-delay').value} minutes without detections${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
+      const cameras = [...card.querySelectorAll('.source-camera')].map(s => s.selectedOptions[0]?.textContent).filter(Boolean);
+      const layout = card.querySelector('.rule-layout')?.selectedOptions[0]?.textContent;
+      const second = card.querySelector('.rule-second-target');
+      automationPresentation.summary(summary, card.querySelector('.rule-name').value, [
+        ['Trigger', 'Person · ' + (card.querySelector('.rule-source-mode').value === 'any' ? 'Any mapped stream' : cameras.join(', ') || 'Select source')],
+        ['Action', action.selectedOptions[0].textContent + (layout ? ' · ' + layout : '')],
+        ['Target', (target.selectedOptions[0]?.textContent || 'Select target') + (Number(second?.value) > 0 ? ' + ' + second.selectedOptions[0].textContent : '')],
+        ['Duration', card.querySelector('.rule-delay').value + ' min without detections → resume other rules / saved wall']
+      ]);
 
-      const second=card.querySelector('.rule-second-target');if(second&&Number(second.value)>0)description.textContent+=' · Focus 2: '+second.selectedOptions[0].textContent;
-      const zones = [...card.querySelectorAll('.source-zone')].map(z => z.value.trim()).filter(Boolean);
-      if (zones.length) description.textContent += ' · Required zones: ' + [...new Set(zones)].join(', ');
-      summary.replaceChildren(name, description);
     };
+    const takeover = card.querySelector('.rule-takeover').closest('label'), help = takeover.nextElementSibling;
+    const advanced = document.createElement('details'); advanced.className = 'rule-advanced'; advanced.innerHTML = '<summary>Advanced · equal-priority behavior</summary>';
+    card.querySelector('.rule-timing').after(advanced); advanced.append(takeover, help);
     card.addEventListener('input', updateSummary); card.addEventListener('change', updateSummary); updateSummary();
     const testControls = document.createElement('div'); testControls.className = 'control-buttons rule-test-controls';
     const testSources=rule.anyConfiguredSource?[...new Map(savedRules.flatMap(r=>r.sources).map(s=>[s.cameraSlot,s])).values()]:rule.sources;
@@ -164,18 +170,20 @@ const automationUi = (() => {
     // Test controls do not edit the saved rule or mark the form dirty.
     testSource.addEventListener('input', e => e.stopPropagation()); testSource.addEventListener('change', e => e.stopPropagation());
     testButton.onclick = async () => {
-      if (dirty || !savedRules.some(r => r.id === rule.id)) { testMessage.textContent = 'Apply changes before testing this rule.'; return; }
-      if (!form.elements.enabled.checked || !rule.enabled) { testMessage.textContent = 'Enable automation and this rule, then apply changes before testing.'; return; }
+      if (dirty || !savedRules.some(r => r.id === rule.id)) { testMessage.textContent = 'Save changes before testing this rule.'; return; }
+      if (!form.elements.enabled.checked || !rule.enabled) { testMessage.textContent = 'Enable automation and this rule, then save changes before testing.'; return; }
       testButton.disabled = true; testMessage.textContent = 'Simulating a person detection…';
       try {
         const result = await api('/api/automation/rules/' + encodeURIComponent(rule.id) + '/test', {method:'POST', body:JSON.stringify({sourceSlot:Number(testSource.value)})});
-        testMessage.textContent = result.message;
+        automationPresentation.status(testMessage, result.message, result.success ? 'healthy' : 'error');
         await refresh();
       } catch (e) { testMessage.textContent = e.message; }
       finally { testButton.disabled = false; }
     };
     testControls.append(testSource, testButton); card.append(testControls, testMessage);
+    automationPresentation.toggles(card);
     rules.append(card);
+    if (!collapsed) card.querySelector(".rule-name").focus();
   }
   function renderActionTarget(card) {
     const action = Number(card.querySelector('.rule-action').value), label = card.querySelector('.target-label');
@@ -189,7 +197,7 @@ const automationUi = (() => {
     if (action !== 0) { select.add(new Option('Camera that detected the person', '0'), 1); select.value = String(selected); }
     label.textContent = action === 0 ? 'Show overlay' : 'Camera to focus'; label.append(select);
     select.onchange = () => { card.dataset[action === 0 ? 'overlayTarget' : 'cameraTarget'] = select.value; };
-    card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Automatic layout: this camera occupies a 2×2 tile at the upper left, with all other enabled, configured main streams in smaller tiles. Uses the active layout’s orientation and restores that layout after the clear delay. Tile sizes and positions cannot currently be customized. Apply changes, then use Test to preview it.';
+    card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Automatic layout: this camera occupies a 2×2 tile at the upper left, with all other enabled, configured main streams in smaller tiles. Uses the active layout’s orientation and restores that layout after the clear delay. Tile sizes and positions cannot currently be customized. Save changes, then use Test to preview it.';
     card.querySelector('.rule-layout-choice')?.remove();
     if(action===2){
       const block=document.createElement('div');block.className='rule-layout-choice automation-grid';const layoutLabel=document.createElement('label');layoutLabel.className='rule-layout-label';layoutLabel.textContent='Automation layout';const picker=document.createElement('select');picker.className='rule-layout';picker.add(new Option('Automatic — all enabled streams',''));for(const item of viewLayouts)picker.add(new Option(item.name,item.id));if(card.dataset.layoutTarget&&!viewLayouts.some(l=>l.id===card.dataset.layoutTarget))picker.add(new Option('Unavailable layout',card.dataset.layoutTarget));picker.value=card.dataset.layoutTarget;picker.onchange=()=>{card.dataset.layoutTarget=picker.value;renderActionTarget(card);};layoutLabel.append(picker);actionGrid.append(layoutLabel);block.append(label);
@@ -212,17 +220,18 @@ const automationUi = (() => {
         cameraSlot: Number(card.querySelector('.rule-action').value) !== 0 ? Number(card.querySelector('.rule-target').value) : 0,
         priority: Number(card.dataset.priority), clearMinutes: Number(card.querySelector('.rule-delay').value), sources: [...card.querySelectorAll('.automation-source')].map(row => ({
           cameraSlot: Number(row.querySelector('.source-camera').value), topic: row.querySelector('.source-topic').value.trim(), requiredZone: row.querySelector('.source-zone').value.trim()})).filter(s=>card.querySelector('.rule-source-mode').value!=='any'||s.topic)}))},
-      password: f.password.value || null, clearPassword: f.clearPassword.checked};
+      password: f.password.value || null, clearPassword: f.clearPassword.checked, revision};
   }
   function render(data) {
-    const settings = data.settings, f = form.elements;
+    const settings = data.settings, f = form.elements; revision = data.revision; savedEnabled = settings.enabled;
     f.enabled.checked = settings.enabled; f.host.value = settings.host; f.port.value = settings.port;
     f.tls.value = String(settings.tls); f.authenticate.value = String(settings.authenticate); f.username.value = settings.username; f.clientId.value = settings.clientId;
     f.password.value = ''; f.password.placeholder = data.hasPassword ? 'Saved — leave blank to keep' : 'Not set'; f.clearPassword.checked = false;
     form.querySelector('.broker-summary').textContent = settings.host ? `${settings.host}:${settings.port}` : 'Set up MQTT';
-    form.querySelector('.automation-broker').open = false;
+    form.querySelector('.automation-broker').open = !settings.host;
     savedRules = settings.rules;
-    rules.replaceChildren(); settings.rules.forEach(rule => addRule(rule, true)); dirty = false; form.dataset.dirty = 'false'; loaded = true; refreshOverlayLinks();
+    rules.replaceChildren(); settings.rules.forEach(rule => addRule(rule, true)); dirty = false; form.dataset.dirty = 'false'; loaded = true; refreshOverlayLinks(); automationPresentation.pending(form, false, savedEnabled);
+    form.querySelector('.rules-intro').textContent = settings.rules.length ? settings.rules.length + ' saved rule(s). Expand a rule to edit.' : 'No rules yet. Configure MQTT, add a stream in Streams, then connect its person events to a rule.';
   }
   async function load(config) {
     await tapoUi.load(config);
@@ -238,33 +247,40 @@ const automationUi = (() => {
     if (busy) return;
     // Testing a connection must also work while a new rule is incomplete.
     if (!test && !form.reportValidity()) return;
-    busy = true; const request = draft(); if (test) request.settings.rules = [];
+    busy = true; const request = draft();
+    if (test) request.settings.rules = dirty ? [] : savedRules;
+    form.inert = true;
     for (const button of form.querySelectorAll('button')) button.disabled = true;
     for (const fieldset of form.querySelectorAll('fieldset')) fieldset.disabled = true;
     message.textContent = test ? 'Testing from Controller…' : 'Saving…';
     try {
       const result = await api(test ? '/api/automation/test' : '/api/automation', {method: test ? 'POST' : 'PUT', body: JSON.stringify(request)});
-      if (test) message.textContent = result.message;
+      if (test) automationPresentation.status(message, result.message + (dirty ? ' Draft rule subscriptions were not checked.' : ''), result.success ? 'healthy' : 'error');
       else { render(result); message.textContent = 'Applied — controller updating automation.'; }
     } catch (e) { message.textContent = e.message; }
-    finally { busy = false; for (const button of form.querySelectorAll('button')) button.disabled = false; for (const fieldset of form.querySelectorAll('fieldset')) fieldset.disabled = false; }
+    finally { busy = false; form.inert = false; for (const button of form.querySelectorAll('button')) button.disabled = false; for (const fieldset of form.querySelectorAll('fieldset')) fieldset.disabled = false; }
   }
   async function refresh() {
     tapoUi.refresh();
     if (!loaded || refreshing) return; refreshing = true;
     try {
       const status = await api('/api/automation/status');
-      connection.textContent = `Broker: ${status.connection} · Last event: ${status.lastMessage ? new Date(status.lastMessage).toLocaleString() : 'None received since controller startup'} · Last person detection: ${status.lastPerson ? new Date(status.lastPerson).toLocaleString() : 'None'}. ${status.lastResult || ''}`;
-      connection.title = status.lastResult;
-      form.querySelector('.automation-broker > summary').title = status.lastResult;
+      const {presentation} = await api('/api/automation/presentation');
+      automationPresentation.activity(form, status);
+      const problem = status.configurationError || (status.delivery?.success === false && savedEnabled ? automationPresentation.delivery(status.delivery) + ' Check Live View in Quick actions.' : '');
+      automationPresentation.status(connection, 'MQTT: ' + status.connection + (problem ? ' · ' + problem : ' · ' + (status.lastResult || 'Waiting for person events')), problem || status.connection === 'Error' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
+      connection.title = status.lastResult || '';
       for (const card of rules.children) {
         const state = status.rules.find(r => r.id === card.dataset.id), remaining = state?.expiresAt ? Math.max(0, Math.ceil((new Date(state.expiresAt) - Date.now()) / 1000)) : 0;
-        const target = Number(card.querySelector('.rule-action').value) === 0 ? overlays.find(o => o.slot === Number(card.querySelector('.rule-target').value)) : null;
-        const activeNames = (state?.activeCameraSlots || []).map(slot => inventory.find(c => c.slot === slot)?.name || `Stream ${slot}`);
-        card.querySelector('.rule-status').textContent = (dirty ? 'Unsaved changes · ' : '') + (status.connection === 'Disabled' ? 'Automation disabled' : !state ? 'Not saved' : !state.enabled ? 'Disabled' : remaining ? `Detection active${activeNames.length ? ' · ' + activeNames.join(', ') : ''} · clear in ${remaining}s` : 'Waiting for person') + ` · Last event: ${state?.lastEvent ? new Date(state.lastEvent).toLocaleString() : 'None since settings applied'} · Last triggered: ${state?.lastTriggered ? new Date(state.lastTriggered).toLocaleString() : 'No successful viewer command since settings applied'}` + (target?.enabled ? ' · Target is Always visible; choose Automation only in Overlays to hide it while waiting.' : '');
+        const condition = state?.error ? 'Invalid rule · ' + state.error : !savedEnabled ? 'Automation disabled' : !state ? 'Not saved / status pending' : !state.enabled ? 'Rule disabled' : remaining ? 'Detection active · expires in ' + remaining + 's' : 'Waiting for detection';
+        const receipt = state?.lastEvent ? ' · Last event ' + new Date(state.lastEvent).toLocaleTimeString() : '';
+        automationPresentation.status(card.querySelector('.rule-status'), condition + receipt + (savedEnabled && state?.enabled ? ' · ' + automationPresentation.delivery(state.delivery) + ' · ' + automationPresentation.visibility(presentation, 'MQTT', card.dataset.id) : ''), state?.error || state?.delivery?.success === false ? 'error' : 'neutral');
       }
       if (!document.querySelector('#page-automation').hidden) await refreshDiagnostics();
-    } catch { connection.textContent = 'Controller unavailable'; }
+    } catch {
+      automationPresentation.status(connection, 'RTSPView service unreachable. Status cannot be refreshed; check the RTSPView host.', 'error');
+      for (const card of rules.children) automationPresentation.status(card.querySelector('.rule-status'), 'Status unavailable · previous activity is not confirmed', 'warning');
+    }
     finally { refreshing = false; }
   }
   function updateSourceChoices(row, suggest) {
@@ -273,7 +289,7 @@ const automationUi = (() => {
     if (suggest && !input.value && camera) {
       const known = [...new Set(savedRules.flatMap(r => r.sources).filter(s => s.cameraSlot === slot).map(s => s.topic))];
       const matches = discovered.filter(t => t.cameraName?.toLowerCase() === camera.name.toLowerCase());
-      if (known.length === 1 || camera.scryptedTopic || matches.length === 1) { input.value = known.length === 1 ? known[0] : camera.scryptedTopic || matches[0].topic; dirty = true; form.dataset.dirty = 'true'; }
+      if (known.length === 1 || camera.scryptedTopic || matches.length === 1) { input.value = known.length === 1 ? known[0] : camera.scryptedTopic || matches[0].topic; mark(); form.dataset.dirty = 'true'; }
     }
     const choices = discovered.map(t => ({value: t.topic, label: `${t.cameraName || 'Camera name unavailable'} · ${t.topic}${t.personSeen ? ' · Person observed' : ''}`}));
     if (input.value && !choices.some(c => c.value === input.value)) choices.unshift({value:input.value, label:'Configured topic (not seen in this discovery session) · ' + input.value});
@@ -371,7 +387,7 @@ const automationUi = (() => {
   function refreshOverlayLinks() {
     for (const info of document.querySelectorAll('.overlay-automation-info')) {
       const overlayForm = info.closest('form'), slot = Number(overlayForm.dataset.slot);
-      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Apply changes in Overlays to use this mode.' : 'Always visible: stays on screen even when automation is idle.';
+      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Save changes in Overlays to use this mode.' : 'Always visible: stays on screen even when automation is idle.';
       const linked = savedRules.filter(r => (r.action || 0) === 0 && r.overlaySlot === slot);
       info.querySelector('.overlay-rule-links').textContent = linked.length ? 'Linked rules: ' + linked.map(r => r.name + (r.enabled ? '' : ' (disabled)')).join(', ') : 'No automation rules assigned';
     }

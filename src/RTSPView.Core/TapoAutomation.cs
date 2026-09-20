@@ -32,7 +32,7 @@ public sealed record TapoSettings
     public TapoHub[] Hubs { get; init; } = [];
     public TapoRule[] Rules { get; init; } = [];
 
-    public void Validate(AppSettings app, bool connect = false)
+    public void Validate(AppSettings app, bool connect = false, bool validateTargets = true)
     {
         if (Username is null || Username.Length > 256 || ((Enabled || connect) && string.IsNullOrWhiteSpace(Username)))
             throw new InvalidDataException("Enter your Tapo account email.");
@@ -51,11 +51,12 @@ public sealed record TapoSettings
         foreach (var r in Rules)
         {
             if (!Guid.TryParse(r.Id, out _) || string.IsNullOrWhiteSpace(r.Name) || r.Name.Length > 100 ||
-                !Hubs.Any(h => h.Id == r.HubId) || string.IsNullOrWhiteSpace(r.DeviceId) || r.DeviceId.Length > 256 || r.DeviceId.Any(char.IsControl))
+                (validateTargets && r.Enabled && !Hubs.Any(h => h.Id == r.HubId)) || string.IsNullOrWhiteSpace(r.DeviceId) || r.DeviceId.Length > 256 || r.DeviceId.Any(char.IsControl))
                 throw new InvalidDataException("Each rule needs a name and a sensor from a configured hub.");
             if (r.Match is not (ContactState.Open or ContactState.Closed) || !Enum.IsDefined(r.Action) || !Enum.IsDefined(r.ClearAction) ||
                 r.UnavailableAction is not (SensorAction.Restore or SensorAction.HideOverlay) || r.Priority is < 1 or > 100)
                 throw new InvalidDataException("Select valid sensor states, actions, and priority (1–100; 1 is highest).");
+            if (!validateTargets || !r.Enabled) continue;
             if (new[] { r.Action, r.ClearAction, r.UnavailableAction }.Any(a => a is SensorAction.ShowOverlay or SensorAction.HideOverlay) &&
                 !app.AllOverlays().Any(o => o.Camera.Slot == r.OverlaySlot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl)))
                 throw new InvalidDataException("Select an overlay with a configured stream.");

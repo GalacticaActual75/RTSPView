@@ -1,6 +1,7 @@
 /* Controller owns polling, credentials and actions. This form only configures them. */
 const tapoUi = (() => {
   let form, config, sensors = [], dirty = false, busy = false, loaded = false, refreshing = false, draftDiscovery = false;
+  let revision, savedEnabled = false, savedRuleFlags = new Map();
   const id = () => '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
     (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16));
   const q = selector => form.querySelector(selector);
@@ -18,7 +19,7 @@ const tapoUi = (() => {
     wrap.append(el); return wrap;
   }
   function button(text, fn) { const b = document.createElement('button'); b.type = 'button'; b.className = 'secondary'; b.textContent = text; b.onclick = fn; return b; }
-  function mark() { dirty = true; form.dataset.dirty = 'true'; }
+  function mark() { dirty = true; form.dataset.dirty = 'true'; automationPresentation.pending(form, true, savedEnabled); }
   function init() {
     if (form) return;
     form = document.createElement('form'); form.id = 'tapoForm'; form.className = 'panel control-panel';
@@ -27,7 +28,7 @@ const tapoUi = (() => {
       <label class="tapo-enable"><input type="checkbox" name="enabled" role="switch" class="automation-toggle"> Enable Tapo sensor automations <span class="toggle-state" aria-hidden="true"></span></label>
       <p class="tapo-status" role="status">Loading sensor status…</p>
       <div class="tapo-inventory"></div>
-      <h3>Sensor rules</h3><p>For an overlay only while a door is open, choose Open → Show overlay and When the state clears → Hide overlay. No layout change is needed. Restore normal behavior returns to the saved overlay setting and other active rules.</p>
+      <h3>Sensor rules</h3><p>For an overlay only while a door is open, choose Open → Show overlay and When the door changes back → Hide overlay. No layout change is needed. Resume other rules / saved wall returns to the saved overlay setting and other active rules.</p>
 
       <div class="tapo-rules"></div><button type="button" class="secondary tapo-add-rule">Add sensor rule</button>
       <details class="tapo-connection"><summary>Tapo hubs and account</summary>
@@ -44,6 +45,12 @@ const tapoUi = (() => {
       <p>Discovery tests the draft connection without saving or activating rules. Passwords are encrypted on this Windows account and omitted from configuration exports.</p>
       </details><div class="control-buttons"><button type="submit">Save Tapo automations</button><button type="button" class="secondary tapo-discard">Discard changes</button></div>
       <p class="tapo-message" role="status"></p>`;
+    const connection = q('.tapo-connection');
+    const inventoryDetails = document.createElement('details'); inventoryDetails.innerHTML = '<summary>Sensor readings & connection details</summary>'; inventoryDetails.append(q('.tapo-inventory')); connection.append(inventoryDetails);
+    const rulesHelp = q('h3').nextElementSibling, help = document.createElement('details'); help.className = 'automation-help'; help.innerHTML = '<summary>How sensor rules behave</summary>'; q('.tapo-add-rule').after(help); help.append(rulesHelp);
+    const poll = form.elements.pollSeconds.closest('label'), advanced = document.createElement('details'); advanced.innerHTML = '<summary>Advanced connection settings</summary>'; poll.before(advanced); advanced.append(poll);
+    q('button[type=submit]').parentElement.classList.add('automation-savebar'); q('button[type=submit]').textContent = 'Save changes';
+    automationPresentation.toggles(form);
     document.querySelector('#page-automation').append(form);
     form.addEventListener('input', mark); form.addEventListener('change', mark);
     q('.tapo-add-hub').onclick = () => { if (q('.tapo-hubs').children.length < 8) { addHub(); mark(); } };
@@ -71,9 +78,10 @@ const tapoUi = (() => {
       if (value && !choices.some(([v]) => v === value)) el.add(new Option('Saved sensor · currently unavailable', value));
       el.value = value;
     }
+    for (const card of q('.tapo-rules').children) card.updateSummary?.();
   }
-  const actions = [[0, 'Restore normal behavior'], [1, 'Show overlay'], [2, 'Hide overlay'], [3, 'Activate standard layout'], [4, 'Activate automation layout']];
-  function addRule(rule = {id: id(), name: 'Door sensor', enabled: true, match: 2, priority: 50, action: 1, clearAction: 0, unavailableAction: 0}) {
+  const actions = [[0, 'Resume other rules / saved wall'], [1, 'Show overlay'], [2, 'Hide overlay'], [3, 'Activate standard layout'], [4, 'Activate automation layout']];
+  function addRule(rule = {id: id(), name: 'Door sensor', enabled: true, match: 2, priority: 50, action: 1, clearAction: 0, unavailableAction: 0}, collapsed = false) {
     const card = document.createElement('fieldset'); card.className = 'tapo-rule'; card.dataset.id = rule.id;
     const legend = document.createElement('legend'); legend.textContent = 'Door sensor rule'; card.append(legend);
     const grid = document.createElement('div'); grid.className = 'automation-grid';
@@ -86,7 +94,7 @@ const tapoUi = (() => {
     choice.querySelector('select').className = 'sensor-choice'; choice.querySelector('select').required = true;
     const state = select('While the door is', [[2, 'Open'], [1, 'Closed']], rule.match); state.querySelector('select').className = 'sensor-match';
     grid.append(choice, state);
-    for (const [label, cls, value, choices] of [['Then', 'sensor-action', rule.action, actions], ['When the state clears', 'sensor-clear', rule.clearAction, actions], ['When unavailable', 'sensor-unavailable', rule.unavailableAction, actions.slice(0, 1).concat(actions.slice(2, 3))]]) {
+    for (const [label, cls, value, choices] of [['Then', 'sensor-action', rule.action, actions], ['When the door changes back', 'sensor-clear', rule.clearAction, actions], ['If the sensor is unavailable', 'sensor-unavailable', rule.unavailableAction, actions.slice(0, 1).concat(actions.slice(2, 3))]]) {
       const el = select(label, choices, value ?? 0); el.querySelector('select').className = cls; grid.append(el);
     }
     const overlays = [config?.doorbellOverlay, config?.garageOverlay, ...(config?.additionalOverlays || [])].filter(o => o?.camera?.rtspUrl).map(o => [o.camera.slot, o.camera.name]);
@@ -114,7 +122,24 @@ const tapoUi = (() => {
       if (second.hidden && !preserveSelection) second.querySelector('select').value = '0';
     };
     card.refreshTargets = () => targets(true);
-    card.addEventListener('change', () => targets()); targets(); q('.tapo-rules').append(card);
+    const title = text => { const h = document.createElement('h4'); h.textContent = text; h.className = 'automation-editor-heading'; return h; };
+    const actionField = card.querySelector('.sensor-action').closest('label'), clearField = card.querySelector('.sensor-clear').closest('label'), unavailableField = card.querySelector('.sensor-unavailable').closest('label');
+    grid.append(title('When'), choice, state, title('Do'), actionField, overlay, layout, focus, second, title('Afterward'), clearField, clearLayout, unavailableField);
+    const editor = document.createElement('details'); editor.className = 'rule-editor'; editor.open = !collapsed;
+    const summary = document.createElement('summary'); summary.className = 'rule-summary'; editor.append(summary); grid.before(editor); editor.append(grid);
+    const remove = [...buttons.children].find(b => b.textContent === 'Delete rule'); remove.className = 'danger-secondary'; editor.append(remove); legend.hidden = true;
+    const testOutput = document.createElement('p'); testOutput.className = 'sensor-test-message'; testOutput.setAttribute('role','status'); card.append(testOutput);
+    card.updateSummary = () => {
+      const text = cls => card.querySelector(cls).selectedOptions[0]?.textContent || 'Select target'; const a = Number(card.querySelector('.sensor-action').value);
+      automationPresentation.summary(summary, card.querySelector('.sensor-name').value, [
+        ['Trigger', text('.sensor-choice') + ' · ' + text('.sensor-match')], ['Action', text('.sensor-action')],
+        ['Target', a === 1 || a === 2 ? text('.sensor-overlay') : a === 3 || a === 4 ? text('.sensor-layout') + (a === 4 ? ' · ' + text('.sensor-focus') : '') : 'This RTSPView wall'],
+        ['Afterward', text('.sensor-clear') + ' · If unavailable: ' + text('.sensor-unavailable')]
+      ]);
+    };
+    card.addEventListener('change', () => { targets(); card.updateSummary(); }); card.addEventListener('input', card.updateSummary);
+    targets(); card.updateSummary(); automationPresentation.toggles(card); q('.tapo-rules').append(card);
+    if (!collapsed) card.querySelector('.sensor-name').focus();
   }
   function draft(discovery = false) {
     const f = form.elements;
@@ -126,14 +151,14 @@ const tapoUi = (() => {
         return {id: r.dataset.id, name: get('name').trim(), enabled: r.querySelector('.sensor-enabled').checked, hubId, deviceId,
           match: Number(get('match')), priority: Number(r.dataset.priority), action: Number(get('action')), clearAction: Number(get('clear')),
           unavailableAction: Number(get('unavailable')), overlaySlot: Number(get('overlay')), layoutId: get('layout'), clearLayoutId: get('clear-layout'), focusCameraSlot: Number(get('focus')), secondFocusCameraSlot: Number(get('second'))};
-      })}, password: f.password.value || null, clearPassword: f.clearPassword.checked};
+      })}, password: f.password.value || null, clearPassword: f.clearPassword.checked, revision};
   }
   function render(data) {
-    const s = data.settings, f = form.elements;
+    const s = data.settings, f = form.elements; revision = data.revision; savedEnabled = s.enabled; savedRuleFlags = new Map(s.rules.map(r => [r.id, r.enabled]));
     f.enabled.checked = s.enabled; f.username.value = s.username; f.password.value = ''; f.password.placeholder = data.hasPassword ? 'Saved — leave blank to keep' : 'Not set'; f.clearPassword.checked = false; f.pollSeconds.value = s.pollSeconds;
     q('.tapo-hubs').replaceChildren(); s.hubs.forEach(addHub);
-    q('.tapo-rules').replaceChildren(); s.rules.forEach(addRule);
-    q('.tapo-connection').open = !s.hubs.length; dirty = false; draftDiscovery = false; form.dataset.dirty = 'false'; loaded = true;
+    q('.tapo-rules').replaceChildren(); s.rules.forEach(rule => addRule(rule, true));
+    q('.tapo-connection').open = !s.hubs.length; dirty = false; draftDiscovery = false; form.dataset.dirty = 'false'; loaded = true; automationPresentation.pending(form, false, savedEnabled);
   }
   async function load(appConfig) {
     init(); if (appConfig) { config = {...appConfig}; updateTargets(appConfig); }
@@ -188,16 +213,22 @@ const tapoUi = (() => {
     finally { busy = false; form.querySelectorAll('button, input, select').forEach(el => el.disabled = false); }
   }
   async function test(card, state) {
-    const output = card.querySelector('.sensor-rule-status');
+    const output = card.querySelector('.sensor-test-message');
     if (dirty) { output.textContent = 'Save your changes before testing.'; return; }
-    try { const result = await api(`/api/tapo/rules/${encodeURIComponent(card.dataset.id)}/test`, {method: 'POST', body: JSON.stringify({state})}); output.textContent = result.success ? 'Testing for 10 seconds. ' + result.message : result.message; }
-    catch (e) { output.textContent = e.message; }
+    if (card.dataset.testing === "true") return;
+    card.dataset.testing = "true"; automationPresentation.status(output, "Testing saved action for 10 seconds…");
+    try { const result = await api(`/api/tapo/rules/${encodeURIComponent(card.dataset.id)}/test`, {method: 'POST', body: JSON.stringify({state})}); automationPresentation.status(output, result.success ? result.message + ' · Simulated for 10 seconds; sensor connectivity was not tested. Priority and manual focus still apply.' : result.message, result.success ? 'healthy' : 'error'); }
+    catch (e) { automationPresentation.status(output, e.message, 'error'); }
+    finally { delete card.dataset.testing; }
   }
   async function refresh() {
     if (!loaded || busy || refreshing || document.hidden) return; refreshing = true;
     try {
       const status = await api('/api/tapo/status');
-      q('.tapo-status').textContent = `${status.connection} · ${status.message} Last checked: ${status.lastChecked ? new Date(status.lastChecked).toLocaleTimeString() : 'Not yet'}`;
+      const {presentation} = await api('/api/automation/presentation');
+      automationPresentation.activity(form, status);
+      const failure = status.configurationError || (savedEnabled && status.delivery?.success === false ? automationPresentation.delivery(status.delivery) + ' Check Live View in Quick actions.' : '');
+      automationPresentation.status(q('.tapo-status'), 'Tapo: ' + status.connection + ' · ' + (failure || status.message) + (status.lastChecked ? ' · Checked ' + new Date(status.lastChecked).toLocaleTimeString() : ''), failure || status.connection === 'Unavailable' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
       // Keep draft discovery available while editing; status must not remove its choices.
       if (!draftDiscovery) inventory(status);
       else {
@@ -207,9 +238,15 @@ const tapoUi = (() => {
       }
       for (const card of q('.tapo-rules').children) {
         const testing = status.testingRules.includes(card.dataset.id), active = status.activeRules.includes(card.dataset.id);
-        if (!dirty) card.querySelector('.sensor-rule-status').textContent = testing ? 'Test active · restores sensor state after 10 seconds.' : active ? 'Rule condition active. Highest-priority action for each target wins.' : 'No override active. Tests affect the wall for 10 seconds.';
+        const error = status.ruleErrors?.[card.dataset.id];
+        const condition = error ? 'Invalid rule · ' + error : !savedEnabled ? 'Automation disabled' : !savedRuleFlags.has(card.dataset.id) ? 'Not saved' : !savedRuleFlags.get(card.dataset.id) ? 'Rule disabled' : testing ? 'Simulated condition active · 10 seconds' : active ? 'Sensor action requested · priority determines visibility' : 'No sensor override active';
+        const triggered = status.lastTriggered?.[card.dataset.id];
+        automationPresentation.status(card.querySelector('.sensor-rule-status'), condition + (active ? ' · ' + automationPresentation.delivery(status.delivery) : '') + (triggered ? ' · Last action ' + new Date(triggered).toLocaleString() : '') + ' · ' + automationPresentation.visibility(presentation, 'Tapo', card.dataset.id), error || active && status.delivery?.success === false ? 'error' : 'neutral');
       }
-    } catch (e) { q('.tapo-status').textContent = 'Sensor status unavailable. ' + e.message; }
+    } catch (e) {
+      automationPresentation.status(q('.tapo-status'), 'RTSPView service unreachable. Sensor status cannot be refreshed.', 'error');
+      for (const card of q('.tapo-rules').children) automationPresentation.status(card.querySelector('.sensor-rule-status'), 'Status unavailable · previous activity is not confirmed', 'warning');
+    }
     finally { refreshing = false; }
   }
   function updateTargets(appConfig) {
@@ -227,7 +264,7 @@ const tapoUi = (() => {
     }
     for (const card of q('.tapo-rules').children) {
       card.querySelectorAll('.sensor-layout, .sensor-clear-layout').forEach(el => delete el.dataset.kind);
-      card.refreshTargets();
+      card.refreshTargets(); card.updateSummary?.();
     }
   }
   function updateCamera(camera) {

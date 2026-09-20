@@ -13,7 +13,7 @@ Release channels as of September 20, 2026:
 | Channel | Published version | Availability |
 | --- | --- | --- |
 | Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Promotes the beta dashboard, native stream editor, expanded layout/framing controls, per-layout appearance and Scrypted connector support. Adds intentional viewer exit, manual resume, optional fullscreen hover exit and viewer taskbar identity fixes. |
-| Beta | [1.0.44-beta.6](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.6) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
+| Beta | [1.0.44-beta.7](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.7) | Completes the automation usability/reliability review: viewer priority status, durable activity, recovery journals and rolling backups; includes automations in web configuration backups and floating feedback/support buttons. Live hub validation is pending. |
 
 Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. Unless marked beta, this guide describes stable 1.0.43. Tapo integration and numeric rule priorities require 1.0.44-beta.1 or newer; they are not in stable 1.0.43.
 
@@ -510,7 +510,13 @@ Composite stream compatibility enables TCP, a 3000 ms buffer, and disables low-l
 
 Stop both processes before copying the entire data directory to a protected backup. Thumbnails, logs, settings and automatic backups can contain private information. DPAPI cookie keys are tied to the Windows account and are not portable login credentials.
 
-Web configuration export removes URL user information, query strings and fragments, but retains camera names, hosts and paths. Keep exports private and re-enter camera credentials after import. A full private data-directory backup preserves credentials. Import saves a backup before replacing settings.
+Web configuration export includes MQTT and Tapo automations (rules, priorities, mappings, zones, hubs and connection settings) in the same JSON file as stream and display settings. It removes automation passwords and stream URL user information, query strings and fragments, but retains names, hosts, paths and account identities. Keep exports private and re-enter camera credentials after import. Import retains an existing automation password only for the same connection/account; integrations needing a password are left disabled until you enter it and enable them. Older files without automations preserve the current automation settings. Import validates the included automations and saves a combined local backup before replacing settings. A full private data-directory backup preserves credentials. The native Viewer stream editor's export/import remains limited to stream and display settings; use the web Settings export/import for automations.
+
+Every web administration page has floating buttons at the bottom left: **Submit feedback** opens the feedback dialog, and **Buy me a coffee** above it opens the support page.
+
+Automation rule status distinguishes viewer acknowledgement from **Wins viewer priority**, and explains priority, manual-focus or dismissal suppression. Stale or missing viewer telemetry is shown as unavailable. **Recent activity** retains the last 200 decisions per integration across restarts, grouping repeated events and excluding raw MQTT payloads and passwords. It includes delivery results, priority transitions and Tapo action times. MQTT queue-drop counts are shown since Controller startup. These diagnostics report rule arbitration, not successful video decoding.
+
+MQTT and Tapo settings retain three local backup generations. Startup recovers the newest structurally valid backup when needed and preserves the damaged original. Priority saves and combined imports use a recovery journal so a Controller interruption before commit restores the previous files on startup. Local backups/journals may contain protected automation credentials and private stream configuration; downloadable web exports still omit passwords.
 
 Install a newer release over the existing installation; settings are preserved. Back up before switching channels or downgrading, because older versions may not understand newer schemas. Restore a compatible pre-upgrade backup when rolling back.
 

@@ -1,8 +1,14 @@
 (() => {
   const trigger = document.getElementById('shareFeedback');
+  const support = document.createElement('nav'); support.className = 'floating-support'; support.setAttribute('aria-label', 'Feedback and support');
+  const coffee = document.createElement('a'); coffee.className = 'support-fab coffee-fab'; coffee.href = 'https://buymeacoffee.com/galacticaactual75'; coffee.target = '_blank'; coffee.rel = 'noopener noreferrer'; coffee.title = 'Buy me a coffee'; coffee.setAttribute('aria-label', 'Buy me a coffee (opens a new tab)');
+  coffee.innerHTML = '<img src="support-coffee.png" alt="" width="48" height="48">';
+  trigger.className = 'support-fab feedback-fab'; trigger.title = 'Submit feedback'; trigger.setAttribute('aria-label', 'Submit feedback'); trigger.setAttribute('aria-haspopup', 'dialog');
+  trigger.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><path fill="currentColor" d="M16 4C8.8 4 3 8.7 3 14.5S8.8 25 16 25c1.6 0 3.2-.2 4.6-.7L27 28l-1.4-7C27.7 19.1 29 16.9 29 14.5 29 8.7 23.2 4 16 4Z"/><g fill="#259bd2"><circle cx="10" cy="14" r="1.6"/><circle cx="16" cy="14" r="1.6"/><circle cx="22" cy="14" r="1.6"/></g></svg>';
+  support.append(coffee, trigger); document.getElementById('app').append(support);
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = 'feedback.css?v=1';
+  stylesheet.href = 'feedback.css?v=2';
   document.head.append(stylesheet);
   const dialog = document.createElement('dialog');
   dialog.id = 'feedbackDialog';

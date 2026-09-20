@@ -147,6 +147,7 @@ public partial class MainWindow : Window
             RaiseWarningWindows();
             _telemetryPublisher.Publish(new ViewerTelemetry
             {
+                Automation = AutomationVisibility.Capture(_automationPresentation, _sensorPresentation, _settings, DateTimeOffset.UtcNow, _focusedSlot.HasValue, CanDisplayOverlayWindows()),
                 IsFullScreen = _isFullScreen,
                 ViewerUptimeSeconds = (long)_viewerUptime.Elapsed.TotalSeconds,
                 ViewerMemoryMb = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1024d / 1024d, 1),

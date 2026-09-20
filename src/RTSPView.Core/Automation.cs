@@ -43,7 +43,7 @@ public sealed record AutomationSettings
         } : rule).ToArray()
     };
 
-    public void Validate(AppSettings cameras, bool connectionRequired = false)
+    public void Validate(AppSettings cameras, bool connectionRequired = false, bool validateTargets = true)
     {
         if ((Enabled || connectionRequired) && string.IsNullOrWhiteSpace(Host)) throw new InvalidDataException("Enter a broker host.");
         if (Host is null || Host.Length > 253 || Host.Contains('/') || Host.Contains('@') || Host.Any(char.IsWhiteSpace)) throw new InvalidDataException("Use a hostname or IP address without a URL scheme.");
@@ -58,9 +58,10 @@ public sealed record AutomationSettings
         {
             if (!Enum.IsDefined(rule.Action)) throw new InvalidDataException("Select a supported automation action.");
             if (rule.Priority is < 1 or > 100) throw new InvalidDataException("Priority must be 1–100; 1 is highest.");
-            if (rule.LayoutId is null || (rule.Action == AutomationAction.FocusedLayout && rule.LayoutId.Length > 0 && !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId)))
+            var checkTargets = validateTargets && rule.Enabled;
+            if (rule.LayoutId is null || (checkTargets && rule.Action == AutomationAction.FocusedLayout && rule.LayoutId.Length > 0 && !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId)))
                 throw new InvalidDataException("Select an available automation layout.");
-            if (rule.SecondCameraSlot != 0 && (rule.Action != AutomationAction.FocusedLayout ||
+            if (checkTargets && rule.SecondCameraSlot != 0 && (rule.Action != AutomationAction.FocusedLayout ||
                 !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId && l.FocusSlots.Length == 2) ||
                 !AutomationConfiguration.CanFocus(cameras, AutomationAction.FocusedLayout, rule.SecondCameraSlot) ||
                 rule.CameraSlot == rule.SecondCameraSlot))
@@ -72,8 +73,9 @@ public sealed record AutomationSettings
             {
                 if (source.RequiredZone is null || source.RequiredZone.Length > 100 || source.RequiredZone.Any(char.IsControl)) throw new InvalidDataException("Zone names must be at most 100 characters without control characters.");
                 if (string.IsNullOrWhiteSpace(source.Topic) || source.Topic.Length > 512 || source.Topic.IndexOfAny(['#', '+', '\0']) >= 0) throw new InvalidDataException("Enter an exact MQTT event topic without wildcards.");
-                if (!StreamCatalog.LayoutCameras(cameras).Concat(cameras.AllOverlays().Select(o => o.Camera)).Any(c => c.Slot == source.CameraSlot && !string.IsNullOrWhiteSpace(c.RtspUrl))) throw new InvalidDataException("Select a configured source camera.");
+                if (checkTargets && !StreamCatalog.LayoutCameras(cameras).Concat(cameras.AllOverlays().Select(o => o.Camera)).Any(c => c.Slot == source.CameraSlot && !string.IsNullOrWhiteSpace(c.RtspUrl))) throw new InvalidDataException("Select a configured source camera.");
             }
+            if (!checkTargets) continue;
             if (rule.Action == AutomationAction.Overlay)
             {
                 if (!cameras.AllOverlays().Any(o => o.Camera.Slot == rule.OverlaySlot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl))) throw new InvalidDataException("Select an overlay with a configured RTSP stream.");
@@ -129,6 +131,13 @@ public sealed class PersonOverlayEngine
     private readonly Dictionary<string, AutomationOverlayLease> _leases = new();
     public IReadOnlyDictionary<string, AutomationOverlayLease> Leases => _leases;
     public void Clear() { _watermarks.Clear(); _leases.Clear(); }
+    public void RetainRules(IEnumerable<AutomationRule> rules)
+    {
+        var priorities = rules.Where(r => r.Enabled).ToDictionary(r => r.Id, r => r.Priority);
+        foreach (var key in _leases.Keys.ToArray())
+            if (priorities.TryGetValue(_leases[key].RuleId, out var priority)) _leases[key] = _leases[key] with { Priority = priority };
+            else _leases.Remove(key);
+    }
     // Local rule tests share action arbitration and expiry, but never alter MQTT watermarks.
     public void Trigger(AutomationRule rule, int sourceSlot, DateTimeOffset now, DateTimeOffset? eventTime = null)
     {
@@ -146,8 +155,10 @@ public sealed class PersonOverlayEngine
     {
         foreach (var id in _leases.Where(p => p.Value.ExpiresAt <= now).Select(p => p.Key).ToArray()) _leases.Remove(id);
     }
+    public Dictionary<string, string> LastDecisions { get; } = new();
     public string Accept(AutomationSettings settings, string topic, ReadOnlyMemory<byte> payload, bool retained, DateTimeOffset now, DateTimeOffset connectedAt)
     {
+        LastDecisions.Clear();
         Expire(now);
         if (!settings.Enabled || retained) return "Retained or disabled";
         var rules = settings.ResolveSources().Rules.Where(r => r.Enabled && r.Sources.Any(s => s.Topic == topic)).ToArray();
@@ -167,6 +178,7 @@ public sealed class PersonOverlayEngine
             var matched = false;
             foreach (var rule in rules)
             {
+                LastDecisions[rule.Id] = "Person outside required zone";
                 foreach (var source in rule.Sources.Where(s => s.Topic == topic))
                 {
                     if (!string.IsNullOrEmpty(source.RequiredZone) && !detections.EnumerateArray().Any(d =>
@@ -175,6 +187,7 @@ public sealed class PersonOverlayEngine
                         d.TryGetProperty("zones", out var zones) && zones.ValueKind == JsonValueKind.Array &&
                         zones.EnumerateArray().Any(z => z.ValueKind == JsonValueKind.String && z.GetString() == source.RequiredZone))) continue;
                     Trigger(rule, source.CameraSlot, now, sourceTime);
+                    LastDecisions[rule.Id] = "Person detected";
                     matched = true;
                     break;
                 }

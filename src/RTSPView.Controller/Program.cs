@@ -38,6 +38,7 @@ if (network.Managed)
 }
 else builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5080");
 Directory.CreateDirectory(dataDirectory);
+AutomationPersistence.Recover(dataDirectory);
 var dataProtectionDirectory = Path.Combine(dataDirectory, "data-protection");
 Directory.CreateDirectory(dataProtectionDirectory);
 builder.Services.AddDataProtection()
@@ -119,6 +120,19 @@ var settingsStore = new JsonSettingsStore(Path.Combine(dataDirectory, "settings.
 var security = await WebSecurity.LoadOrCreateAsync(Path.Combine(dataDirectory, "web-security.json"), Path.Combine(dataDirectory, "initial-admin-password.txt"));
 var configGate = new SemaphoreSlim(1, 1);
 var viewerTelemetry = app.Services.GetRequiredService<ViewerTelemetryClient>();
+viewerTelemetry.SnapshotReceived += snapshot =>
+{
+    if (snapshot.Automation is not { } presentation) return;
+    var mqtt = app.Services.GetRequiredService<AutomationService>();
+    var tapo = app.Services.GetRequiredService<TapoService>();
+    foreach (var state in presentation.Rules.GroupBy(r => (r.Source, r.RuleId)))
+    {
+        var entry = state.FirstOrDefault(r => r.Effective) ?? state.First();
+        var history = entry.Source == "MQTT" ? mqtt.Activity : tapo.Activity;
+        var name = entry.Source == "MQTT" ? mqtt.CurrentSettings.Rules.FirstOrDefault(r => r.Id == entry.RuleId)?.Name : tapo.CurrentSettings.Rules.FirstOrDefault(r => r.Id == entry.RuleId)?.Name;
+        history.Add(entry.RuleId, name ?? "Removed rule", "Presentation", entry.Reason, true);
+    }
+};
 var systemMetrics = app.Services.GetRequiredService<SystemMetricsCollector>();
 var temperatures = app.Services.GetRequiredService<TemperatureMonitor>();
 var pawnIo = app.Services.GetRequiredService<PawnIoInstaller>();
@@ -333,6 +347,7 @@ app.MapTapo(configGate);
 app.MapAutomationPriorities(configGate);
 app.MapGet("/api/automation", (AutomationService automation) => Results.Ok(automation.Configuration)).RequireAuthorization();
 app.MapGet("/api/automation/status", (AutomationService automation) => Results.Ok(automation.Status)).RequireAuthorization();
+app.MapGet("/api/automation/presentation", () => Results.Ok(new { presentation = viewerTelemetry.Latest?.Automation })).RequireAuthorization();
 app.MapGet("/api/automation/diagnostics", (HttpContext context, AutomationService automation) =>
 {
     context.Response.Headers.CacheControl = "no-store";
@@ -372,19 +387,24 @@ app.MapPost("/api/automation/rules/{id}/test", async (string id, AutomationRuleT
         var result = await automation.TestRuleAsync(id, request.SourceSlot, token);
         auditLog.Write("AUTOMATION", "Local rule test requested");
         return Results.Ok(new { success = result.Success, message = result.Success
-            ? "Test sent to Viewer. Normal priority and clear delay apply; active detections may extend it." : result.Message });
+            ? "Viewer acknowledged: " + result.Message + " This tests the saved action, not MQTT delivery or zone matching. Priority and clear delay still apply." : result.Message });
     }
     catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
     catch (OperationCanceledException) { return Results.BadRequest(new { error = "Test timed out. Check Controller and Viewer status." }); }
 }).RequireAuthorization();
-app.MapGet("/api/config/export", async (HttpContext context) =>
+app.MapGet("/api/config/export", async (HttpContext context, AutomationService automation, TapoService tapo) =>
 {
     context.Response.Headers.CacheControl = "no-store";
-    var settings = JsonSettingsStore.WithoutCredentials(await settingsStore.LoadAsync());
-    return Results.File(JsonSerializer.SerializeToUtf8Bytes(settings, new JsonSerializerOptions { WriteIndented = true }),
-        "application/json", "RTSPView-config.json");
+    await configGate.WaitAsync(context.RequestAborted);
+    try
+    {
+        var backup = ConfigurationBackup.Export(await settingsStore.LoadAsync(), automation.CurrentSettings, tapo.CurrentSettings);
+        return Results.File(System.Text.Encoding.UTF8.GetBytes(backup.ToJsonString(new JsonSerializerOptions { WriteIndented = true })),
+            "application/json", "RTSPView-config.json");
+    }
+    finally { configGate.Release(); }
 }).RequireAuthorization();
-app.MapPost("/api/config/import", async (HttpContext context) =>
+app.MapPost("/api/config/import", async (HttpContext context, AutomationService automation, TapoService tapo) =>
 {
     const int maximumBytes = 2 * 1024 * 1024;
     using var body = new MemoryStream();
@@ -399,9 +419,10 @@ app.MapPost("/api/config/import", async (HttpContext context) =>
     await configGate.WaitAsync(context.RequestAborted);
     try
     {
-        var backup = await settingsStore.ImportAndSaveAsync(System.Text.Encoding.UTF8.GetString(body.ToArray()).TrimStart('\uFEFF'), context.RequestAborted);
+        var result = await ConfigurationBackup.ImportAsync(System.Text.Encoding.UTF8.GetString(body.ToArray()).TrimStart('\uFEFF'), dataDirectory, settingsStore, automation, tapo, context.RequestAborted);
+        var backup = result.Backup;
         auditLog.Write("AUDIT", "Configuration imported from web admin; previous configuration backed up as " + backup);
-        return Results.Ok(new { message = "Configuration imported. Applying to the viewer; previous settings were backed up.", backup });
+        return Results.Ok(new { message = result.Message, backup });
     }
     catch (Exception exception) when (exception is InvalidDataException or JsonException)
     {

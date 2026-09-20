@@ -7,6 +7,11 @@
     "docs/branding-audit.md"
   ],
   "files": {
+    "src/RTSPView.Controller/ApplicationRestart.cs": [
+      "SpotMonitor.Viewer.exe",
+      "SpotMonitor.Controller.exe",
+      "\"SpotMonitor.Viewer\""
+    ],
     ".gitignore": [
       "SpotMonitor-config*.json"
     ],

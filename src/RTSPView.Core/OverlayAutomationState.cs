@@ -14,6 +14,8 @@ public sealed class OverlayAutomationState
     public void Dismiss() { foreach (var lease in _leases) _dismissed.Add(lease.Id); }
     public void Clear() { _leases = []; _dismissed.Clear(); }
     private IEnumerable<AutomationOverlayLease> Active(DateTimeOffset now) => _leases.Where(l => l.ExpiresAt > now && !_dismissed.Contains(l.Id));
+    public AutomationOverlayLease[] Pending(DateTimeOffset now) => _leases.Where(l => l.ExpiresAt > now).ToArray();
+    public bool IsDismissed(string id) => _dismissed.Contains(id);
     public HashSet<int> ActiveSlots(DateTimeOffset now) => Active(now).Where(l => l.Action == AutomationAction.Overlay).Select(l => l.Slot).ToHashSet();
     public int? OverlayPriority(int slot, DateTimeOffset now) => Active(now).Where(l => l.Action == AutomationAction.Overlay && l.Slot == slot).Select(l => (int?)l.Priority).Min();
     public AutomationOverlayLease? Focus(DateTimeOffset now)

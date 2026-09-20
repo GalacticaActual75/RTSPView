@@ -9,13 +9,20 @@ using RTSPView.Infrastructure;
 
 namespace RTSPView.Controller;
 
-public sealed record AutomationRequest(AutomationSettings Settings, string? Password, bool ClearPassword = false);
+public sealed record AutomationRequest(AutomationSettings Settings, string? Password, bool ClearPassword = false, string? Revision = null);
 public sealed record MqttDiagnosticsRequest(AutomationRequest Connection, string Prefix = "scrypted");
 public sealed record AutomationRuleTestRequest(int SourceSlot);
 internal sealed record PendingRuleTest(string RuleId, int SourceSlot, int Revision, CancellationToken Token, TaskCompletionSource<ViewerCommandResult> Completion);
 internal sealed record StoredAutomation(AutomationSettings Settings, string ProtectedPassword);
 public sealed record AutomationStatus(string Connection, string LastResult, DateTimeOffset? LastMessage,
-    DateTimeOffset? LastPerson, object[] Rules);
+    DateTimeOffset? LastPerson, object[] Rules)
+{
+    public AutomationDeliveryStatus? Delivery { get; init; }
+    public string? ConfigurationError { get; init; }
+    public long DroppedEvents { get; init; }
+    public AutomationActivityEntry[] Activity { get; init; } = [];
+    public string? ActivityError { get; init; }
+}
 
 public sealed class AutomationService : BackgroundService
 {
@@ -26,12 +33,32 @@ public sealed class AutomationService : BackgroundService
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private StoredAutomation _stored = new(new(), "");
     private int _revision;
+    private int _credentialRevision;
+    private string? _loadError;
+    private readonly Dictionary<string, AutomationDeliveryStatus> _ruleDelivery = new();
+    private HashSet<string> _requestedRules = [];
     private readonly Channel<PendingRuleTest> _ruleTests = Channel.CreateBounded<PendingRuleTest>(32);
     private AutomationStatus _status = new("Disabled", "Waiting", null, null, []);
-    public AutomationStatus Status => _status;
+    private long _droppedEvents;
+    public AutomationActivity Activity { get; }
+    internal string DirectoryPath => Path.GetDirectoryName(_path)!;
+    public AutomationStatus Status => _status with { DroppedEvents = Interlocked.Read(ref _droppedEvents), Activity = Activity.Entries, ActivityError = Activity.Error };
     public MqttDiagnostics Diagnostics { get; } = new();
-    public object Configuration => new { settings = _stored.Settings, hasPassword = _stored.ProtectedPassword.Length > 0 };
+    public object Configuration => new { settings = _stored.Settings, hasPassword = _stored.ProtectedPassword.Length > 0, revision = AutomationRevision.For(_stored.Settings) };
     public AutomationSettings CurrentSettings => _stored.Settings;
+    internal StoredAutomation StoredState => _stored;
+    internal async Task RestoreStateAsync(StoredAutomation stored)
+    {
+        await _saveGate.WaitAsync();
+        try
+        {
+            await File.WriteAllTextAsync(_path + ".tmp", JsonSerializer.Serialize(stored));
+            File.Move(_path + ".tmp", _path, true);
+            _stored = stored; _loadError = null;
+            Interlocked.Increment(ref _credentialRevision); Interlocked.Increment(ref _revision);
+        }
+        finally { _saveGate.Release(); }
+    }
     public bool UsesCamera(int slot) => _stored.Settings.Rules.Any(r => r.Sources.Any(s => s.CameraSlot == slot) || (r.Action != AutomationAction.Overlay && (r.CameraSlot == slot || r.SecondCameraSlot == slot)));
     public bool UsesOverlay(int slot) => UsesCamera(slot) || UsesCamera(StreamCatalog.SourceSlot(slot)) || _stored.Settings.Rules.Any(r => r.Action == AutomationAction.Overlay && r.OverlaySlot == slot);
     public bool RequiresSecondFocus(string id) => _stored.Settings.Rules.Any(r => r.LayoutId == id && r.SecondCameraSlot != 0);
@@ -40,14 +67,19 @@ public sealed class AutomationService : BackgroundService
     public AutomationService(string directory, IDataProtectionProvider protection, ViewerCommandClient viewer)
     {
         _path = Path.Combine(directory, "automation.json");
+        Activity = new(Path.Combine(directory, "mqtt-activity.json"));
         _protector = protection.CreateProtector("RTSPView.Mqtt.Password.v1");
         _viewer = viewer;
         _cameras = new(Path.Combine(directory, "settings.json"));
         try
         {
-            if (File.Exists(_path)) _stored = JsonSerializer.Deserialize<StoredAutomation>(File.ReadAllText(_path)) ?? throw new InvalidDataException();
+            _stored = AutomationPersistence.Load(_path, _stored, value => {
+                if (value.Settings is null || value.ProtectedPassword is null) throw new InvalidDataException();
+                value.Settings.Validate(new AppSettings().Normalize(), validateTargets: false);
+            }, out var recovered);
+            if (recovered) Activity.Add("", "MQTT", "Recovery", "Recovered settings from the latest valid local backup.");
         }
-        catch { _status = new("Error", "Automation settings could not be loaded. Save valid settings to recover.", null, null, []); }
+        catch { _stored = new(new(), ""); _loadError = "Automation settings could not be loaded. Restore a backup or save valid settings to recover."; _status = new("Error", _loadError, null, null, []) { ConfigurationError = _loadError }; }
     }
 
     private string Password(AutomationRequest request)
@@ -62,14 +94,16 @@ public sealed class AutomationService : BackgroundService
         await _saveGate.WaitAsync(token);
         try
         {
-            request.Settings.Validate(await _cameras.LoadAsync(token));
+            AutomationRevision.Check(request.Revision, AutomationRevision.For(_stored.Settings));
+            request.Settings.Validate(await _cameras.LoadAsync(token), validateTargets: request.Settings.Enabled);
             var password = Password(request);
             if (password.Length > 1024) throw new InvalidDataException("Password is too long.");
             var stored = new StoredAutomation(request.Settings, password.Length == 0 ? "" : _protector.Protect(password));
-            var temp = _path + ".tmp";
-            await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(stored, new JsonSerializerOptions { WriteIndented = true }), token);
-            File.Move(temp, _path, true);
+            token.ThrowIfCancellationRequested();
+            AutomationPersistence.Save(_path, JsonSerializer.Serialize(stored), _loadError is not null);
             _stored = stored;
+            _loadError = null;
+            if (request.ClearPassword || !string.IsNullOrEmpty(request.Password)) Interlocked.Increment(ref _credentialRevision);
             Interlocked.Increment(ref _revision);
         }
         finally { _saveGate.Release(); }
@@ -111,7 +145,7 @@ public sealed class AutomationService : BackgroundService
 
     public async Task<object> TestAsync(AutomationRequest request, CancellationToken token)
     {
-        request.Settings.Validate(await _cameras.LoadAsync(token), true);
+        request.Settings.Validate(await _cameras.LoadAsync(token), true, validateTargets: false);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(12));
         using var client = new MqttFactory().CreateMqttClient();
@@ -146,7 +180,7 @@ public sealed class AutomationService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var engine = new PersonOverlayEngine();
-        var channel = Channel.CreateBounded<(string Topic, byte[] Payload, bool Retain, DateTimeOffset Received)>(new BoundedChannelOptions(128) { FullMode = BoundedChannelFullMode.DropOldest });
+        var channel = Channel.CreateBounded<(string Topic, byte[] Payload, bool Retain, DateTimeOffset Received)>(new BoundedChannelOptions(128) { FullMode = BoundedChannelFullMode.DropOldest }, _ => Interlocked.Increment(ref _droppedEvents));
         IMqttClient? client = null;
         var revision = -1;
         var hash = "";
@@ -157,25 +191,53 @@ public sealed class AutomationService : BackgroundService
         var connectedAt = DateTimeOffset.MinValue;
         var nextConnect = DateTimeOffset.MinValue;
         var failures = 0;
+        AutomationSettings? applied = null;
+        var appliedCredentials = -1;
+        long reportedDrops = 0;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
                 var now = DateTimeOffset.UtcNow;
+                var drops = Interlocked.Read(ref _droppedEvents);
+                if (drops != reportedDrops) { reportedDrops = drops; Activity.Add("", "MQTT", "Queue", $"Dropped events since Controller start: {drops}"); }
                 try
                 {
                     var cameras = await _cameras.LoadAsync(stoppingToken);
                     var currentHash = AutomationConfiguration.Hash(cameras);
                     if (revision != _revision || hash != currentHash)
                     {
+                        var updated = _stored.Settings;
+                        var priorityOnly = hash == currentHash && appliedCredentials == _credentialRevision && applied is not null &&
+                            JsonSerializer.Serialize(applied with { Rules = applied.Rules.Select(r => r with { Priority = 50 }).ToArray() }) ==
+                            JsonSerializer.Serialize(updated with { Rules = updated.Rules.Select(r => r with { Priority = 50 }).ToArray() });
                         revision = _revision; hash = currentHash;
-                        client?.Dispose(); client = null;
-                        while (channel.Reader.TryRead(out _)) { }
-                        engine.Clear(); sent = ""; lastEvents.Clear(); lastTriggered.Clear(); sentRules.Clear(); nextConnect = now; failures = 0;
-                        await Send(engine, hash, stoppingToken);
+                        applied = updated;
+                        appliedCredentials = _credentialRevision;
+                        if (priorityOnly) engine.RetainRules(updated.Rules);
+                        else
+                        {
+                            client?.Dispose(); client = null;
+                            while (channel.Reader.TryRead(out _)) { }
+                            engine.Clear(); sent = ""; lastEvents.Clear(); lastTriggered.Clear(); sentRules.Clear(); _ruleDelivery.Clear(); nextConnect = now; failures = 0;
+                            await Send(engine, hash, stoppingToken);
+                        }
                     }
-                    var settings = _stored.Settings.ResolveSources();
-                    settings.Validate(cameras);
+                    if (_loadError is not null)
+                    {
+                        _status = _status with { Connection = "Error", LastResult = _loadError, ConfigurationError = _loadError, Rules = [] };
+                        await Task.Delay(500, stoppingToken);
+                        continue;
+                    }
+                    var configured = _stored.Settings.ResolveSources();
+                    (configured with { Rules = [] }).Validate(cameras);
+                    var invalid = new Dictionary<string, string>();
+                    foreach (var rule in configured.Rules.Where(r => r.Enabled && configured.Enabled))
+                        try { (configured with { Rules = [rule] }).Validate(cameras); }
+                        catch (InvalidDataException e) { invalid[rule.Id] = e.Message; Activity.Add(rule.Id, rule.Name, "Configuration", "Invalid target; rule skipped", true); }
+                    var settings = configured with { Rules = configured.Rules.Where(r => !invalid.ContainsKey(r.Id)).ToArray() };
+                    engine.RetainRules(settings.Rules);
+                    _status = _status with { ConfigurationError = invalid.Count > 0 ? "Some rules need attention; valid rules remain enabled." : null };
                     while (_ruleTests.Reader.TryRead(out var test))
                     {
                         if (test.Token.IsCancellationRequested) continue;
@@ -188,6 +250,7 @@ public sealed class AutomationService : BackgroundService
                         try
                         {
                             engine.Trigger(rule, test.SourceSlot, DateTimeOffset.UtcNow);
+                            Activity.Add(rule.Id, rule.Name, "Trigger", "Simulated person detection");
                             var result = await Send(engine, hash, stoppingToken);
                             sent = JsonSerializer.Serialize(engine.Leases.Values);
                             if (result.Success) lastTriggered[rule.Id] = DateTimeOffset.UtcNow;
@@ -228,6 +291,11 @@ public sealed class AutomationService : BackgroundService
                     {
                         foreach (var rule in settings.Rules.Where(r => r.Enabled && r.Sources.Any(source => source.Topic == message.Topic))) lastEvents[rule.Id] = message.Received;
                         var result = engine.Accept(settings, message.Topic, message.Payload, message.Retain, DateTimeOffset.UtcNow, connectedAt);
+                        foreach (var rule in settings.Rules.Where(r => r.Enabled && r.Sources.Any(s => s.Topic == message.Topic)))
+                        {
+                            var decision = engine.LastDecisions.GetValueOrDefault(rule.Id, result);
+                            Activity.Add(rule.Id, rule.Name, decision == "Person detected" ? "Trigger" : "Event", decision);
+                        }
                         _status = _status with { LastMessage = message.Received, LastResult = result,
                             LastPerson = result == "Person detected" ? message.Received : _status.LastPerson };
                     }
@@ -250,9 +318,11 @@ public sealed class AutomationService : BackgroundService
                             foreach (var id in sentRules.Keys.Where(id => !engine.Leases.Values.Any(lease => lease.RuleId == id)).ToArray()) sentRules.Remove(id);
                         }
                     }
-                    _status = _status with { Rules = settings.Rules.Select(r => (object)new { r.Id, r.Name, r.Enabled,
+                    _status = _status with { Rules = configured.Rules.Select(r => (object)new { r.Id, r.Name, r.Enabled,
+                        error = invalid.GetValueOrDefault(r.Id),
+                        delivery = _ruleDelivery.GetValueOrDefault(r.Id),
                         lastEvent = lastEvents.TryGetValue(r.Id, out var received) ? (DateTimeOffset?)received : null,
-                        lastTriggered = lastTriggered.TryGetValue(r.Id, out var triggered) ? (DateTimeOffset?)triggered : null,
+                        lastTriggered = Activity.LastTrigger(r.Id),
                         expiresAt = engine.Leases.Values.Where(l => l.RuleId == r.Id).Select(l => (DateTimeOffset?)l.ExpiresAt).Max(),
                         activeCameraSlots = engine.Leases.Values.Where(l => l.RuleId == r.Id).Select(l => l.Slot).Distinct().ToArray() }).ToArray() };
                 }
@@ -275,6 +345,22 @@ public sealed class AutomationService : BackgroundService
         finally { client?.Dispose(); }
     }
 
-    private Task<ViewerCommandResult> Send(PersonOverlayEngine engine, string hash, CancellationToken token) =>
-        _viewer.SendAsync(new ViewerCommand(Guid.NewGuid(), ViewerCommandType.AutomationOverlays, Automation: new(hash, engine.Leases.Values.ToArray())), token);
+    private async Task<ViewerCommandResult> Send(PersonOverlayEngine engine, string hash, CancellationToken token)
+    {
+        var requested = engine.Leases.Values.Select(l => l.RuleId).ToHashSet();
+        foreach (var id in _requestedRules.Except(requested))
+        {
+            Activity.Add(id, _stored.Settings.Rules.FirstOrDefault(r => r.Id == id)?.Name ?? "Removed rule", "State", "Override request expired or cleared");
+            Activity.ResetTransition(id, "Delivery"); Activity.ResetTransition(id, "Presentation");
+        }
+        _requestedRules = requested;
+        var result = await _viewer.SendAsync(new ViewerCommand(Guid.NewGuid(), ViewerCommandType.AutomationOverlays, Automation: new(hash, engine.Leases.Values.ToArray())), token);
+        _status = _status with { Delivery = new(DateTimeOffset.UtcNow, result.Success, result.Message) };
+        foreach (var id in engine.Leases.Values.Select(l => l.RuleId).Distinct())
+        {
+            _ruleDelivery[id] = _status.Delivery;
+            Activity.Add(id, _stored.Settings.Rules.FirstOrDefault(r => r.Id == id)?.Name ?? "Removed rule", "Delivery", result.Success ? "Viewer acknowledged" : "Viewer delivery failed", true);
+        }
+        return result;
+    }
 }

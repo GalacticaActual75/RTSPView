@@ -42,9 +42,20 @@ public static class AutomationPriorityEndpoints
                 var priorities = request.Rules.Select((r, i) => (r.Source, r.Id, Priority: i + 1)).ToDictionary(r => (r.Source, r.Id), r => r.Priority);
                 var updatedMqtt = beforeMqtt with { Rules = beforeMqtt.Rules.Select(r => r with { Priority = priorities[("MQTT", r.Id)] }).ToArray() };
                 var updatedTapo = beforeTapo with { Rules = beforeTapo.Rules.Select(r => r with { Priority = priorities[("Tapo", r.Id)] }).ToArray() };
-                await mqtt.SaveAsync(new(updatedMqtt, null), token);
-                try { await tapo.SaveAsync(new(updatedTapo), CancellationToken.None); }
-                catch { await mqtt.SaveAsync(new(beforeMqtt, null), CancellationToken.None); throw; }
+                AutomationPersistence.Prepare(mqtt.DirectoryPath);
+                try
+                {
+                    await mqtt.SaveAsync(new(updatedMqtt, null), token);
+                    await tapo.SaveAsync(new(updatedTapo), CancellationToken.None);
+                    AutomationPersistence.Commit(mqtt.DirectoryPath);
+                }
+                catch
+                {
+                    await mqtt.SaveAsync(new(beforeMqtt, null), CancellationToken.None);
+                    await tapo.SaveAsync(new(beforeTapo), CancellationToken.None);
+                    AutomationPersistence.Recover(mqtt.DirectoryPath);
+                    throw;
+                }
                 return Results.Ok(Snapshot(mqtt.CurrentSettings, tapo.CurrentSettings));
             }
             catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }

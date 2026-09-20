@@ -4,7 +4,7 @@ const automationTabs = (() => {
   function init() {
     if (root) return;
     root = document.querySelector('#page-automation');
-    const nav = document.createElement('div'); nav.className = 'automation-tabs'; nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', 'Automation integration'); root.prepend(nav);
+    const nav = document.createElement('div'); nav.className = 'system-tabs automation-tabs'; nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', 'Automation integration'); root.prepend(nav);
     panel = document.createElement('section'); panel.id = 'automationPriority'; panel.innerHTML = '<h2>Automation priority</h2><p>Top is highest priority. Drag rules or use Move up/down, then Save order. Priorities apply across MQTT and Tapo. Disabled rules keep their place.</p><p>Priority 1 is highest. Higher-priority rules interrupt lower-priority views immediately. After they clear, a still-active lower-priority rule can resume. Manual camera focus takes priority over automation.</p><ol class="priority-list"></ol><div class="control-buttons"><button type="button" class="priority-save">Save order</button><button type="button" class="secondary priority-reload">Discard & reload</button></div><p class="priority-message" role="status"></p>'; root.append(panel);
     list = panel.querySelector('ol'); message = panel.querySelector('.priority-message'); save = panel.querySelector('.priority-save');
     const panes = [document.querySelector('#automationForm'), document.querySelector('#tapoForm'), panel];

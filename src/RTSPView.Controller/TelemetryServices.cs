@@ -11,6 +11,7 @@ public sealed class ViewerTelemetryClient : BackgroundService
 {
     public const string PipeName = "RTSPView.Telemetry.v1";
     private ViewerTelemetry? _latest;
+    public event Action<ViewerTelemetry>? SnapshotReceived;
     public DateTimeOffset? LastReceivedAt { get; private set; }
     public ViewerTelemetry? Latest => _latest is { } value && DateTimeOffset.UtcNow - value.Timestamp < TimeSpan.FromSeconds(5) ? value : null;
 
@@ -28,7 +29,7 @@ public sealed class ViewerTelemetryClient : BackgroundService
                     var line = await reader.ReadLineAsync(stoppingToken);
                     if (line is null) break;
                     var snapshot = JsonSerializer.Deserialize<ViewerTelemetry>(line, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    if (snapshot is not null) { _latest = snapshot; LastReceivedAt = DateTimeOffset.UtcNow; }
+                    if (snapshot is not null) { _latest = snapshot; LastReceivedAt = DateTimeOffset.UtcNow; SnapshotReceived?.Invoke(snapshot); }
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }

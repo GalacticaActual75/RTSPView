@@ -6,11 +6,19 @@ using RTSPView.Infrastructure;
 
 namespace RTSPView.Controller;
 
-public sealed record TapoRequest(TapoSettings Settings, string? Password = null, bool ClearPassword = false);
+public sealed record TapoRequest(TapoSettings Settings, string? Password = null, bool ClearPassword = false, string? Revision = null);
 public sealed record TapoTestRequest(ContactState State);
 public sealed record TapoConnection(string Username, string Password, TapoHub[] Hubs, bool DiscoverHubs = false);
 internal sealed record StoredTapo(TapoSettings Settings, string ProtectedPassword);
-public sealed record TapoStatus(string Connection, string Message, DateTimeOffset? LastChecked, TapoHubStatus[] Hubs, TapoSensor[] Sensors, string[] ActiveRules, string[] TestingRules);
+public sealed record TapoStatus(string Connection, string Message, DateTimeOffset? LastChecked, TapoHubStatus[] Hubs, TapoSensor[] Sensors, string[] ActiveRules, string[] TestingRules)
+{
+    public AutomationDeliveryStatus? Delivery { get; init; }
+    public string? ConfigurationError { get; init; }
+    public AutomationActivityEntry[] Activity { get; init; } = [];
+    public IReadOnlyDictionary<string, DateTimeOffset?> LastTriggered { get; init; } = new Dictionary<string, DateTimeOffset?>();
+    public string? ActivityError { get; init; }
+    public IReadOnlyDictionary<string, string> RuleErrors { get; init; } = new Dictionary<string, string>();
+}
 
 public interface ITapoReader : IDisposable
 {
@@ -89,8 +97,17 @@ public sealed class TapoService : BackgroundService
     private readonly Dictionary<string, (ContactState State, DateTimeOffset Until)> _tests = new();
     private CancellationTokenSource _changed = new();
     private bool _hasPresentedEffects;
+    private string? _loadError;
+    public AutomationActivity Activity { get; }
     private readonly SemaphoreSlim _discovery = new(1, 1);
     public TapoSettings CurrentSettings { get { lock (_sync) return _stored.Settings; } }
+    internal StoredTapo StoredState { get { lock (_sync) return _stored; } }
+    internal async Task RestoreStateAsync(StoredTapo stored)
+    {
+        await _save.WaitAsync();
+        try { await PersistAsync(stored, CancellationToken.None); }
+        finally { _save.Release(); }
+    }
     public bool UsesCamera(int slot) { lock (_sync) return _stored.Settings.Rules.Any(r => (r.Action == SensorAction.AutomationLayout || r.ClearAction == SensorAction.AutomationLayout) && (r.FocusCameraSlot == slot || r.SecondFocusCameraSlot == slot)); }
     public bool UsesAutomationLayout(string id) { lock (_sync) return _stored.Settings.Rules.Any(r => (r.Action == SensorAction.AutomationLayout && r.LayoutId == id) || (r.ClearAction == SensorAction.AutomationLayout && r.ClearLayoutId == id)); }
     public bool RequiresSecondFocus(string id) { lock (_sync) return _stored.Settings.Rules.Any(r => r.SecondFocusCameraSlot != 0 && ((r.Action == SensorAction.AutomationLayout && r.LayoutId == id) || (r.ClearAction == SensorAction.AutomationLayout && r.ClearLayoutId == id))); }
@@ -113,16 +130,21 @@ public sealed class TapoService : BackgroundService
         Func<ViewerCommand, CancellationToken, Task<ViewerCommandResult>> viewer, ITapoReader reader)
     {
         _path = Path.Combine(directory, "tapo.json");
+        Activity = new(Path.Combine(directory, "tapo-activity.json"));
         _app = new(Path.Combine(directory, "settings.json"));
         _protector = protection.CreateProtector("RTSPView.Tapo.Password.v1");
         _viewer = viewer; _reader = reader; _read = reader.ReadAsync;
         try
         {
-            if (File.Exists(_path)) _stored = JsonSerializer.Deserialize<StoredTapo>(File.ReadAllText(_path)) ?? throw new InvalidDataException();
+            _stored = AutomationPersistence.Load(_path, _stored, value => {
+                if (value.Settings is null || value.ProtectedPassword is null) throw new InvalidDataException();
+                value.Settings.Validate(new AppSettings().Normalize(), validateTargets: false);
+            }, out var recovered);
+            if (recovered) Activity.Add("", "Tapo", "Recovery", "Recovered settings from the latest valid local backup.");
         }
-        catch { _status = _status with { Connection = "Error", Message = "Tapo settings could not be loaded. Save the connection again." }; }
+        catch { _stored = new(new(), ""); _loadError = "Tapo settings could not be loaded. Restore a backup or save valid settings to recover."; _status = _status with { Connection = "Error", Message = _loadError, ConfigurationError = _loadError }; }
     }
-    public object Configuration { get { lock (_sync) return new { settings = _stored.Settings, hasPassword = _stored.ProtectedPassword.Length > 0 }; } }
+    public object Configuration { get { lock (_sync) return new { settings = _stored.Settings, hasPassword = _stored.ProtectedPassword.Length > 0, revision = AutomationRevision.For(_stored.Settings) }; } }
     public TapoStatus Status
     {
         get
@@ -132,7 +154,9 @@ public sealed class TapoService : BackgroundService
                 var now = DateTimeOffset.UtcNow;
                 var stale = _status.LastChecked is null || now - _status.LastChecked > TimeSpan.FromSeconds(_stored.Settings.PollSeconds + 30);
                 return _status with { Sensors = stale ? _status.Sensors.Select(s => s with { State = ContactState.Unavailable }).ToArray() : _status.Sensors,
-                    TestingRules = _tests.Where(t => t.Value.Until > now).Select(t => t.Key).ToArray() };
+                    TestingRules = _tests.Where(t => t.Value.Until > now).Select(t => t.Key).ToArray(),
+                    Activity = Activity.Entries, ActivityError = Activity.Error,
+                    LastTriggered = _stored.Settings.Rules.ToDictionary(r => r.Id, r => Activity.LastTrigger(r.Id)) };
             }
         }
     }
@@ -150,23 +174,33 @@ public sealed class TapoService : BackgroundService
         try
         {
             if (request.Settings is null) throw new InvalidDataException("Missing Tapo settings.");
-            request.Settings.Validate(await _app.LoadAsync(token));
+            AutomationRevision.Check(request.Revision, AutomationRevision.For(CurrentSettings));
+            request.Settings.Validate(await _app.LoadAsync(token), validateTargets: request.Settings.Enabled);
             string password; lock (_sync) password = Password(request);
             if (password.Length > 1024 || (request.Settings.Enabled && password.Length == 0)) throw new InvalidDataException("Enter your Tapo password.");
             var stored = new StoredTapo(request.Settings, password.Length == 0 ? "" : _protector.Protect(password));
-            await PersistAsync(stored, token);
+            await PersistAsync(stored, token, request.Password is null && !request.ClearPassword);
         }
         finally { _save.Release(); }
     }
-    private async Task PersistAsync(StoredTapo stored, CancellationToken token)
+    private async Task PersistAsync(StoredTapo stored, CancellationToken token, bool preserveRuntime = false)
     {
-        await File.WriteAllTextAsync(_path + ".tmp", JsonSerializer.Serialize(stored), token);
-        File.Move(_path + ".tmp", _path, true);
-        lock (_sync)
+        await _send.WaitAsync(token);
+        try
         {
-            _stored = stored; _tests.Clear(); _changed.Cancel(); _changed.Dispose(); _changed = new();
-            _status = new(stored.Settings.Enabled ? "Connecting" : "Disabled", "Settings saved.", null, [], [], [], []);
+            token.ThrowIfCancellationRequested();
+            AutomationPersistence.Save(_path, JsonSerializer.Serialize(stored), _loadError is not null);
+            lock (_sync)
+            {
+                var priorityOnly = preserveRuntime && _loadError is null && JsonSerializer.Serialize(_stored.Settings with { Rules = _stored.Settings.Rules.Select(r => r with { Priority = 50 }).ToArray() }) ==
+                    JsonSerializer.Serialize(stored.Settings with { Rules = stored.Settings.Rules.Select(r => r with { Priority = 50 }).ToArray() });
+                _loadError = null;
+                if (priorityOnly) { _stored = stored; return; }
+                _stored = stored; _tests.Clear(); _changed.Cancel(); _changed.Dispose(); _changed = new();
+                _status = new(stored.Settings.Enabled ? "Connecting" : "Disabled", "Settings saved.", null, [], [], [], []);
+            }
         }
+        finally { _send.Release(); }
     }
     public async Task RemoveAccountAsync(CancellationToken token)
     {
@@ -195,10 +229,12 @@ public sealed class TapoService : BackgroundService
     public async Task<ViewerCommandResult> TestAsync(string id, ContactState state, CancellationToken token)
     {
         if (!Enum.IsDefined(state)) throw new InvalidDataException("Select Open, Closed, or Unavailable.");
+        var app = await _app.LoadAsync(token);
         lock (_sync)
         {
             if (!_stored.Settings.Enabled || !_stored.Settings.Rules.Any(r => r.Id == id && r.Enabled))
                 throw new InvalidDataException("Save and enable this sensor rule before testing.");
+            (_stored.Settings with { Rules = [_stored.Settings.Rules.Single(r => r.Id == id)] }).Validate(app);
             _tests[id] = (state, DateTimeOffset.UtcNow.AddSeconds(10));
         }
         return await PresentAsync(token);
@@ -215,7 +251,7 @@ public sealed class TapoService : BackgroundService
             {
                 if (stored.Settings.Enabled)
                 {
-                    stored.Settings.Validate(await _app.LoadAsync(scope.Token));
+                    (stored.Settings with { Rules = [] }).Validate(await _app.LoadAsync(scope.Token));
                     var snapshot = await _read(new(stored.Settings.Username, _protector.Unprotect(stored.ProtectedPassword), stored.Settings.Hubs), scope.Token);
                     lock (_sync)
                     {
@@ -248,7 +284,7 @@ public sealed class TapoService : BackgroundService
         while (!token.IsCancellationRequested)
         {
             try { await PresentAsync(token); } catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
-            catch { /* Viewer may be intentionally stopped. Leases expire independently there. */ }
+            catch { lock (_sync) _status = _status with { Delivery = new(DateTimeOffset.UtcNow, false, "Viewer delivery failed. Check Live View and the saved configuration.") }; }
             try { await Task.Delay(1000, token); } catch (OperationCanceledException) { break; }
         }
     }
@@ -263,22 +299,42 @@ public sealed class TapoService : BackgroundService
             {
                 var now = DateTimeOffset.UtcNow;
                 foreach (var id in _tests.Where(t => t.Value.Until <= now).Select(t => t.Key).ToArray()) _tests.Remove(id);
+                var sensorReadings = Status.Sensors;
+                var invalid = new Dictionary<string, string>();
                 try
                 {
-                    _stored.Settings.Validate(app);
-                    effects = _stored.Settings.Rules.SelectMany(rule =>
+                    (_stored.Settings with { Rules = [] }).Validate(app);
+                    foreach (var rule in _stored.Settings.Rules.Where(r => r.Enabled && _stored.Settings.Enabled))
+                        try { (_stored.Settings with { Rules = [rule] }).Validate(app); }
+                        catch (InvalidDataException e) { invalid[rule.Id] = e.Message; Activity.Add(rule.Id, rule.Name, "Configuration", "Invalid target; rule skipped", true); }
+                    effects = _stored.Settings.Rules.Where(r => !invalid.ContainsKey(r.Id)).SelectMany(rule =>
                         TapoRuleEngine.Evaluate(_stored.Settings with { Rules = [rule] }, _tests.TryGetValue(rule.Id, out var test)
-                            ? [new TapoSensor(rule.HubId, rule.DeviceId, rule.Name, "T110", test.State)] : Status.Sensors)).ToArray();
+                            ? [new TapoSensor(rule.HubId, rule.DeviceId, rule.Name, "T110", test.State)] : sensorReadings)).ToArray();
                 }
-                catch (InvalidDataException) { effects = []; }
-                _status = _status with { ActiveRules = effects.Select(e => e.RuleId).ToArray() };
+                catch (InvalidDataException e) { effects = []; invalid["integration"] = e.Message; }
+                foreach (var rule in _stored.Settings.Rules)
+                {
+                    var state = _tests.TryGetValue(rule.Id, out var simulation) ? simulation.State : sensorReadings.FirstOrDefault(s => s.HubId == rule.HubId && s.DeviceId == rule.DeviceId)?.State ?? ContactState.Unavailable;
+                    Activity.Add(rule.Id, rule.Name, "Sensor", !_stored.Settings.Enabled || !rule.Enabled ? "Rule disabled" : (_tests.ContainsKey(rule.Id) ? "Simulated " : "") + state, true);
+                    var effect = effects.FirstOrDefault(e => e.RuleId == rule.Id);
+                    Activity.Add(rule.Id, rule.Name, effect is null ? "State" : "Trigger", effect is null ? "No override requested" : (_tests.ContainsKey(rule.Id) ? "Simulated: " : "Sensor: ") + effect.Action, true);
+                    if (effect is null) { Activity.ResetTransition(rule.Id, "Trigger"); Activity.ResetTransition(rule.Id, "Presentation"); Activity.ResetTransition(rule.Id, "Delivery"); }
+                    else Activity.ResetTransition(rule.Id, "State");
+                }
+                _status = _status with { ActiveRules = effects.Select(e => e.RuleId).ToArray(), RuleErrors = invalid,
+                    ConfigurationError = _loadError ?? (invalid.Count > 0 ? "Some rules need attention; valid rules remain enabled." : null) };
             }
             if (effects.Length == 0 && !_hasPresentedEffects)
                 return new(Guid.Empty, true, "No sensor override active.");
             // Short leases ensure crashes and Controller outages restore the saved wall.
             var presentation = new SensorPresentation(AutomationConfiguration.Hash(app), DateTimeOffset.UtcNow.AddSeconds(5), effects);
             var result = await _viewer(new(Guid.NewGuid(), ViewerCommandType.SensorAutomation, Sensors: presentation), token);
-            if (result.Success) _hasPresentedEffects = effects.Length > 0;
+            foreach (var effect in effects) Activity.Add(effect.RuleId, CurrentSettings.Rules.FirstOrDefault(r => r.Id == effect.RuleId)?.Name ?? "Removed rule", "Delivery", result.Success ? "Viewer acknowledged" : "Viewer delivery failed", true);
+            lock (_sync)
+            {
+                _status = _status with { Delivery = new(DateTimeOffset.UtcNow, result.Success, result.Message) };
+                if (result.Success) _hasPresentedEffects = effects.Length > 0;
+            }
             return result;
         }
         finally { _send.Release(); }
