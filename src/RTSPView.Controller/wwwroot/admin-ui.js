@@ -62,12 +62,13 @@ const adminUi = (() => {
       ['[data-action="start"]','Start viewer','Open the viewer and enable automatic recovery. Unavailable while the viewer is already running.'],
       ['[data-action="restart-cameras"]','Restart all streams','Reconnect every stream without restarting the viewer application.'],
       ['[data-action="enter-fullscreen"]','Enter full screen','Fill the selected display with the live wall.'],
-      ['[data-action="restart"]','Restart viewer','Close and relaunch the viewer, including all streams.'],
+      ['[data-action="restart"]','Restart Live View','Restart the live camera wall and its streams. The dashboard and automatic recovery stay online.'],
+      ['[data-application="restart"]','Restart Application','Restart the live view, dashboard, watchdog, and sensor connections. The dashboard briefly disconnects. Windows stays running.'],
       ['[data-system="reboot"]','Reboot host','Restart Windows and interrupt all applications on this host.']
     ]) {
       const button = document.querySelector(selector), group = document.createElement('div'); group.className = 'restart-action';
       button.before(group); button.textContent = label;
-      const description = document.createElement('small'); description.id = (button.dataset.action || button.dataset.system) + '-help'; description.textContent = help;
+      const description = document.createElement('small'); description.id = (button.dataset.action || button.dataset.system || "application-restart") + '-help'; description.textContent = help;
       button.setAttribute('aria-describedby',description.id); group.append(button,description);
     }
   }

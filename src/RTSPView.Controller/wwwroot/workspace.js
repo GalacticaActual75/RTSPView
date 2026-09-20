@@ -89,7 +89,7 @@ const workspace = (() => {
   function sync() {
     if(!editor)return;
     const active=wallDesigner.active(); if(config&&active){config.layouts=wallDesigner.savedLayouts();config.activeLayoutId=active.id;}
-    const next=JSON.stringify([cameraInventory,active,monitorMode]);
+    const next=JSON.stringify([cameraInventory,active,config?.layouts,monitorMode]);
     if(signature!==next){
       signature=next;
       const list=$('#streamInventory');list.replaceChildren();
@@ -107,8 +107,8 @@ const workspace = (() => {
         row.append(health,placement,action);list.append(row);
       }
       const empty=node('p','', 'empty-state');empty.id='inventoryEmpty';list.append(empty);filter();
-      const picker=$('#monitorLayout');picker.replaceChildren();
-      for(const layout of config?.layouts||[])picker.add(new Option(layout.name,layout.id));picker.value=active?.id||'';
+      const picker=$('#monitorLayout'), chosen=picker.value;picker.replaceChildren();
+      for(const layout of config?.layouts||[])picker.add(new Option(layout.name,layout.id));picker.value=(config?.layouts||[]).some(l=>l.id===chosen)?chosen:active?.id||'';
       for(const item of document.querySelectorAll('[data-monitor-mode]'))item.setAttribute('aria-pressed',String(item.dataset.monitorMode===monitorMode));
       const board=$('#monitorBoard');board.replaceChildren();board.classList.toggle('all-streams',monitorMode==='all');
       board.style.backgroundColor=monitorMode==='wall'?(active?.backgroundColor||'#000000'):'';

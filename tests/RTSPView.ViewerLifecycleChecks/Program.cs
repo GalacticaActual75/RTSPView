@@ -41,11 +41,24 @@ try
     try { await failed.StartAsync(timeout.Token); throw new Exception("Failed launch accepted."); }
     catch (IOException) { }
     Check(state.Paused && !failed.Starting, "failed launch preserves pause and permits retry");
+    var steps = new List<string>();
+    Func<Task> step(string name) => () => { steps.Add(name); return Task.CompletedTask; };
+    await ApplicationRestart.CompleteAsync(step("wait"), step("stop"), () => steps.Add("resume"), () => steps.Add("controller"), () => steps.Add("viewer"));
+    Check(string.Join(",", steps) == "wait,stop,resume,controller,viewer", "application restart waits for controller before stopping viewer and relaunching");
+    steps.Clear();
+    try { await ApplicationRestart.CompleteAsync(() => throw new TimeoutException(), step("stop"), () => steps.Add("resume"), () => steps.Add("controller"), () => steps.Add("viewer")); }
+    catch (TimeoutException) { }
+    Check(steps.Count == 0, "unacknowledged shutdown cannot stop or duplicate running processes");
+    try { await ApplicationRestart.CompleteAsync(step("wait"), () => throw new IOException(), () => steps.Add("resume"), () => steps.Add("controller"), () => steps.Add("viewer")); }
+    catch (IOException) { }
+    Check(string.Join(",", steps) == "wait,resume,controller", "viewer stop failure restores controller and recovery without duplicating viewer");
+    var launch = ApplicationRestart.StartInfo(Path.Combine(directory, "Application with spaces.exe"), new[] { "--urls", "http://localhost:1234", "argument with spaces" });
+    Check(!launch.UseShellExecute && launch.CreateNoWindow && launch.ArgumentList.Last() == "argument with spaces", "restart launches hidden with separate literal arguments");
     var store = new JsonSettingsStore(Path.Combine(directory, "settings.json"));
     Check(!new AppSettings().ShowHoverExitButton, "hover exit is opt-in");
     await store.SaveAsync(new AppSettings { ShowHoverExitButton = true });
     Check((await store.LoadAsync()).ShowHoverExitButton, "hover preference persists");
-    Console.WriteLine("PASS viewer lifecycle: durable pause, automatic/manual launch distinction, queued recovery, concurrent start, running guard, failed start and hover preference.");
+    Console.WriteLine("PASS viewer lifecycle: durable pause, automatic/manual launch distinction, queued recovery, concurrent start, running guard, failed start, hover preference, application restart ordering and failure recovery.");
 }
 finally { Directory.Delete(directory, true); }
 

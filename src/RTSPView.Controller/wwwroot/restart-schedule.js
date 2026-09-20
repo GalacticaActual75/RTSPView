@@ -6,7 +6,7 @@ const restartScheduleUi = (() => {
     const section = document.createElement('section');
     section.id = 'restartScheduleForm'; section.className = 'panel control-panel';
     section.innerHTML = `<h2>Scheduled restarts</h2><p>Schedule the viewer application, Windows host, or both independently. Runs while the Controller is open, even with this browser closed.</p><div class="restart-schedules"></div><p class="restart-help">Host restarts have a 60-second countdown with cancellation in the admin panel. Updates defer restarts; missed runs are skipped after startup or sleep. If both actions are due together, the host restart takes priority. These host-specific schedules are not included in configuration exports.</p>`;
-    for (const [action,title,help] of [['viewer','Viewer application','Restart RTSPView without restarting Windows.'],['host','Windows host','Restart Windows and all applications on this computer.']]) {
+    for (const [action,title,help] of [['viewer','Live View','Restart the live camera wall. The dashboard and watchdog stay running.'],['host','Windows host','Restart Windows and all applications on this computer.']]) {
       const form = document.createElement('form'); forms[action] = form; form.className = 'restart-schedule-card';
       form.setAttribute('aria-labelledby',`restart-title-${action}`);
       form.innerHTML = `<h3 id="restart-title-${action}">${title}</h3><p>${help}</p>

@@ -14,6 +14,12 @@ using RTSPView.Infrastructure;
 using RTSPView.Controller;
 using RTSPView.Hardware;
 
+if (args.FirstOrDefault() == ApplicationRestart.HelperSwitch)
+{
+    await ApplicationRestart.RunHelperAsync(args);
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
@@ -119,7 +125,9 @@ var pawnIo = app.Services.GetRequiredService<PawnIoInstaller>();
 var viewerCommands = app.Services.GetRequiredService<ViewerCommandClient>();
 var auditLog = app.Services.GetRequiredService<RollingFileLogger>();
 var updates = app.Services.GetRequiredService<UpdateService>();
-updates.ExternalMaintenanceActive = async () => (await pawnIo.RemoteStatusAsync()).State is "installing" or "downloading" or "update-installing";
+var applicationRestartPending = false;
+var applicationInstance = Guid.NewGuid().ToString("N");
+updates.ExternalMaintenanceActive = async () => applicationRestartPending || (await pawnIo.RemoteStatusAsync()).State is "installing" or "downloading" or "update-installing";
 var updateMonitor = app.Services.GetRequiredService<UpdateMonitor>();
 var restartScheduler = app.Services.GetRequiredService<RestartScheduler>();
 var scheduleTimeZoneId = TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaZone) ? ianaZone : TimeZoneInfo.Local.Id;
@@ -695,6 +703,33 @@ app.MapPost("/api/restart-schedule/skip", async (string? action) =>
     catch (ArgumentException error) { return Results.BadRequest(new { error = error.Message }); }
     auditLog.Write("AUDIT", "Administrator skipped the next scheduled restart.");
     return Results.Ok(await RestartScheduleStatus());
+}).RequireAuthorization();
+
+app.MapGet("/api/control/application/status", () => Results.Ok(new { instance = applicationInstance })).RequireAuthorization();
+app.MapPost("/api/control/application/restart", async (ConfirmedAction request, HttpContext context, ViewerRuntimeState runtime, CancellationToken token) =>
+{
+    if (!request.Confirmed) return Results.BadRequest(new { error = "Explicit confirmation is required." });
+    if (app.Environment.IsEnvironment("Testing")) return Results.Conflict(new { error = "Application restart is disabled in the test host." });
+    try
+    {
+        var accepted = await updates.TryRunMaintenanceAsync(async () =>
+        {
+            using var gate = await runtime.AcquireAsync(token);
+            if (pawnIo.Busy) throw new InvalidOperationException("Maintenance is active.");
+            ApplicationRestart.Prepare(args);
+            runtime.Pause();
+            applicationRestartPending = true;
+        }, token);
+        if (!accepted) return Results.Conflict(new { error = "Wait for the current update, maintenance, or application restart to finish." });
+        context.Response.OnCompleted(() => { app.Lifetime.StopApplication(); return Task.CompletedTask; });
+        auditLog.Write("AUDIT", "Administrator requested an application restart.");
+        return Results.Ok(new { success = true, instance = applicationInstance, message = "Restarting application. The dashboard will reconnect shortly." });
+    }
+    catch (Exception error)
+    {
+        auditLog.Write("ERROR", "Application restart could not be prepared: " + error.GetType().Name);
+        return Results.Problem("Unable to prepare application restart. RTSPView is still running.", statusCode: 503);
+    }
 }).RequireAuthorization();
 
 app.MapPost("/api/control/system/{action}", (string action, ConfirmedAction request) =>

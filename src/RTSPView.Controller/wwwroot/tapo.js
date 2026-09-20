@@ -57,6 +57,7 @@ const tapoUi = (() => {
   function addHub(hub = {id: id(), name: '', host: ''}) {
     const row = document.createElement('div'); row.className = 'tapo-hub automation-grid'; row.dataset.id = hub.id;
     row.append(input('Hub name', 'hub-name', hub.name), input('Hub address', 'hub-host', hub.host), button('Remove hub', () => { row.remove(); mark(); }));
+    row.querySelector('.hub-name').addEventListener('input', updateSensorChoices);
     row.querySelector('.hub-name').maxLength = 100; row.querySelector('.hub-host').maxLength = 253;
     row.querySelectorAll('input').forEach(el => el.required = true);
     q('.tapo-hubs').append(row);
@@ -101,7 +102,7 @@ const tapoUi = (() => {
     for (const [stateValue, label] of [[2, 'Test open'], [1, 'Test closed'], [0, 'Test unavailable']]) buttons.append(button(label, () => test(card, stateValue)));
     buttons.append(button('Delete rule', () => { card.remove(); mark(); })); card.append(buttons);
     const status = document.createElement('p'); status.className = 'sensor-rule-status'; status.setAttribute('role', 'status'); status.textContent = 'Save before testing. Tests affect the wall for 10 seconds.'; card.append(status);
-    const targets = () => {
+    const targets = (preserveSelection = false) => {
       const action = Number(card.querySelector('.sensor-action').value), clear = Number(card.querySelector('.sensor-clear').value), unknown = Number(card.querySelector('.sensor-unavailable').value);
       overlay.hidden = ![action, clear, unknown].some(a => a === 1 || a === 2); overlay.querySelector('select').required = !overlay.hidden;
       for (const [field, a] of [[layout, action], [clearLayout, clear]]) {
@@ -110,9 +111,10 @@ const tapoUi = (() => {
       }
       focus.hidden = action !== 4 && clear !== 4; focus.querySelector('select').required = !focus.hidden;
       second.hidden = ![[action, layout], [clear, clearLayout]].some(([a, f]) => a === 4 && config?.automationViewLayouts?.some(l => l.id === f.querySelector('select').value && l.focusSlots.length === 2));
-      if (second.hidden) second.querySelector('select').value = '0';
+      if (second.hidden && !preserveSelection) second.querySelector('select').value = '0';
     };
-    card.addEventListener('change', targets); targets(); q('.tapo-rules').append(card);
+    card.refreshTargets = () => targets(true);
+    card.addEventListener('change', () => targets()); targets(); q('.tapo-rules').append(card);
   }
   function draft(discovery = false) {
     const f = form.elements;
@@ -134,7 +136,7 @@ const tapoUi = (() => {
     q('.tapo-connection').open = !s.hubs.length; dirty = false; draftDiscovery = false; form.dataset.dirty = 'false'; loaded = true;
   }
   async function load(appConfig) {
-    init(); if (appConfig) config = {...appConfig};
+    init(); if (appConfig) { config = {...appConfig}; updateTargets(appConfig); }
     try { if (!dirty && !busy) render(await api('/api/tapo')); await refresh(); }
     catch (e) { q('.tapo-message').textContent = e.message; }
   }
@@ -197,7 +199,12 @@ const tapoUi = (() => {
       const status = await api('/api/tapo/status');
       q('.tapo-status').textContent = `${status.connection} · ${status.message} Last checked: ${status.lastChecked ? new Date(status.lastChecked).toLocaleTimeString() : 'Not yet'}`;
       // Keep draft discovery available while editing; status must not remove its choices.
-      if (!dirty && !draftDiscovery) inventory(status);
+      if (!draftDiscovery) inventory(status);
+      else {
+        const merged = new Map(sensors.map(sensor => [JSON.stringify([sensor.hubId, sensor.deviceId]), sensor]));
+        for (const sensor of status.sensors || []) merged.set(JSON.stringify([sensor.hubId, sensor.deviceId]), sensor);
+        sensors = [...merged.values()]; updateSensorChoices();
+      }
       for (const card of q('.tapo-rules').children) {
         const testing = status.testingRules.includes(card.dataset.id), active = status.activeRules.includes(card.dataset.id);
         if (!dirty) card.querySelector('.sensor-rule-status').textContent = testing ? 'Test active · restores sensor state after 10 seconds.' : active ? 'Rule condition active. Highest-priority action for each target wins.' : 'No override active. Tests affect the wall for 10 seconds.';
@@ -220,13 +227,20 @@ const tapoUi = (() => {
     }
     for (const card of q('.tapo-rules').children) {
       card.querySelectorAll('.sensor-layout, .sensor-clear-layout').forEach(el => delete el.dataset.kind);
-      card.dispatchEvent(new Event('change'));
+      card.refreshTargets();
     }
+  }
+  function updateCamera(camera) {
+    if (!config) return;
+    const cameras = (config.cameras || []).slice(0, config.cameraCount || 9);
+    const index = cameras.findIndex(c => c.slot === camera.slot);
+    if (index < 0) cameras.push(camera); else cameras[index] = camera;
+    updateTargets({cameras, cameraCount: cameras.length, deletedCameraSlots: (config.deletedCameraSlots || []).filter(slot => slot !== camera.slot)});
   }
   function updateOverlay(camera) {
     if (!config) return;
     const overlays = [config.doorbellOverlay, config.garageOverlay, ...(config.additionalOverlays || [])].filter(o => o && o.camera.slot !== camera.slot);
     overlays.push({camera}); updateTargets({doorbellOverlay: overlays.find(o => o.camera.slot === 10), garageOverlay: overlays.find(o => o.camera.slot === 11), additionalOverlays: overlays.filter(o => o.camera.slot !== 10 && o.camera.slot !== 11)});
   }
-  return {init, load, refresh, updateTargets, updateOverlay};
+  return {init, load, refresh, updateTargets, updateCamera, updateOverlay};
 })();

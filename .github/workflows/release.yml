@@ -110,7 +110,10 @@ jobs:
         run: node tests/dashboard-ux.checks.cjs
 
       - name: Check viewer control states
-        run: node tests/viewer-controls.checks.cjs
+        run: |
+          node tests/viewer-controls.checks.cjs
+          node tests/application-restart.checks.cjs
+          node tests/related-choices.checks.cjs
 
       - name: Check landscape and portrait presets
         run: |

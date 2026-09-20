@@ -13,7 +13,7 @@ Release channels as of September 20, 2026:
 | Channel | Published version | Availability |
 | --- | --- | --- |
 | Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Promotes the beta dashboard, native stream editor, expanded layout/framing controls, per-layout appearance and Scrypted connector support. Adds intentional viewer exit, manual resume, optional fullscreen hover exit and viewer taskbar identity fixes. |
-| Beta | [1.0.44-beta.5](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.5) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
+| Beta | [1.0.44-beta.6](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.6) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
 
 Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. Unless marked beta, this guide describes stable 1.0.43. Tapo integration and numeric rule priorities require 1.0.44-beta.1 or newer; they are not in stable 1.0.43.
 
@@ -21,7 +21,7 @@ Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/lates
 
 Open **Automation → Tapo** to add both hubs, discover your T110, and view Open, Closed or Unavailable status. A rule can show an overlay while a door is open and hide it when closed, without changing the layout. Rules can also activate a standard wall layout or an automation template with selected focus cameras. Everything runs in Controller after the browser closes; Home Assistant and MQTT are not required for Tapo.
 
-Manage MQTT and Tapo priority together in **Automation → Priority**; 1 is highest. For example, a priority-1 doorbell detection interrupts a priority-2 garage view immediately, even when the garage rule holds its view. A lower-priority view resumes only while its condition or detection timer remains active. Manual camera focus stays above automation.
+Manage MQTT and Tapo priority together in **Automation → Automation Priority**; 1 is highest. For example, a priority-1 doorbell detection interrupts a priority-2 garage view immediately, even when the garage rule holds its view. A lower-priority view resumes only while its condition or detection timer remains active. Manual camera focus stays above automation.
 
 In **1.0.44-beta.3**, Automation has aligned **MQTT**, **Tapo** and **Priority** tabs with enable toggles. Use Priority to drag rules into one order, or use Move up/down, then Save order. The top rule receives priority 1. **Discover hubs on network** finds local H100/H200 candidates before sensor discovery. Both layout editors have **New layout** (blank or preset) and **Add stream**; new tiles default to Fit, preserving explicit sizing on existing layouts.
 
@@ -32,6 +32,8 @@ In **1.0.44-beta.2**, custom overlay masks also follow their host camera's Fit/F
 In **1.0.44-beta.4**, priority editing and guidance live in the Priority tab, and automation help uses the full panel width. **Quick actions** beside Sign out mirrors Maintenance. Restart viewer is disabled while stopped or starting; one full-screen button follows the viewer’s reported mode.
 
 In **1.0.44-beta.5**, each MQTT and Tapo rule has an On/Off switch. Apply or save to persist it. Tapo discovery buttons and hub rows have clearer spacing. **Remove Tapo account** clears RTSPView’s saved email/password and disables Tapo automation while keeping saved hubs and rules.
+
+In **1.0.44-beta.6**, **Restart Live View** restarts the camera wall, while **Restart Application** restarts the wall, dashboard, watchdog and sensor readers. Quick actions matches the header buttons. Stream, sensor and layout choices refresh while preserving rule drafts. **Automation Priority** shows priorities by row position; Save order applies the displayed order.
 
 ### Finding controls after upgrading
 
@@ -472,7 +474,7 @@ Under **Settings → Maintenance**, **Scheduled restarts** can restart the Viewe
 
 Start with the default streaming settings. For an unreliable connection, try TCP and increase **Cache (ms)** to trade latency for smoother playback. **Startup timeout**, **Stall timeout** and **Maximum backoff** control connection/recovery timing; **Low latency** changes playback tuning. **Composite stream compatibility** forces TCP with a 3000 ms buffer and disables low-latency tuning for rebroadcast/composite streams. More streams and larger resolutions increase network, decoder and graphics load.
 
-Use **Restart stream** on a camera for a single-feed problem, **Restart all cameras** for all feeds, or **Restart viewer** for the display process. **Reboot host** restarts the entire host. The dashboard also shows health information and recent logs. Browser thumbnails and layout/overlay previews are snapshots, not full-motion browser video.
+Use **Restart stream** on a camera for a single-feed problem, **Restart all streams** for all feeds, or **Restart Live View** for the display process. **Restart Application** restarts the live view and Controller, including its watchdog, MQTT/Tapo readers, and dashboard. It resumes automatic viewer recovery, briefly disconnects the dashboard, and reconnects without discarding browser edits. This requires an installed application and waits for updates/maintenance to finish. The optional privileged temperature/installer service stays running. **Reboot host** restarts the entire host. The dashboard also shows health information and recent logs. Browser thumbnails and layout/overlay previews are snapshots, not full-motion browser video.
 
 **Show stream names** controls labels on the wall. Detailed statistics and connection/stale-video errors are shown in the shared diagnostics panel. These diagnostics are separate from picture-in-picture video overlays.
 

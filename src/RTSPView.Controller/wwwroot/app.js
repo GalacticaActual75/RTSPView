@@ -229,7 +229,7 @@ async function addOverlay(){
 async function addCameraEntry(){
  const button=q('#addCamera'),state=q('#controlState');button.disabled=true;
  try{
-  const camera=await api('/api/cameras',{method:'POST'});cameraInventory.push(camera);
+  const camera=await api('/api/cameras',{method:'POST'});cameraInventory.push(camera);automationUi.updateCamera(camera);
   const card=cameraCard(camera);grid.append(card);card.querySelector('.camera-settings').open=true;
   q('#cameraCount').textContent=cameraInventory.length+' streams';
   for(const select of document.querySelectorAll('select[name="hostCameraSlot"]'))select.add(new Option(camera.name,camera.slot));
@@ -244,6 +244,23 @@ async function updateTelemetry(){automationUi.refresh();restartScheduleUi.refres
 function pct(v){return v==null?'Unavailable':`${v.toFixed(1)}%`}function rate(v){return v==null?'Unavailable':`${v.toFixed(2)} Mb/s`}
 async function runControl(url,body={},confirmation){if(confirmation&&!confirm(confirmation))return;const state={set textContent(value){viewerControls.message(value)}};state.textContent='Sending command...';try{const result=await api(url,{method:'POST',body:JSON.stringify(body)});state.textContent=result.message||'Command completed.'}catch(err){state.textContent=err.message}}
 for(const button of document.querySelectorAll('[data-action]'))button.onclick=async()=>{if(button.disabled)return;const action=button.dataset.action;viewerControls.busy(true);try{await runControl(`/api/control/viewer/${action}`,{},button.dataset.confirm);await updateTelemetry();}finally{viewerControls.busy(false);}};
+for (const button of document.querySelectorAll('[data-application]')) button.onclick = async () => {
+ if (button.disabled || !confirm('Restart Application? The live view, dashboard, watchdog, and sensor connections will restart. Windows will stay running.')) return;
+ viewerControls.busy(true);
+ try {
+  const result = await api('/api/control/application/restart', {method:'POST', body:JSON.stringify({confirmed:true})});
+  viewerControls.message(result.message);
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  let connected = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+   try { const status = await api('/api/control/application/status', {signal:AbortSignal.timeout(3000)}); if (status.instance !== result.instance) { connected = true; break; } } catch {}
+   await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  await updateTelemetry();
+  viewerControls.message(connected ? 'Application restarted. Dashboard reconnected.' : 'The dashboard has not reconnected yet. Wait a moment and refresh, or open RTSPView from its desktop shortcut.');
+ } catch (error) { viewerControls.message(error.message); }
+ finally { viewerControls.busy(false); }
+};
 for(const button of document.querySelectorAll('[data-system]'))button.onclick=()=>runControl(`/api/control/system/${button.dataset.system}`,{confirmed:true},'Reboot the host? This will interrupt every stream.');
 q('#displayForm').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,state=q('#displayState'),payload={diagnosticsAutoOpenExcludedSlots:[...form.querySelectorAll('[data-diagnostics-exclude]:checked')].map(input=>Number(input.value)),startFullScreen:form.elements.startFullScreen.checked,preferredMonitor:Number(form.elements.preferredMonitor.value),hideMouseCursor:form.elements.hideMouseCursor.checked,mouseCursorHideSeconds:Number(form.elements.mouseCursorHideSeconds.value),showCameraNames:form.elements.showCameraNames.checked,showCameraStats:form.elements.showCameraStats.checked,showTileBorders:form.elements.showTileBorders.checked,keepViewerAlwaysOnTop:form.elements.keepViewerAlwaysOnTop.checked,showHoverExitButton:form.elements.showHoverExitButton.checked};state.textContent='Saving...';try{await api('/api/display',{method:'PUT',body:JSON.stringify(payload)});form.markSaved?.();state.textContent='Applied — viewer updating'}catch(err){state.textContent=err.message}};
 async function loadLogs(){try{const result=await api('/api/logs?lines=400');q('#logView').textContent=result.lines.join('\n');q('#logView').scrollTop=q('#logView').scrollHeight}catch(err){q('#logView').textContent=err.message}}

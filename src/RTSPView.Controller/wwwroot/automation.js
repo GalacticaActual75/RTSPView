@@ -156,7 +156,7 @@ const automationUi = (() => {
     const testControls = document.createElement('div'); testControls.className = 'control-buttons rule-test-controls';
     const testSources=rule.anyConfiguredSource?[...new Map(savedRules.flatMap(r=>r.sources).map(s=>[s.cameraSlot,s])).values()]:rule.sources;
     const testSource = optionSelect(testSources.map(s => ({slot:s.cameraSlot, name:inventory.find(c => c.slot === s.cameraSlot)?.name || 'Camera'})), testSources[0]?.cameraSlot, 'Test source camera');
-    testSource.required = false;
+    testSource.className = 'rule-test-source'; testSource.required = false;
     testSource.hidden = testSources.length < 2;
     const testButton = document.createElement('button'); testButton.type = 'button'; testButton.className = 'secondary'; testButton.textContent = 'Test';
     testButton.setAttribute('aria-label', 'Test ' + rule.name);
@@ -230,6 +230,7 @@ const automationUi = (() => {
       if (config) { viewLayouts = config.automationViewLayouts || []; overlays = [config.doorbellOverlay, config.garageOverlay, ...(config.additionalOverlays || [])].map(o => o.camera).filter(c => c.rtspUrl);
         inventory = [...layoutStreamInventory(config), ...overlays].filter(c => c.rtspUrl); }
       if (!dirty && !busy) render(await api('/api/automation'));
+      else if (config) refreshStreamChoices();
       await refresh();
     } catch (e) { message.textContent = e.message; }
   }
@@ -387,10 +388,16 @@ const automationUi = (() => {
         const value=select.value, replacement=optionSelect(inventory,Number(value),'Source camera');
         select.replaceChildren(...replacement.options);select.value=value;
       }
+      const test = card.querySelector('.rule-test-source');
+      if (test) for (const option of test.options) {
+        const camera = inventory.find(c => String(c.slot) === option.value);
+        if (option.value) option.textContent = camera ? camera.name + ' · #' + camera.slot : 'Unavailable stream (' + option.value + ')';
+      }
       renderActionTarget(card);
     }
   }
   function updateCamera(camera) {
+    tapoUi.updateCamera(camera);
     inventory=inventory.filter(c=>c.slot!==camera.slot);
     if(camera.rtspUrl)inventory.push(camera);
     refreshStreamChoices();

@@ -30,6 +30,12 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await session(a)).passwordChangeRequired,false);
   const same=await request(a,'/api/auth/password','POST',{currentPassword:password,newPassword:password});assert.equal(same.status,400);assert.equal(same.json.error,'The new password must differ from your current password.');
   const wrong=await request(a,'/api/auth/password','POST',{currentPassword:'wrong-current',newPassword:'another'});assert.equal(wrong.status,400);assert.equal(wrong.json.error,'Current password is incorrect.');
+  assert.equal((await request(a,'/api/control/application/restart','POST',{confirmed:false})).status,400,'restart needs explicit confirmation');
+  assert.equal((await request(a,'/api/control/application/restart','POST',{confirmed:true})).status,409,'test host cannot restart real processes');
+  const instance=(await request(a,'/api/control/application/status')).json.instance;
+  assert.equal(typeof instance,'string');
+  const savedCsrf=a.csrf;a.csrf='';
+  assert.equal((await request(a,'/api/control/application/restart','POST',{confirmed:true})).status,400,'restart requires CSRF');a.csrf=savedCsrf;
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
   const appearanceLayouts=config.layouts.map(l=>({...l,borderColor:'#ff0000',backgroundColor:'#123456',showTileBorders:false}));
   const appearanceSave=await request(a,'/api/layouts','PUT',{layouts:appearanceLayouts,activeLayoutId:config.activeLayoutId});
