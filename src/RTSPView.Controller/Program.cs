@@ -322,6 +322,7 @@ app.MapPost("/api/update/install", async (UpdateInstallRequest request, Cancella
 
 app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();
 app.MapTapo(configGate);
+app.MapAutomationPriorities(configGate);
 app.MapGet("/api/automation", (AutomationService automation) => Results.Ok(automation.Configuration)).RequireAuthorization();
 app.MapGet("/api/automation/status", (AutomationService automation) => Results.Ok(automation.Status)).RequireAuthorization();
 app.MapGet("/api/automation/diagnostics", (HttpContext context, AutomationService automation) =>
@@ -465,7 +466,7 @@ app.MapDelete("/api/overlays/{slot:int}", async (int slot, AutomationService aut
     await configGate.WaitAsync();
     try
     {
-        if (automation.UsesOverlay(slot) || tapo.UsesOverlay(slot)) return Results.BadRequest(new { error = "An automation rule uses this overlay or its original stream. Remove that reference before deleting it." });
+        if (automation.UsesOverlay(slot) || tapo.UsesOverlay(slot) || tapo.UsesCamera(StreamCatalog.SourceSlot(slot))) return Results.BadRequest(new { error = "An automation rule uses this overlay or its original stream. Remove that reference before deleting it." });
         var settings = await settingsStore.LoadAsync();
         await settingsStore.SaveAsync(StreamCatalog.DeleteOverlay(settings, slot));
         try { File.Delete(Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg")); } catch (IOException) { }
@@ -566,12 +567,12 @@ app.MapPost("/api/cameras", async () =>
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
-app.MapDelete("/api/cameras/{slot:int}", async (int slot, AutomationService automation) =>
+app.MapDelete("/api/cameras/{slot:int}", async (int slot, AutomationService automation, TapoService tapo) =>
 {
     await configGate.WaitAsync();
     try
     {
-        if (automation.UsesCamera(slot)) return Results.BadRequest(new { error = "An automation rule uses this stream. Remove it from the rule before deleting it." });
+        if (automation.UsesCamera(slot) || tapo.UsesCamera(slot)) return Results.BadRequest(new { error = "An automation rule uses this stream. Remove it from the rule before deleting it." });
         var settings = await settingsStore.LoadAsync();
         var updated = StreamCatalog.DeleteCamera(settings, slot).Normalize();
         await settingsStore.SaveAsync(updated);
@@ -604,16 +605,16 @@ app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
 }).RequireAuthorization();
 
 app.MapGet("/api/automation/layouts", async () => Results.Ok(new { layouts = (await settingsStore.LoadAsync()).AutomationViewLayouts })).RequireAuthorization();
-app.MapPut("/api/automation/layouts", async (WallLayoutsRequest request, AutomationService automation) =>
+app.MapPut("/api/automation/layouts", async (WallLayoutsRequest request, AutomationService automation, TapoService tapo) =>
 {
     await configGate.WaitAsync();
     try
     {
         var automationLayouts = AutomationLayouts.Normalize(request.Layouts);
-        if (automationLayouts.Any(l => l.FocusSlots.Length < 2 && automation.RequiresSecondFocus(l.Id)))
+        if (automationLayouts.Any(l => l.FocusSlots.Length < 2 && (automation.RequiresSecondFocus(l.Id) || tapo.RequiresSecondFocus(l.Id))))
             return Results.BadRequest(new { error = "A rule assigns a Focus 2 camera to this layout. Remove that assignment before removing its second focus tile." });
         var settings = await settingsStore.LoadAsync();
-        if (settings.AutomationViewLayouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && automation.UsesLayout(l.Id)))
+        if (settings.AutomationViewLayouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && (automation.UsesLayout(l.Id) || tapo.UsesAutomationLayout(l.Id))))
             return Results.BadRequest(new { error = "A rule uses this layout. Choose another layout in that rule before deleting it." });
         await settingsStore.SaveAsync(settings with { AutomationViewLayouts = automationLayouts });
         auditLog.Write("AUTOMATION", "Automation layouts saved");

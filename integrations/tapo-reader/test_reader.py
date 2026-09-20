@@ -26,6 +26,19 @@ class ContactChecks(unittest.TestCase):
 
 
 class HubChecks(unittest.IsolatedAsyncioTestCase):
+    async def test_network_discovery_without_credentials(self):
+        devices = {"192.0.2.10": SimpleNamespace(model="H100", alias="Hall", disconnect=AsyncMock()),
+                   "192.0.2.11": SimpleNamespace(model="H200", alias=None, disconnect=AsyncMock()),
+                   "192.0.2.12": SimpleNamespace(model="P100", alias="Plug", disconnect=AsyncMock())}
+        with patch("reader.Discover.discover", new=AsyncMock(return_value=devices)) as discover:
+            result = await Reader().read({"discoverHubs": True})
+            self.assertEqual([h["name"] for h in result["discoveredHubs"]], ["Hall", "H200"])
+            self.assertEqual(len({h["id"] for h in result["discoveredHubs"]}), 2)
+            self.assertEqual(result["sensors"], [])
+            discover.assert_awaited_once_with(discovery_timeout=5, timeout=5)
+            for device in devices.values():
+                device.disconnect.assert_awaited_once()
+
     async def test_both_hubs_reuse_and_failure(self):
         first = SimpleNamespace(model="H100", children=[child(True)], update=AsyncMock(), disconnect=AsyncMock())
         second = SimpleNamespace(model="H200", children=[child(False)], update=AsyncMock(), disconnect=AsyncMock())

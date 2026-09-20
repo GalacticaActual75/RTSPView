@@ -11,7 +11,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const session=async()=>{const r=await request('/api/session');csrf=r.data.csrfToken;return r;};
  try{
   let ready=false;for(let i=0;i<100;i++){try{await session();ready=true;break}catch{await new Promise(r=>setTimeout(r,100))}}assert(ready);
-  for(const [route,method,body]of [['/api/tapo','GET'],['/api/tapo/status','GET'],['/api/tapo','PUT',{}],['/api/tapo/discover','POST',{}],['/api/tapo/rules/example/test','POST',{state:2}]])assert.equal((await request(route,method,body)).status,401,route);
+  for(const [route,method,body]of [['/api/automation/priorities','GET'],['/api/automation/priorities','PUT',{}],['/api/tapo/discover-hubs','POST',{}],['/api/tapo','GET'],['/api/tapo/status','GET'],['/api/tapo','PUT',{}],['/api/tapo/discover','POST',{}],['/api/tapo/rules/example/test','POST',{state:2}]])assert.equal((await request(route,method,body)).status,401,route);
   assert.equal((await request('/api/auth/login','POST',{password:'admin'})).status,200);await session();
   assert.equal((await request('/api/tapo')).status,403,'Setup gate');
   const admin='test-'+crypto.randomUUID();
@@ -29,6 +29,27 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   const saved=await request('/api/tapo','PUT',{settings,password:secret});assert.equal(saved.status,200);assert.equal(saved.data.hasPassword,true);assert.equal(saved.data.settings.rules[0].priority,1);
   assert(!JSON.stringify(saved.data).includes(secret));assert(!fs.readFileSync(path.join(directory,'tapo.json'),'utf8').includes(secret),'Password encrypted at rest');
   assert.equal((await request('/api/tapo','PUT',{settings})).data.hasPassword,true,'Blank password retains saved secret');
+  for(const route of ['/api/automation/priorities','/api/tapo/discover-hubs']) assert.equal((await request(route,route.endsWith('discover-hubs')?'POST':'PUT',{},false)).status,400,'CSRF on new endpoints');
+  const mqtt=(await request('/api/automation')).data.settings;
+  mqtt.rules=[{id:crypto.randomUUID(),name:'Person rule',enabled:true,priority:50,action:0,overlaySlot:10,sources:[{cameraSlot:10,topic:'test/person',requiredZone:''}],clearMinutes:1}];
+  assert.equal((await request('/api/automation','PUT',{settings:mqtt})).status,200);
+  const order=(await request('/api/automation/priorities')).data;
+  assert.equal(order.rules.length,2);
+  const reordered=await request('/api/automation/priorities','PUT',{...order,rules:[...order.rules].reverse()});assert.equal(reordered.status,200);
+  assert.equal((await request('/api/automation')).data.settings.rules[0].priority,1);
+  assert.equal((await request('/api/tapo')).data.settings.rules[0].priority,2);
+  assert.equal((await request('/api/tapo')).data.hasPassword,true);
+  assert.equal((await request('/api/automation/priorities','PUT',order)).status,400,'Stale order rejected');
+  const fresh=(await request('/api/automation/priorities')).data;
+  assert.equal((await request('/api/automation/priorities','PUT',{...fresh,rules:[fresh.rules[0],fresh.rules[0]]})).status,400,'Duplicate order rejected');
+  for(const camera of config.cameras.slice(0,2))assert.equal((await request('/api/cameras/'+camera.slot,'PUT',{...camera,enabled:true,rtspUrl:'rtsp://camera.example/live'})).status,200);
+  const dual=config.automationViewLayouts.find(l=>l.focusSlots.length===2);
+  const focused={...rule,action:4,layoutId:dual.id,focusCameraSlot:config.cameras[0].slot,secondFocusCameraSlot:config.cameras[1].slot};
+  assert.equal((await request('/api/tapo','PUT',{settings:{...settings,rules:[focused]}})).status,200,'Automation layout saved');
+  assert.equal((await request('/api/cameras/'+config.cameras[0].slot,'DELETE',{})).status,400,'Referenced focus camera protected');
+  assert.equal((await request('/api/automation/layouts','PUT',{layouts:config.automationViewLayouts.filter(l=>l.id!==dual.id),activeLayoutId:config.automationViewLayouts[0].id})).status,400,'Referenced template protected');
+  assert.equal((await request('/api/tapo','PUT',{settings:{...settings,rules:[{...focused,secondFocusCameraSlot:focused.focusCameraSlot}]}})).status,400,'Duplicate focus camera rejected');
+  assert.equal((await request('/api/tapo','PUT',{settings})).status,200);
   assert.equal((await request('/api/tapo','PUT',{settings:{...settings,rules:[{...rule,priority:0}]}})).status,400,'Invalid priority');
   assert.equal((await request('/api/tapo','PUT',{settings:{...settings,rules:[{...rule,overlaySlot:999}]}})).status,400,'Invalid overlay');
   assert.equal((await request('/api/tapo/discover','POST',{settings:{...settings,hubs:[]}})).status,400,'Invalid discovery without contacting network');

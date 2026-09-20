@@ -1,11 +1,11 @@
 namespace RTSPView.Core;
 
 public enum ContactState { Unavailable, Closed, Open }
-public enum SensorAction { Restore, ShowOverlay, HideOverlay, Layout }
+public enum SensorAction { Restore, ShowOverlay, HideOverlay, Layout, AutomationLayout }
 public sealed record TapoHub(string Id, string Name, string Host);
 public sealed record TapoSensor(string HubId, string DeviceId, string Name, string Model, ContactState State);
 public sealed record TapoHubStatus(string Id, string Name, string Model, bool Connected, string Message);
-public sealed record TapoSnapshot(TapoHubStatus[] Hubs, TapoSensor[] Sensors);
+public sealed record TapoSnapshot(TapoHubStatus[] Hubs, TapoSensor[] Sensors, TapoHub[]? DiscoveredHubs = null);
 public sealed record TapoRule
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
@@ -21,6 +21,8 @@ public sealed record TapoRule
     public string LayoutId { get; init; } = "";
     public string ClearLayoutId { get; init; } = "";
     public int Priority { get; init; } = 50;
+    public int FocusCameraSlot { get; init; }
+    public int SecondFocusCameraSlot { get; init; }
 }
 public sealed record TapoSettings
 {
@@ -60,11 +62,22 @@ public sealed record TapoSettings
             if ((r.Action == SensorAction.Layout && !app.Layouts.Any(l => l.Id == r.LayoutId)) ||
                 (r.ClearAction == SensorAction.Layout && !app.Layouts.Any(l => l.Id == r.ClearLayoutId)))
                 throw new InvalidDataException("Select an available saved wall layout.");
+            if (r.Action == SensorAction.AutomationLayout || r.ClearAction == SensorAction.AutomationLayout)
+            {
+                foreach (var id in new[] { r.Action == SensorAction.AutomationLayout ? r.LayoutId : null, r.ClearAction == SensorAction.AutomationLayout ? r.ClearLayoutId : null }.Where(id => id is not null))
+                    if (!app.AutomationViewLayouts.Any(l => l.Id == id)) throw new InvalidDataException("Select an available automation layout.");
+                if (!AutomationConfiguration.CanFocus(app, AutomationAction.FocusedLayout, r.FocusCameraSlot) ||
+                    (r.SecondFocusCameraSlot != 0 && (r.SecondFocusCameraSlot == r.FocusCameraSlot || !AutomationConfiguration.CanFocus(app, AutomationAction.FocusedLayout, r.SecondFocusCameraSlot))))
+                    throw new InvalidDataException("Select configured, distinct focus cameras.");
+                if (r.SecondFocusCameraSlot != 0 && !app.AutomationViewLayouts.Any(l => l.FocusSlots.Length == 2 &&
+                    ((r.Action == SensorAction.AutomationLayout && l.Id == r.LayoutId) || (r.ClearAction == SensorAction.AutomationLayout && l.Id == r.ClearLayoutId))))
+                    throw new InvalidDataException("Select a two-focus automation layout for the second camera.");
+            }
         }
     }
 }
 
-public sealed record SensorEffect(string RuleId, SensorAction Action, int OverlaySlot, string LayoutId, int Priority);
+public sealed record SensorEffect(string RuleId, SensorAction Action, int OverlaySlot, string LayoutId, int Priority, int FocusCameraSlot = 0, int SecondFocusCameraSlot = 0);
 public sealed record SensorPresentation(string ConfigurationHash, DateTimeOffset ExpiresAt, SensorEffect[] Effects);
 
 public static class TapoRuleEngine
@@ -78,7 +91,7 @@ public static class TapoRuleEngine
         {
             var state = readings.TryGetValue((r.HubId, r.DeviceId), out var s) ? s.State : ContactState.Unavailable;
             var action = state == ContactState.Unavailable ? r.UnavailableAction : state == r.Match ? r.Action : r.ClearAction;
-            return new SensorEffect(r.Id, action, r.OverlaySlot, state == r.Match ? r.LayoutId : r.ClearLayoutId, r.Priority);
+            return new SensorEffect(r.Id, action, r.OverlaySlot, state == r.Match ? r.LayoutId : r.ClearLayoutId, r.Priority, r.FocusCameraSlot, r.SecondFocusCameraSlot);
         }).Where(e => e.Action != SensorAction.Restore).OrderBy(e => e.Priority).ThenBy(e => e.RuleId, StringComparer.Ordinal).ToArray();
     }
 }
@@ -97,6 +110,11 @@ public sealed class SensorPresentationState
     {
         var sensor = Active(now).FirstOrDefault(e => e.Action == SensorAction.Layout);
         return sensor is not null && (detection is null || sensor.Priority <= detection.Priority) ? sensor.LayoutId : null;
+    }
+    public SensorEffect? WinningView(AutomationOverlayLease? detection, DateTimeOffset now)
+    {
+        var sensor = Active(now).FirstOrDefault(e => e.Action is SensorAction.Layout or SensorAction.AutomationLayout);
+        return sensor is not null && (detection is null || sensor.Priority <= detection.Priority) ? sensor : null;
     }
     public bool? WinningOverlay(int slot, int? detectionPriority, DateTimeOffset now)
     {

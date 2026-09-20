@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import sys
+import uuid
 
 from kasa import Discover
 from kasa.exceptions import AuthenticationError
@@ -40,6 +41,21 @@ class Reader:
         self.devices.clear()
 
     async def read(self, request):
+        if request.get("discoverHubs"):
+            devices = await Discover.discover(discovery_timeout=5, timeout=5)
+            try:
+                hubs = []
+                for host, device in devices.items():
+                    model = str(device.model)
+                    if model.upper().startswith(("H100", "H200")):
+                        hubs.append({"id": str(uuid.uuid4()), "name": str(device.alias or model)[:100], "host": host})
+                return {"hubs": [], "sensors": [], "discoveredHubs": hubs[:64]}
+            finally:
+                for device in devices.values():
+                    try:
+                        await device.disconnect()
+                    except Exception:
+                        pass
         username, password = request["username"], request["password"]
         hubs = request["hubs"]
         if len(hubs) > 8:

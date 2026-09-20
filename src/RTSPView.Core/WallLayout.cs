@@ -7,7 +7,7 @@ public sealed record WallTile
     public int Column { get; init; }
     public int RowSpan { get; init; } = 1;
     public int ColumnSpan { get; init; } = 1;
-    public string Sizing { get; init; } = "original";
+    public string Sizing { get; init; } = "fit";
     public int ZoomPercent { get; init; } = 100;
     public int HorizontalPositionPercent { get; init; } = 50;
     public int VerticalPositionPercent { get; init; } = 50;

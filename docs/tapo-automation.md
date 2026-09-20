@@ -1,11 +1,11 @@
-# Tapo sensor automations (1.0.44-beta.1)
+# Tapo sensor automations (1.0.44-beta.3)
 
-Configure direct Tapo access in **Automation → Tapo door sensors**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. This beta has automated reader, Controller, HTTP and native-viewer tests; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
+Configure direct Tapo access in **Automation → Tapo**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. This beta has automated reader, Controller, HTTP and native-viewer tests; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
 
 ## Connect and discover
 
 1. Expand **Tapo hubs and account**. Enter your Tapo account email and password in RTSPView's administrator interface.
-2. Add each hub's name and IPv4 address or hostname (no URL scheme or port). Add both H100 and H200 if you do not know where the T110 is paired. Up to eight hubs are supported.
+2. Select **Discover hubs on network**, then add the discovered hubs you want. Discovery runs on the RTSPView computer without account credentials and does not save or activate anything. For other subnets, blocked broadcasts or undiscovered hubs, use **Add hub manually** with a name and IPv4 address or hostname (no URL scheme or port). Add both H100 and H200 if you do not know where the T110 is paired. Up to eight hubs are supported.
 3. Select **Test connection & discover sensors**. This reads the draft connection without saving or firing actions. Each T110 is labeled with its hub; hub failures are reported separately.
 4. Add sensor rules, enable **Tapo sensor automations**, and save. MQTT has a separate enable switch.
 
@@ -30,9 +30,13 @@ No layout target is required. The overlay still needs its host tile to be visibl
 
 ## Change the layout
 
-Create a saved standard wall layout under **Layouts**, then select **Activate saved layout** and its target in the sensor rule. On clear, restore normal behavior or select another saved layout. Sensor layout changes are temporary and do not overwrite the saved active layout. To control a layout and overlay simultaneously, create two rules for the same sensor.
+Use **Layouts → New layout** to create a named blank layout or start from a preset, in either Standard View or Automation layouts. New tiles default to Fit; existing explicit sizing remains unchanged.
+
+Choose **Activate standard layout** and its target in the sensor rule, or **Activate automation layout** and a template. Automation templates expose **Focus 1 camera**, plus **Focus 2 camera** when the template has two focus slots. The second focus can be left empty; selected cameras must be different. The same focus selections apply to matching and clearing actions. On clear, restore normal behavior or select another saved layout. Sensor layout changes are temporary and do not overwrite the saved active layout. To control a layout and overlay simultaneously, create two rules for the same sensor.
 
 ## Priorities
+
+**Automation → Priority** lists saved MQTT and Tapo rules together. Drag to reorder or use Move up/down, then **Save order** to assign priority 1 to the top rule, 2 to the next, and so on. Save or discard edits in MQTT/Tapo first. Disabled rules retain their place. Switching subtabs preserves drafts; a stale priority save is rejected if another session changed the rules.
 
 - Every MQTT and Tapo rule has priority **1–100; 1 is highest**. Existing rules default to 50.
 - Priority applies to competing wall views and, separately, to actions targeting the same overlay. Independent overlays can remain visible together.

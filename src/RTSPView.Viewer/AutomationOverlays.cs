@@ -10,10 +10,13 @@ public partial class MainWindow
     private string _focusLayoutSignature = "";
     private readonly SensorPresentationState _sensorPresentation = new();
     private string? _sensorLayout;
+    private SensorEffect? _sensorView;
     private Dictionary<int, bool> _sensorOverlays = [];
     private int? EffectiveFocusedSlot => _focusedSlot ?? (_sensorLayout is null && _automatedFocus?.Action == AutomationAction.FullScreen ? _automatedFocus.Slot : null);
     private WallLayout EffectiveLayout => !_focusedSlot.HasValue && _sensorLayout is not null
-        ? _settings.Layouts.FirstOrDefault(l => l.Id == _sensorLayout) ?? _settings.Layouts.Single(l => l.Id == _settings.ActiveLayoutId)
+        ? _sensorView?.Action == SensorAction.AutomationLayout
+            ? AutomationLayouts.Resolve(_settings, _settings.AutomationViewLayouts.Single(l => l.Id == _sensorLayout), new[] { _sensorView.FocusCameraSlot, _sensorView.SecondFocusCameraSlot })
+            : _settings.Layouts.FirstOrDefault(l => l.Id == _sensorLayout) ?? _settings.Layouts.Single(l => l.Id == _settings.ActiveLayoutId)
         : !_focusedSlot.HasValue && _automatedFocus?.Action == AutomationAction.FocusedLayout
         ? ResolveAutomationLayout()
         : _settings.Layouts.Single(l => l.Id == _settings.ActiveLayoutId);
@@ -35,7 +38,10 @@ public partial class MainWindow
         if (p is null || p.Effects is null || p.Effects.Length > 32 || p.ConfigurationHash != AutomationConfiguration.Hash(_settings) ||
             p.ExpiresAt <= now || p.ExpiresAt > now.AddSeconds(30) || p.Effects.Any(e => e is null ||
                 !Enum.IsDefined(e.Action) || e.Priority is < 1 or > 100 ||
-                (e.Action == SensorAction.Layout ? !_settings.Layouts.Any(l => l.Id == e.LayoutId) :
+                (e.Action == SensorAction.AutomationLayout ? !_settings.AutomationViewLayouts.Any(l => l.Id == e.LayoutId) ||
+                    !AutomationConfiguration.CanFocus(_settings, AutomationAction.FocusedLayout, e.FocusCameraSlot) ||
+                    (e.SecondFocusCameraSlot != 0 && (e.SecondFocusCameraSlot == e.FocusCameraSlot || !AutomationConfiguration.CanFocus(_settings, AutomationAction.FocusedLayout, e.SecondFocusCameraSlot))) :
+                 e.Action == SensorAction.Layout ? !_settings.Layouts.Any(l => l.Id == e.LayoutId) :
                  e.Action != SensorAction.Restore && !_settings.AllOverlays().Any(o => o.Camera.Slot == e.OverlaySlot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl)))))
             return new(command.Id, false, "Sensor target or configuration is unavailable.");
         _sensorPresentation.Update(p);
@@ -70,12 +76,14 @@ public partial class MainWindow
     {
         var now = DateTimeOffset.UtcNow;
         var focus = _focusedSlot.HasValue ? null : _automationPresentation.Focus(now);
-        var sensorLayout = _sensorPresentation.WinningLayout(focus, now);
+        var sensorView = _sensorPresentation.WinningView(focus, now);
+        var sensorLayout = sensorView?.LayoutId;
         var sensorOverlays = _settings.AllOverlays().Select(o => (Slot: o.Camera.Slot,
                 Enabled: _sensorPresentation.WinningOverlay(o.Camera.Slot, _automationPresentation.OverlayPriority(o.Camera.Slot, now), now)))
             .Where(o => o.Enabled.HasValue).ToDictionary(o => o.Slot, o => o.Enabled!.Value);
         var sensorChanged = _sensorOverlays.Count != sensorOverlays.Count || _sensorOverlays.Any(p => !sensorOverlays.TryGetValue(p.Key, out var v) || v != p.Value);
-        var sensorLayoutChanged = sensorLayout != _sensorLayout;
+        var sensorLayoutChanged = sensorView != _sensorView;
+        _sensorView = sensorView;
         _sensorLayout = sensorLayout; _sensorOverlays = sensorOverlays;
         var active = _automationPresentation.ActiveSlots(DateTimeOffset.UtcNow);
         var signature = focus?.Action == AutomationAction.FocusedLayout

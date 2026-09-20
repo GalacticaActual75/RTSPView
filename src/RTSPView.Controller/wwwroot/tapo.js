@@ -24,7 +24,7 @@ const tapoUi = (() => {
     form = document.createElement('form'); form.id = 'tapoForm'; form.className = 'panel control-panel';
     form.innerHTML = `<h2>Tapo door sensors</h2>
       <p>Read T110 sensors directly through H100/H200 hubs. Home Assistant is not required.</p>
-      <label class="tapo-enable"><input type="checkbox" name="enabled"> Enable Tapo sensor automations</label>
+      <label class="tapo-enable"><input type="checkbox" name="enabled" role="switch" class="automation-toggle"> Enable Tapo sensor automations <span class="toggle-state" aria-hidden="true"></span></label>
       <p class="tapo-status" role="status">Loading sensor status…</p>
       <div class="tapo-inventory"></div>
       <h3>Sensor rules</h3><p>For an overlay only while a door is open, choose Open → Show overlay and When the state clears → Hide overlay. No layout change is needed. Restore normal behavior returns to the saved overlay setting and other active rules.</p>
@@ -36,8 +36,10 @@ const tapoUi = (() => {
       <label>Tapo password<input name="password" type="password" maxlength="1024" autocomplete="new-password"></label>
       <label>Check interval (seconds)<input name="pollSeconds" type="number" min="5" max="60" step="1" value="5" required></label></div>
       <label><input type="checkbox" name="clearPassword"> Remove saved password</label>
-      <div class="tapo-hubs"></div><div class="control-buttons"><button type="button" class="secondary tapo-add-hub">Add hub</button>
+      <div class="tapo-hubs"></div><div class="control-buttons"><button type="button" class="secondary tapo-add-hub">Add hub manually</button>
+      <button type="button" class="secondary tapo-scan">Discover hubs on network</button>
       <button type="button" class="secondary tapo-discover">Test connection & discover sensors</button></div>
+      <div class="tapo-found-hubs"></div><p>Network discovery runs from the RTSPView computer. Hubs on other subnets or VLANs may require manual entry.</p>
       <p>Discovery tests the draft connection without saving or activating rules. Passwords are encrypted on this Windows account and omitted from configuration exports.</p>
       </details><div class="control-buttons"><button type="submit">Save Tapo automations</button><button type="button" class="secondary tapo-discard">Discard changes</button></div>
       <p class="tapo-message" role="status"></p>`;
@@ -46,6 +48,7 @@ const tapoUi = (() => {
     q('.tapo-add-hub').onclick = () => { if (q('.tapo-hubs').children.length < 8) { addHub(); mark(); } };
     q('.tapo-add-rule').onclick = () => { if (q('.tapo-rules').children.length < 32) { addRule(); mark(); } };
     q('.tapo-discover').onclick = () => mutate(true);
+    q('.tapo-scan').onclick = scanHubs;
     q('.tapo-discard').onclick = async () => { dirty = false; await load(config); };
     form.onsubmit = e => { e.preventDefault(); mutate(false); };
   }
@@ -66,7 +69,7 @@ const tapoUi = (() => {
       el.value = value;
     }
   }
-  const actions = [[0, 'Restore normal behavior'], [1, 'Show overlay'], [2, 'Hide overlay'], [3, 'Activate saved layout']];
+  const actions = [[0, 'Restore normal behavior'], [1, 'Show overlay'], [2, 'Hide overlay'], [3, 'Activate standard layout'], [4, 'Activate automation layout']];
   function addRule(rule = {id: id(), name: 'Door sensor', enabled: true, match: 2, priority: 50, action: 1, clearAction: 0, unavailableAction: 0}) {
     const card = document.createElement('fieldset'); card.className = 'tapo-rule'; card.dataset.id = rule.id;
     const legend = document.createElement('legend'); legend.textContent = 'Door sensor rule'; card.append(legend);
@@ -86,7 +89,10 @@ const tapoUi = (() => {
     const layouts = [['', 'Select saved layout'], ...(config?.layouts || []).map(l => [l.id, l.name])];
     const layout = select('Active layout', layouts, rule.layoutId || ''); layout.className = 'sensor-layout-field'; layout.querySelector('select').className = 'sensor-layout';
     const clearLayout = select('Layout after state clears', layouts, rule.clearLayoutId || ''); clearLayout.className = 'sensor-clear-layout-field'; clearLayout.querySelector('select').className = 'sensor-clear-layout';
-    grid.append(overlay, layout, clearLayout); card.append(grid);
+    const cameras = (config ? layoutStreamInventory(config) : []).filter(c => c.enabled && c.rtspUrl).map(c => [c.slot, c.name]);
+    const focus = select('Focus 1 camera', [['', 'Select focus camera'], ...cameras], rule.focusCameraSlot || ''); focus.className = 'sensor-focus-field'; focus.querySelector('select').className = 'sensor-focus';
+    const second = select('Focus 2 camera', [[0, 'Leave second focus empty'], ...cameras], rule.secondFocusCameraSlot || 0); second.className = 'sensor-second-field'; second.querySelector('select').className = 'sensor-second';
+    grid.append(overlay, layout, clearLayout, focus, second); card.append(grid);
     const buttons = document.createElement('div'); buttons.className = 'control-buttons';
     for (const [stateValue, label] of [[2, 'Test open'], [1, 'Test closed'], [0, 'Test unavailable']]) buttons.append(button(label, () => test(card, stateValue)));
     buttons.append(button('Delete rule', () => { card.remove(); mark(); })); card.append(buttons);
@@ -94,8 +100,13 @@ const tapoUi = (() => {
     const targets = () => {
       const action = Number(card.querySelector('.sensor-action').value), clear = Number(card.querySelector('.sensor-clear').value), unknown = Number(card.querySelector('.sensor-unavailable').value);
       overlay.hidden = ![action, clear, unknown].some(a => a === 1 || a === 2); overlay.querySelector('select').required = !overlay.hidden;
-      layout.hidden = action !== 3; layout.querySelector('select').required = !layout.hidden;
-      clearLayout.hidden = clear !== 3; clearLayout.querySelector('select').required = !clearLayout.hidden;
+      for (const [field, a] of [[layout, action], [clearLayout, clear]]) {
+        field.hidden = a !== 3 && a !== 4; const el = field.querySelector('select'); el.required = !field.hidden;
+        if (el.dataset.kind !== String(a)) { const value = el.value; el.replaceChildren(new Option('Select layout', '')); (a === 4 ? config?.automationViewLayouts || [] : config?.layouts || []).forEach(l => el.add(new Option(l.name, l.id))); if (value && ![...el.options].some(o => o.value === value)) el.add(new Option('Unavailable selection', value)); el.value = value; el.dataset.kind = String(a); }
+      }
+      focus.hidden = action !== 4 && clear !== 4; focus.querySelector('select').required = !focus.hidden;
+      second.hidden = ![[action, layout], [clear, clearLayout]].some(([a, f]) => a === 4 && config?.automationViewLayouts?.some(l => l.id === f.querySelector('select').value && l.focusSlots.length === 2));
+      if (second.hidden) second.querySelector('select').value = '0';
     };
     card.addEventListener('change', targets); targets(); q('.tapo-rules').append(card);
   }
@@ -108,7 +119,7 @@ const tapoUi = (() => {
         const [hubId, deviceId] = JSON.parse(get('choice') || '["",""]');
         return {id: r.dataset.id, name: get('name').trim(), enabled: r.querySelector('.sensor-enabled').checked, hubId, deviceId,
           match: Number(get('match')), priority: Number(get('priority')), action: Number(get('action')), clearAction: Number(get('clear')),
-          unavailableAction: Number(get('unavailable')), overlaySlot: Number(get('overlay')), layoutId: get('layout'), clearLayoutId: get('clear-layout')};
+          unavailableAction: Number(get('unavailable')), overlaySlot: Number(get('overlay')), layoutId: get('layout'), clearLayoutId: get('clear-layout'), focusCameraSlot: Number(get('focus')), secondFocusCameraSlot: Number(get('second'))};
       })}, password: f.password.value || null, clearPassword: f.clearPassword.checked};
   }
   function render(data) {
@@ -144,6 +155,21 @@ const tapoUi = (() => {
     } catch (e) { q('.tapo-message').textContent = e.message; }
     finally { busy = false; form.querySelectorAll('button, input, select').forEach(b => b.disabled = false); }
   }
+  async function scanHubs() {
+    if (busy) return; busy = true; form.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
+    q('.tapo-message').textContent = 'Looking for hubs on the local network…';
+    const area = q('.tapo-found-hubs'); area.replaceChildren();
+    try {
+      const result = await api('/api/tapo/discover-hubs', {method: 'POST', body: '{}'});
+      for (const hub of result.discoveredHubs || []) {
+        const row = document.createElement('div'); row.className = 'control-buttons'; const label = document.createElement('span'); label.textContent = `${hub.name} · ${hub.host}`;
+        const add = button('Add discovered hub', () => { if ([...q('.tapo-hubs').children].some(h => h.querySelector('.hub-host').value.trim().toLowerCase() === hub.host.toLowerCase())) { q('.tapo-message').textContent = 'That address is already added.'; return; } if (q('.tapo-hubs').children.length >= 8) { q('.tapo-message').textContent = 'Up to eight hubs can be configured.'; return; } addHub(hub); mark(); row.remove(); });
+        row.append(label, add); area.append(row);
+      }
+      q('.tapo-message').textContent = (result.discoveredHubs?.length || 0) + ' hub(s) found. Select hubs to add, then enter your account and discover sensors. Nothing saved yet.';
+    } catch (e) { q('.tapo-message').textContent = e.message; }
+    finally { busy = false; form.querySelectorAll('button, input, select').forEach(el => el.disabled = false); }
+  }
   async function test(card, state) {
     const output = card.querySelector('.sensor-rule-status');
     if (dirty) { output.textContent = 'Save your changes before testing.'; return; }
@@ -168,14 +194,18 @@ const tapoUi = (() => {
     if (!form || !config) return;
     Object.assign(config, appConfig);
     const overlays = [config.doorbellOverlay, config.garageOverlay, ...(config.additionalOverlays || [])].filter(o => o?.camera?.rtspUrl).map(o => [o.camera.slot, o.camera.name]);
-    const layouts = (config.layouts || []).map(l => [l.id, l.name]);
-    for (const [selector, items, label] of [['.sensor-overlay', overlays, 'Select overlay'], ['.sensor-layout, .sensor-clear-layout', layouts, 'Select saved layout']]) {
+    const cameras = layoutStreamInventory(config).filter(c => c.enabled && c.rtspUrl).map(c => [c.slot, c.name]);
+    for (const [selector, items, label] of [['.sensor-overlay', overlays, 'Select overlay'], ['.sensor-focus', cameras, 'Select focus camera'], ['.sensor-second', [[0, 'Leave second focus empty'], ...cameras], 'Select focus camera']]) {
       for (const el of form.querySelectorAll(selector)) {
         const value = el.value; el.replaceChildren(new Option(label, ''));
         items.forEach(([v, text]) => el.add(new Option(text, String(v))));
         if (value && !items.some(([v]) => String(v) === value)) el.add(new Option('Unavailable selection', value));
         el.value = value;
       }
+    }
+    for (const card of q('.tapo-rules').children) {
+      card.querySelectorAll('.sensor-layout, .sensor-clear-layout').forEach(el => delete el.dataset.kind);
+      card.dispatchEvent(new Event('change'));
     }
   }
   function updateOverlay(camera) {

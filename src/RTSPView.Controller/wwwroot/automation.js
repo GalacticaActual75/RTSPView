@@ -7,7 +7,7 @@ const automationUi = (() => {
     (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16));
   function init() {
     form = document.createElement('form'); form.id = 'automationForm'; form.className = 'panel control-panel';
-    form.innerHTML = `<label class="automation-master"><input name="enabled" type="checkbox"> Enable automation</label>
+    form.innerHTML = `<h2>MQTT automations</h2><label class="automation-master"><input name="enabled" type="checkbox" role="switch" class="automation-toggle"> Enable MQTT automations <span class="toggle-state" aria-hidden="true"></span></label>
       <p class="automation-connection" role="status">Loading connection status…</p>
       <fieldset class="automation-fields"><legend>MQTT connection</legend>
       <div class="automation-grid">
@@ -47,6 +47,7 @@ const automationUi = (() => {
     form.querySelector('.automation-rule-list').after(brokerDetails);
     broker.append(form.querySelector('.automation-test'));
     document.querySelector('#page-automation').append(form);
+    tapoUi.init(); automationTabs.init();
     const editLayouts=document.createElement('button');editLayouts.type='button';editLayouts.className='secondary automation-edit-layouts';editLayouts.textContent='Edit automation layouts';editLayouts.onclick=()=>wallDesigner.openAutomation();form.querySelector('.rules-intro').after(editLayouts);
     const markDirty = e => { if (!e.target.closest('.mqtt-tools')) { dirty = true; form.dataset.dirty = 'true'; } };
     form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);

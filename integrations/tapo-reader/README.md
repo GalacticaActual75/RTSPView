@@ -13,6 +13,8 @@ One JSON request per input line:
 {"username":"user@example.invalid","password":"example-only","hubs":[{"id":"hub-id","name":"Hall hub","host":"hub.example"}]}
 ```
 
+For a local network hub scan, send `{"discoverHubs":true}`. No credentials are needed. The response adds `discoveredHubs`, containing only H100/H200 candidates with generated IDs, names and IP addresses. Broadcast discovery may not cross subnets; manual addresses remain supported. Discovery connections are closed after each scan. A missing `discoveredHubs` field indicates a failed scan, distinct from an empty successful result.
+
 The response contains hub connection results and T110 sensor IDs/names/states.
 States: 0 = unavailable, 1 = closed, 2 = open. Connections are reused until their
 address or account changes. Each request refreshes the hub inventory. A failed

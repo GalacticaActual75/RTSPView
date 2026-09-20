@@ -8,6 +8,12 @@ public static class TapoEndpoints
     {
         app.MapGet("/api/tapo", (TapoService tapo) => Results.Ok(tapo.Configuration)).RequireAuthorization();
         app.MapGet("/api/tapo/status", (TapoService tapo) => Results.Ok(tapo.Status)).RequireAuthorization();
+        app.MapPost("/api/tapo/discover-hubs", async (TapoService tapo, CancellationToken token) =>
+        {
+            try { return Results.Ok(await tapo.DiscoverHubsAsync(token)); }
+            catch (Exception e) when (e is IOException or OperationCanceledException or System.ComponentModel.Win32Exception)
+            { return Results.BadRequest(new { error = "Hub discovery could not complete. Check the local network or add an address manually." }); }
+        }).RequireAuthorization();
         app.MapPut("/api/tapo", async (TapoRequest request, TapoService tapo, CancellationToken token) =>
         {
             await configGate.WaitAsync(token);

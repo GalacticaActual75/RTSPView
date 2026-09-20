@@ -137,7 +137,7 @@ const workspace = (() => {
       const image=card.querySelector('img'),tile=card._tile;if(!image||!tile)return;
       const size=telemetry?.viewer?.cameras.find(c=>c.slot===tile.cameraSlot);
       const width=size?.width||image.naturalWidth||16,height=size?.height||image.naturalHeight||9,w=card.clientWidth,h=card.clientHeight;
-      const mode=tile.sizing||'original',scale=mode==='original'&&size?.width?$('#monitorBoard').clientWidth/(active.outputWidth||1920):mode==='fill'?Math.max(w/width,h/height):Math.min(w/width,h/height);
+      const mode=tile.sizing||'fit',scale=mode==='original'&&size?.width?$('#monitorBoard').clientWidth/(active.outputWidth||1920):mode==='fill'?Math.max(w/width,h/height):Math.min(w/width,h/height);
       const zoom=(tile.zoomPercent??100)/100,rw=(mode==='stretch'?w:width*scale)*zoom,rh=(mode==='stretch'?h:height*scale)*zoom;
       Object.assign(image.style,{position:'absolute',width:rw+'px',height:rh+'px',left:(w-rw)*(tile.horizontalPositionPercent??50)/100+'px',top:(h-rh)*(tile.verticalPositionPercent??50)/100+'px'});
     }

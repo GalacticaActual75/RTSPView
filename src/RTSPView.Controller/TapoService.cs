@@ -8,7 +8,7 @@ namespace RTSPView.Controller;
 
 public sealed record TapoRequest(TapoSettings Settings, string? Password = null, bool ClearPassword = false);
 public sealed record TapoTestRequest(ContactState State);
-public sealed record TapoConnection(string Username, string Password, TapoHub[] Hubs);
+public sealed record TapoConnection(string Username, string Password, TapoHub[] Hubs, bool DiscoverHubs = false);
 internal sealed record StoredTapo(TapoSettings Settings, string ProtectedPassword);
 public sealed record TapoStatus(string Connection, string Message, DateTimeOffset? LastChecked, TapoHubStatus[] Hubs, TapoSensor[] Sensors, string[] ActiveRules, string[] TestingRules);
 
@@ -51,6 +51,7 @@ public sealed class TapoProcessReader : ITapoReader
             if (line is null || line.Length > 262144) throw new IOException("Invalid Tapo response.");
             var result = JsonSerializer.Deserialize<TapoSnapshot>(line, Json) ?? throw new IOException("Missing Tapo response.");
             if (result.Hubs is null || result.Sensors is null || result.Sensors.Length > 512 ||
+                (result.DiscoveredHubs is not null && (result.DiscoveredHubs.Length > 64 || result.DiscoveredHubs.Any(h => h is null || !Guid.TryParse(h.Id, out _) || string.IsNullOrWhiteSpace(h.Name) || h.Name.Length > 100 || !System.Net.IPAddress.TryParse(h.Host, out _)))) ||
                 result.Sensors.Any(s => s is null || !Enum.IsDefined(s.State) || !connection.Hubs.Any(h => h.Id == s.HubId)) ||
                 result.Sensors.Select(s => (s.HubId, s.DeviceId)).Distinct().Count() != result.Sensors.Length)
                 throw new IOException("Invalid Tapo sensor inventory.");
@@ -83,6 +84,23 @@ public sealed class TapoService : BackgroundService
     private readonly Dictionary<string, (ContactState State, DateTimeOffset Until)> _tests = new();
     private CancellationTokenSource _changed = new();
     private bool _hasPresentedEffects;
+    private readonly SemaphoreSlim _discovery = new(1, 1);
+    public TapoSettings CurrentSettings { get { lock (_sync) return _stored.Settings; } }
+    public bool UsesCamera(int slot) { lock (_sync) return _stored.Settings.Rules.Any(r => (r.Action == SensorAction.AutomationLayout || r.ClearAction == SensorAction.AutomationLayout) && (r.FocusCameraSlot == slot || r.SecondFocusCameraSlot == slot)); }
+    public bool UsesAutomationLayout(string id) { lock (_sync) return _stored.Settings.Rules.Any(r => (r.Action == SensorAction.AutomationLayout && r.LayoutId == id) || (r.ClearAction == SensorAction.AutomationLayout && r.ClearLayoutId == id)); }
+    public bool RequiresSecondFocus(string id) { lock (_sync) return _stored.Settings.Rules.Any(r => r.SecondFocusCameraSlot != 0 && ((r.Action == SensorAction.AutomationLayout && r.LayoutId == id) || (r.ClearAction == SensorAction.AutomationLayout && r.ClearLayoutId == id))); }
+    public async Task<TapoSnapshot> DiscoverHubsAsync(CancellationToken token)
+    {
+        if (!await _discovery.WaitAsync(0, token)) throw new InvalidDataException("Hub discovery is already running.");
+        try
+        {
+            using var reader = new TapoProcessReader();
+            var result = await reader.ReadAsync(new("", "", [], true), token);
+            if (result.DiscoveredHubs is null) throw new IOException("Hub discovery did not return a result.");
+            return result;
+        }
+        finally { _discovery.Release(); }
+    }
 
     public TapoService(string directory, IDataProtectionProvider protection, ViewerCommandClient viewer)
         : this(directory, protection, viewer.SendAsync, new TapoProcessReader()) { }

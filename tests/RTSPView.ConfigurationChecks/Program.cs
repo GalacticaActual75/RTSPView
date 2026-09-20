@@ -127,7 +127,7 @@ try
     var suiteReloaded = (await layoutStore.LoadAsync()).Layouts.Single();
     Check(suiteReloaded.OutputWidth == 3440 && suiteReloaded.OutputHeight == 1440 && suiteReloaded.Tiles.SequenceEqual(suiteLayout.Tiles), "resolution, per-tile sizing, zoom and position survive reload");
     Check(suiteReloaded.Fit(1720, 1000) == (1720, 720), "custom output aspect scales to viewer");
-    Check(suiteReloaded.Tiles.Last().Sizing == "original" && suiteReloaded.Tiles.Last().ZoomPercent == 100, "new tile defaults to original size and 100 percent zoom");
+    Check(suiteReloaded.Tiles.Last().Sizing == "fit" && suiteReloaded.Tiles.Last().ZoomPercent == 100, "new tile defaults to fit and 100 percent zoom");
     var originalImage = WallVideoTransform.Calculate(1920, 1080, 320, 180, "original", 640);
     Check(originalImage.RenderWidth == 960 && originalImage.OffsetX == -320, "original pixels scale with output reference and clip centered");
     var fitImage = WallVideoTransform.Calculate(1920, 1080, 400, 400, "fit");

@@ -14,6 +14,7 @@ internal static class SensorViewerChecks
         settings = settings with { DoorbellOverlay = settings.DoorbellOverlay with { Camera = settings.DoorbellOverlay.Camera with { RtspUrl = "rtsp://camera.example/live", Enabled = true } } };
         var layout = settings.Layouts[0] with { Id = Guid.NewGuid().ToString("N"), Name = "Sensor layout" };
         settings = settings with { Layouts = settings.Layouts.Append(layout).ToArray() };
+        settings = settings with { Cameras = settings.Cameras.Select(c => c with { Enabled = true, RtspUrl = "rtsp://camera.example/live" }).ToArray() };
         var hash = AutomationConfiguration.Hash(settings);
         settingsField.SetValue(viewer, settings);
         try
@@ -33,6 +34,10 @@ internal static class SensorViewerChecks
             if (!(bool)overlayEnabled.Invoke(viewer, [settings.DoorbellOverlay with { Camera = settings.DoorbellOverlay.Camera with { Enabled = false } }])!) throw new Exception("Sensor show did not override disabled overlay");
             Send(new SensorEffect("door", SensorAction.Layout, 0, layout.Id, 2));
             if (((WallLayout)effective.GetValue(viewer)!).Id != layout.Id) throw new Exception("Sensor layout was not wired into viewer");
+            var dual = settings.AutomationViewLayouts.First(l => l.FocusSlots.Length == 2);
+            Send(new SensorEffect("door", SensorAction.AutomationLayout, 0, dual.Id, 2, 1, 2));
+            var resolved = (WallLayout)effective.GetValue(viewer)!;
+            if (resolved.Id != dual.Id || resolved.Tiles.Any(t => t.CameraSlot < 0) || !resolved.Tiles.Any(t => t.CameraSlot == 1) || !resolved.Tiles.Any(t => t.CameraSlot == 2)) throw new Exception("Sensor focus cameras were not resolved into automation layout");
             var detections = (OverlayAutomationState)type.GetField("_automationPresentation", flags)!.GetValue(viewer)!;
             detections.Update([new("high", 1, DateTimeOffset.UtcNow.AddSeconds(5), AutomationAction.FullScreen, Priority: 1)], DateTimeOffset.UtcNow);
             type.GetMethod("RefreshAutomationOverlays", flags)!.Invoke(viewer, null);

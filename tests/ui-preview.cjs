@@ -8,7 +8,7 @@ const overlay=(slot,name,host)=>({camera:camera(slot,name),hostCameraSlot:host,v
 const config={cameras:names.map((name,i)=>camera(i+1,name)),cameraCount:9,doorbellOverlay:overlay(10,'Doorbell',1),garageOverlay:overlay(11,'Garage',3),additionalOverlays:[],startFullScreen:true,preferredMonitor:0,hideMouseCursor:true,mouseCursorHideSeconds:3,showCameraNames:false,showCameraStats:false,keepViewerAlwaysOnTop:true,activeLayoutId:'default',layouts:[{id:'default',name:'Main wall',rows:3,columns:3,aspectRatio:'16:9',tiles:names.map((_,i)=>({cameraSlot:i+1,row:Math.floor(i/3),column:i%3,rowSpan:1,columnSpan:1}))}]};
 let schedule={settings:{enabled:false,action:'viewer',mode:'weekly',intervalHours:24,days:[0],time:'03:00'},nextRun:null,pendingUntil:null,lastRun:null,result:'No scheduled restarts yet.'}; const schedules={viewer:schedule,host:{...schedule,settings:{...schedule.settings,action:'host',days:[0]}}}; const scheduleStatus=()=>({schedule,schedules,timeZone:'Pacific Time',timeZoneId:'America/Los_Angeles',serverTime:new Date().toISOString()});
 let temperatureSettings={showWarnings:false,cpuWarningEnabled:false,gpuWarningEnabled:false,cpuMaxC:90,gpuMaxC:85}; const temperatureStatus=()=>({settings:temperatureSettings,timestamp:new Date().toISOString(),cpuC:62.5,gpuC:58.2});
-config.automationViewLayouts=[{...config.layouts[0],id:'automation-default',name:'Focused wall',focusSlots:[1]}];
+config.automationViewLayouts=[{...config.layouts[0],id:'automation-default',name:'Focused wall',focusSlots:[-1],tiles:config.layouts[0].tiles.map((t,i)=>i===0?{...t,cameraSlot:-1}:t)},{...config.layouts[0],id:'automation-dual',name:'Two focus cameras',focusSlots:[-1,-2],tiles:config.layouts[0].tiles.map((t,i)=>i<2?{...t,cameraSlot:-i-1}:t)}];
 let wallNotifications=true;let channel='beta';
 const update=()=>({showWallNotifications:wallNotifications,lastChecked:new Date().toISOString(),nextCheck:new Date(Date.now()+86400000).toISOString(),installedVersion:'1.0.40-beta.1',installedChannel:'beta',selectedChannel:channel,latestVersion:channel==='beta'?'1.0.40-beta.1':'1.0.39',channelAvailable:true,updateAvailable:channel!=='beta',message:channel==='beta'?'RTSPView is up to date on this channel.':'RTSPView 1.0.39 is ready to install.'});
 const network={enabled:true,managed:true,message:'LAN access enabled on private networks.',addresses:['http://192.0.2.10:5080','http://192.0.2.11:5080']};
@@ -21,9 +21,19 @@ const mutations=[];
 http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1'),route=url.pathname;
  const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value))};
+ if(route==='/api/automation/priorities'){
+  const snapshot=()=>({revision:'fixture',rules:[...automation.settings.rules.map(r=>({...r,source:'MQTT'})),...tapo.settings.rules.map(r=>({...r,source:'Tapo'}))].sort((a,b)=>a.priority-b.priority)});
+  if(req.method==='GET')return json(snapshot());
+  let body='';for await(const chunk of req)body+=chunk;JSON.parse(body).rules.forEach((r,i)=>{const settings=r.source==='MQTT'?automation.settings:tapo.settings;settings.rules.find(n=>n.id===r.id).priority=i+1});return json(snapshot());
+ }
+ if(route==='/api/automation/layouts'){
+  if(req.method==='GET')return json({layouts:config.automationViewLayouts,activeLayoutId:config.automationViewLayouts[0].id});
+  let body='';for await(const chunk of req)body+=chunk;const r=JSON.parse(body);config.automationViewLayouts=r.layouts;return json(r);
+ }
  if(route.startsWith('/api/tapo')){
   let body='';for await(const chunk of req)body+=chunk;
   if(route==='/api/tapo'&&req.method==='GET')return json(tapo);
+  if(route==='/api/tapo/discover-hubs')return json({hubs:[],sensors:[],discoveredHubs:[{id:'a0000000-0000-4000-8000-000000000001',name:'Preview H100',host:'192.0.2.10'},{id:'a0000000-0000-4000-8000-000000000002',name:'Preview H200',host:'192.0.2.11'}]});
   if(route==='/api/tapo/status')return json({connection:tapo.settings.enabled?'Connected':'Disabled',message:'Synthetic Tapo preview',lastChecked:new Date().toISOString(),...tapoSnapshot(tapo.settings.hubs),activeRules:[],testingRules:[]});
   if(route==='/api/tapo/discover')return json(tapoSnapshot(JSON.parse(body).settings.hubs));
   if(route.endsWith('/test'))return json({success:true,message:'Fixture test recorded.'});

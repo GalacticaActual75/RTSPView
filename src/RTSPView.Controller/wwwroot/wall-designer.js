@@ -18,7 +18,7 @@ function createWallDesigner(isAutomation = false) {
     board.querySelectorAll('img[data-tile-index]').forEach(image=>{
       const index=Number(image.dataset.tileIndex),tile=index===candidateIndex?candidate:current().tiles[index],slot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(current().id+":"+tile.cameraSlot),size=streamDimensions.get(slot);
       const w=image.parentElement.clientWidth,h=image.parentElement.clientHeight;
-      const sw=size?.width||image.naturalWidth||16,sh=size?.height||image.naturalHeight||9,mode=tile.sizing||'original';
+      const sw=size?.width||image.naturalWidth||16,sh=size?.height||image.naturalHeight||9,mode=tile.sizing||'fit';
       const fit=mode==='original'&&size?scale:mode==='fill'?Math.max(w/sw,h/sh):Math.min(w/sw,h/sh);
       const zoom=(tile.zoomPercent??100)/100,rw=(mode==='stretch'?w:sw*fit)*zoom,rh=(mode==='stretch'?h:sh*fit)*zoom;
       Object.assign(image.style,{width:rw+'px',height:rh+'px',left:(w-rw)*(tile.horizontalPositionPercent??50)/100+'px',top:(h-rh)*(tile.verticalPositionPercent??50)/100+'px',objectFit:'fill'});
@@ -86,9 +86,27 @@ function createWallDesigner(isAutomation = false) {
     if(isAutomation)layout.focusSlots=layout.tiles.filter(t=>t.cameraSlot<0).map(t=>t.cameraSlot);
     selectedTile=-1;changed();
   }
+  function newLayout() {
+    if (draft.layouts.length >= 32) { message('You can save up to 32 layouts.'); return; }
+    const dialog = el('dialog', undefined, 'new-layout-dialog'), form = el('form'); dialog.append(form);
+    form.append(el('h2', 'New ' + (isAutomation ? 'automation' : 'standard') + ' layout'));
+    const name = el('input'); name.required = true; name.maxLength = 80; name.value = 'New layout'; field('Layout name', name, form);
+    const start = el('select'); start.add(new Option(isAutomation ? 'Blank canvas with one focus tile' : 'Blank canvas', 'blank')); wallLayoutPresets.catalog.forEach(p => start.add(new Option(p.name, p.id))); field('Start from', start, form);
+    const buttons = el('div', undefined, 'control-buttons'); form.append(buttons);
+    const create = el('button', 'Create layout'); create.type = 'submit'; buttons.append(create); button('Cancel', () => dialog.close(), buttons);
+    dialog.onclose = () => dialog.remove();
+    form.onsubmit = e => {
+      e.preventDefault(); if (!name.value.trim()) { name.setCustomValidity('Enter a layout name.'); name.reportValidity(); return; }
+      const item = {id: 'layout-' + crypto.randomUUID(), name: name.value.trim(), rows: 3, columns: 3, aspectRatio: '16:9', outputWidth: 1920, outputHeight: 1080, rowWeights: [], columnWeights: [], tiles: [], focusSlots: []};
+      if (start.value === 'blank') { if (isAutomation) { item.tiles = [{cameraSlot: -1, row: 0, column: 0, rowSpan: 1, columnSpan: 1, sizing: 'fit'}]; item.focusSlots = [-1]; } }
+      else { const slots = config.cameras.map(c => c.slot); if (isAutomation) slots.unshift(...(start.value === 'dual' ? [-1, -2] : [-1])); Object.assign(item, wallLayoutPresets.create(start.value, '16:9', slots)); if (isAutomation) item.focusSlots = item.tiles.filter(t => t.cameraSlot < 0).map(t => t.cameraSlot); }
+      dialog.close(); draft.layouts.push(item); selectedId = item.id; selectedTile = -1; drawer = 'add'; changed();
+    };
+    name.oninput = () => name.setCustomValidity(''); root.append(dialog); dialog.showModal(); name.focus(); name.select();
+  }
   function addCamera(slot, row, column, rowSpan=1, columnSpan=1) {
     if(current().tiles.length>=16){message('A layout supports up to 16 tiles. Remove a tile first.');return;}
-    const tile = {cameraSlot:slot,row,column,rowSpan,columnSpan,sizing:"original"};
+    const tile = {cameraSlot:slot,row,column,rowSpan,columnSpan,sizing:"fit"};
     if (!validTile(tile,-1)) { message('Choose an empty cell and a stream not already in this layout.'); return; }
     armedCamera=null;current().tiles.push(tile); drawer='tile'; selectedTile = current().tiles.length-1; changed();
   }
@@ -108,7 +126,7 @@ function createWallDesigner(isAutomation = false) {
       undoHistory.length=0;redoHistory.length=0;
       if (!draft.layouts.some(layout=>layout.id===selectedId)) selectedId = draft.activeLayoutId;
       render(); dashboardUX.sync(); message(revert ? 'Previous saved layouts restored.' : apply ? 'Layout applied. The viewer will update shortly.' : 'Layouts saved.');
-      if(isAutomation){message('Automation layouts saved. Choose one in a focused-layout rule.');await automationUi.refreshLayouts();}
+      if(isAutomation){message('Automation layouts saved. Choose one in a focused-layout rule.');await automationUi.refreshLayouts();tapoUi.updateTargets({automationViewLayouts: result.layouts});}
       else tapoUi.updateTargets({layouts: result.layouts});
     } catch(error) { message(error.message); }
     finally { busy = false; root.inert = false; }
@@ -126,6 +144,7 @@ function createWallDesigner(isAutomation = false) {
     field('Saved layout',layouts,picker);
     const layoutTools=el('div',undefined,'designer-layout-tools');picker.append(layoutTools);
     const badge=el('span',dirty?'Unsaved changes':!isAutomation&&selectedId===saved.activeLayoutId?'On wall':'Saved','designer-badge'+(dirty?' draft':''));layoutTools.append(badge);
+    button('New layout', newLayout, layoutTools);
     const manage=el('details',undefined,'designer-menu');const manageSummary=el('summary','Manage layout');manageSummary.setAttribute('aria-label','Manage layout');manageSummary.title='Manage layout';manage.append(manageSummary);layoutTools.append(manage);
     const menu=el('div',undefined,'designer-popover');manage.append(menu);
     const name=el('input');name.value=layout.name;name.maxLength=80;
@@ -140,7 +159,7 @@ function createWallDesigner(isAutomation = false) {
     },menu);deleteButton.disabled=isAutomation?draft.layouts.length===1:selectedId===saved.activeLayoutId;deleteButton.classList.add('designer-danger');
     const revert=button('Revert last save',()=>persist(false,true),menu);revert.disabled=!previous;
     const actions=el('div',undefined,'designer-actions');top.append(actions);
-    for(const [id,label] of [['add','Add camera'],['presets','Presets'],['sizing','Sizing'],['advanced','Canvas settings'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
+    for(const [id,label] of [['add','Add stream'],['presets','Presets'],['sizing','Sizing'],['advanced','Canvas settings'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
 
     button('Undo',()=>{const state=undoHistory.pop();if(!state)return;redoHistory.push(copy({draft,selectedId,selectedTile}));draft=state.draft;selectedId=state.selectedId;selectedTile=state.selectedTile;dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();message('Last layout edit undone.');},actions).disabled=!undoHistory.length;
     button('Redo',()=>{const state=redoHistory.pop();if(!state)return;undoHistory.push(copy({draft,selectedId,selectedTile}));({draft,selectedId,selectedTile}=state);dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();},actions).disabled=!redoHistory.length;
@@ -296,7 +315,7 @@ function createWallDesigner(isAutomation = false) {
         tilePanel.append(el('p','Your automation rule chooses the live camera.','designer-help'));
       }
       if(isAutomation&&tile.cameraSlot>0){const focusActions=el('div',undefined,'designer-focus-actions');tilePanel.append(focusActions);for(const focusSlot of layout.focusSlots)button('Use as Focus '+(-focusSlot),()=>{const old=layout.tiles.find(t=>t.cameraSlot===focusSlot);old.cameraSlot=tile.cameraSlot;tile.cameraSlot=focusSlot;changed();},focusActions);}
-      const sizing=el('select');for(const [value,label] of [['original','Original size (default)'],['fit','Fit · entire image'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'original';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);
+      const sizing=el('select');for(const [value,label] of [['fit','Fit · entire image (default)'],['original','Original size'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'fit';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);
       const framing=el('div',undefined,'designer-framing');tilePanel.append(framing);
       for(const [key,label,min,max,fallback] of [['zoomPercent','Zoom',25,400,100],['horizontalPositionPercent','Horizontal position',0,100,50],['verticalPositionPercent','Vertical position',0,100,50]]){
         const input=el('input');input.type='range';input.min=min;input.max=max;input.step=1;input.value=tile[key]??fallback;
@@ -312,7 +331,7 @@ function createWallDesigner(isAutomation = false) {
       }
 
       tilePanel.append(el('p',Math.round(proportions.bounds(tile).width*outputWidth)+' × '+Math.round(proportions.bounds(tile).height*outputHeight)+' output pixels. Original uses source pixels, centered and clipped. Fit keeps the whole image; Fill crops; Stretch changes proportions.','designer-help'));
-      if((tile.sizing||'original')==='original'){const note=el('p','Source dimensions unavailable. Preview uses Fit until live camera dimensions arrive.','designer-help');note.dataset.dimensionsNote=tile.cameraSlot>0?tile.cameraSlot:(previewCameras.get(layout.id+":"+tile.cameraSlot)||0);note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));tilePanel.append(note);}
+      if((tile.sizing||'fit')==='original'){const note=el('p','Source dimensions unavailable. Preview uses Fit until live camera dimensions arrive.','designer-help');note.dataset.dimensionsNote=tile.cameraSlot>0?tile.cameraSlot:(previewCameras.get(layout.id+":"+tile.cameraSlot)||0);note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));tilePanel.append(note);}
       button('Fill available space',()=>{let best=tile;for(let r=1;r<=layout.rows-tile.row;r++)for(let c=1;c<=layout.columns-tile.column;c++){const t={...tile,rowSpan:r,columnSpan:c};if(r*c>best.rowSpan*best.columnSpan&&validTile(t,selectedTile))best=t;}updateTile(best,selectedTile);},tilePanel);
       const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].filter(o=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(overlays.length){const hosts=el('div',undefined,'designer-hosts');hosts.append(el('span','OVERLAYS','designer-eyebrow'));for(const o of overlays)hosts.append(el('span',o.camera.name,'designer-host'));tilePanel.append(hosts);}
