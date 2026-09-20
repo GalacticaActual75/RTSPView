@@ -16,12 +16,12 @@ test('rebroadcast discovery uses only unmuted stream settings and translates loo
 test('built-in and external brokers preserve authentication and transport', () => {
   const settings = [{key:'enableBroker',value:'true'}, {key:'tcpPort',value:'1884'}, {key:'username',value:'viewer'}, {key:'password',value:'test-only'}];
   assert.deepEqual(brokerFromSettings(settings,'scrypted-host'),{host:'scrypted-host',port:1884,tls:false,username:'viewer',password:'test-only'});
-  assert.deepEqual(parseBroker('mqtts://user:p%40ss@broker-host/events','','','scrypted-host'),{host:'broker-host',port:8883,tls:true,username:'user',password:'p@ss'});
+  assert.deepEqual(parseBroker('mqtts://user:p%40ss@broker.example/events','','','scrypted-host'),{host:'broker.example',port:8883,tls:true,username:'user',password:'p@ss'});
   assert.throws(() => parseBroker('wss://broker-host','','','scrypted-host'));
 });
 test('controller URL does not allow embedded credentials or path injection', () => {
   assert.equal(controllerAddress('https://viewer-host:5443'), 'https://viewer-host:5443');
-  for(const value of ['file:///tmp','https://user:password@host','https://host/api','https://host/?secret=x']) assert.throws(() => controllerAddress(value));
+  for(const value of ['file:///tmp','https://user:password@host.example','https://host/api','https://host/?secret=x']) assert.throws(() => controllerAddress(value));
 });
 test('topics isolate instances and encode MQTT wildcard characters', () => {
   assert.equal(detectionTopic('instance','a/+#'),'rtspview/instance/a%2F%2B%23/ObjectDetector');

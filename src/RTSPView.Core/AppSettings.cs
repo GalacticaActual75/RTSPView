@@ -32,6 +32,7 @@ public sealed record AppSettings
     public bool ShowTileBorders { get; init; } = true;
     public int[] DiagnosticsAutoOpenExcludedSlots { get; init; } = [];
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
+    public bool ShowHoverExitButton { get; init; }
     public SnapshotSettings Snapshots { get; init; } = new();
 
     public static IReadOnlyList<CameraSettings> CreateCameraSlots() =>
@@ -251,4 +252,5 @@ public sealed record DisplaySettings
     public bool ShowTileBorders { get; init; } = true;
     public int[] DiagnosticsAutoOpenExcludedSlots { get; init; } = [];
     public bool KeepViewerAlwaysOnTop { get; init; } = true;
+    public bool ShowHoverExitButton { get; init; }
 }

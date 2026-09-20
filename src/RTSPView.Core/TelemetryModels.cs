@@ -48,6 +48,9 @@ public sealed record SystemTelemetry
 public sealed record ApplianceTelemetry
 {
     public bool ViewerConnected { get; init; }
+    public bool ViewerRunning { get; init; }
+    public bool ViewerStarting { get; init; }
+    public bool ViewerPaused { get; init; }
     public ViewerTelemetry? Viewer { get; init; }
     public SystemTelemetry System { get; init; } = new();
 }
@@ -64,4 +67,7 @@ public enum ViewerCommandType
 }
 
 public sealed record ViewerCommand(Guid Id, ViewerCommandType Type, int? Slot = null, AutomationPresentation? Automation = null);
-public sealed record ViewerCommandResult(Guid Id, bool Success, string Message);
+public sealed record ViewerCommandResult(Guid Id, bool Success, string Message)
+{
+    public bool ExitingIntentionally { get; init; }
+}

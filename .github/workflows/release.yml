@@ -51,6 +51,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Connector pairing and import checks failed." }
           node tests/connector-http.checks.cjs
           if ($LASTEXITCODE -ne 0) { throw "Connector HTTP integration checks failed." }
+          dotnet run --project tests/RTSPView.ViewerLifecycleChecks -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Viewer lifecycle checks failed." }
           dotnet run --project tests/RTSPView.AutomationChecks -c Release
           if ($LASTEXITCODE -ne 0) { throw "MQTT automation checks failed." }
           dotnet run --project tests/RTSPView.LanAccessChecks -c Release

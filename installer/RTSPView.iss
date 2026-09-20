@@ -75,11 +75,11 @@ Type: files; Name: "{app}\Viewer\SpotMonitor.Core.dll"
 Type: files; Name: "{app}\Viewer\SpotMonitor.Infrastructure.dll"
 
 [Icons]
-Name: "{group}\RTSPView"; Filename: "{app}\Start-RTSPView.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"
+Name: "{group}\RTSPView"; Filename: "{app}\Start-RTSPView.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"; AppUserModelID: "RTSPView.Viewer"
 Name: "{group}\Web configuration"; Filename: "{app}\Open-Web-Admin.cmd"; IconFilename: "{app}\Controller\SpotMonitor.Controller.exe"
 Name: "{group}\Stop RTSPView"; Filename: "{app}\Stop-RTSPView.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"
 Name: "{group}\Uninstall RTSPView"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\RTSPView"; Filename: "{app}\Start-RTSPView.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"; Tasks: desktopicon
+Name: "{autodesktop}\RTSPView"; Filename: "{app}\Start-RTSPView.cmd"; IconFilename: "{app}\Viewer\SpotMonitor.Viewer.exe"; AppUserModelID: "RTSPView.Viewer"; Tasks: desktopicon
 
 [Run]
 ; Start only a previously enabled helper; first-time enabling stays opt-in in System.

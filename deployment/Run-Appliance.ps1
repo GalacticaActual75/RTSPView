@@ -5,7 +5,7 @@ $viewer = Join-Path $PSScriptRoot 'Viewer\SpotMonitor.Viewer.exe'
 try {
     Start-Process -FilePath $controller -WindowStyle Hidden
     Start-Sleep -Seconds 2
-    $viewerProcess = Start-Process -FilePath $viewer -PassThru -Wait
+    $viewerProcess = Start-Process -FilePath $viewer -ArgumentList '--respect-viewer-pause' -PassThru -Wait
     exit $viewerProcess.ExitCode
 }
 catch {

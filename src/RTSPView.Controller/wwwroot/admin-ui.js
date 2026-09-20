@@ -41,7 +41,8 @@ const adminUi = (() => {
     const help = {
       startFullScreen: 'Start the viewer in full screen.', hideMouseCursor: 'Hide the cursor after inactivity.',
       showTileBorders: 'Default for layouts that do not override borders in Canvas settings.', showCameraNames: 'Display names on the wall.', showCameraStats: 'Show stream and decoder details.',
-      keepViewerAlwaysOnTop: 'Keep the viewer above other windows.'
+      keepViewerAlwaysOnTop: 'Keep the viewer above other windows.',
+      showHoverExitButton: 'Reveal Full exit only while hovering in the top-right corner of the full-screen viewer. Web administration stays online after exit.'
     };
     for (const label of display.querySelectorAll('.display-toggle-grid label')) {
       const input = label.querySelector('input'), title = label.textContent.trim();
@@ -58,6 +59,7 @@ const adminUi = (() => {
     backup.querySelector('#configState').classList.add('information-note');
     document.querySelector('#updateState').setAttribute('role', 'status');
     for (const [selector,label,help] of [
+      ['[data-action="start"]','Start viewer','Open the viewer and enable automatic recovery. Unavailable while the viewer is already running.'],
       ['[data-action="restart-cameras"]','Restart all streams','Reconnect every stream without restarting the viewer application.'],
       ['[data-action="enter-fullscreen"]','Enter full screen','Fill the selected display with the live wall.'],
       ['[data-action="exit-fullscreen"]','Exit full screen','Return to a window. Always-on-top remains a separate setting.'],

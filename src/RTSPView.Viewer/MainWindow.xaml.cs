@@ -91,6 +91,8 @@ public partial class MainWindow : Window
     private WallUpdateNotice? _updateNotice;
     private DateTime _lastUpdateNoticeRead;
     private bool _dialogOpen;
+    private Window? _hoverExitWindow;
+    private bool _exitingIntentionally;
 
     public MainWindow()
     {
@@ -105,6 +107,7 @@ public partial class MainWindow : Window
         _cursorTimer.Tick += (_, _) =>
         {
             CheckCornerGesture();
+            RefreshHoverExit();
             if (!_dialogOpen && _updateBadge?.Busy != true && _isFullScreen && _settings.HideMouseCursor &&
                 DateTime.UtcNow - _lastMouseMovement >= TimeSpan.FromSeconds(_settings.MouseCursorHideSeconds))
             {
@@ -759,6 +762,7 @@ public partial class MainWindow : Window
         if (!CanDisplayOverlayWindows()) return;
         RaiseWindow(_updateBadge);
         RaiseWindow(_temperatureWarning);
+        RaiseWindow(_hoverExitWindow);
     }
 
     private static void RaiseWindow(Window? overlayWindow)
@@ -894,6 +898,65 @@ public partial class MainWindow : Window
         if (Mouse.OverrideCursor is not null) Mouse.OverrideCursor = null;
     }
 
+    private void RefreshHoverExit()
+    {
+        if (!_settings.ShowHoverExitButton || !_isFullScreen || !CanDisplayOverlayWindows() || _exitingIntentionally)
+        { _hoverExitWindow?.Hide(); return; }
+        var cursor = System.Windows.Forms.Cursor.Position;
+        var point = PointFromScreen(new System.Windows.Point(cursor.X, cursor.Y));
+        if (point.X < ActualWidth - 190 || point.X >= ActualWidth || point.Y < 0 || point.Y > 64)
+        { _hoverExitWindow?.Hide(); return; }
+        RegisterPointerActivity();
+        if (_hoverExitWindow is null)
+        {
+            var button = new System.Windows.Controls.Button { Content = "Full exit", Style = (Style)FindResource("ProductButton"),
+                ToolTip = "Close the viewer. Web administration stays online." };
+            button.Click += FullExitButton_Click;
+            _hoverExitWindow = new Window { Owner = this, Title = "RTSPView exit", Width = 150, Height = 40,
+                WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false,
+                ShowActivated = false, Content = button };
+        }
+        var topRight = PointToScreen(new System.Windows.Point(ActualWidth - 162, 12));
+        var dpi = VisualTreeHelper.GetDpi(this);
+        _hoverExitWindow.Left = topRight.X / dpi.DpiScaleX;
+        _hoverExitWindow.Top = topRight.Y / dpi.DpiScaleY;
+        if (!_hoverExitWindow.IsVisible) _hoverExitWindow.Show();
+        RaiseWindow(_hoverExitWindow);
+    }
+
+    private async void FullExitButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_exitingIntentionally) return;
+        if (WithOverlaysSuppressed(() => System.Windows.MessageBox.Show(this,
+            "Close the viewer and pause automatic recovery? Web administration will stay online. Reopen RTSPView or use Start viewer in Maintenance to resume.",
+            "Exit RTSPView viewer", MessageBoxButton.YesNo, MessageBoxImage.Question)) != MessageBoxResult.Yes) return;
+        _exitingIntentionally = true;
+        FullExitButton.IsEnabled = false;
+        _hoverExitWindow?.Hide();
+        try
+        {
+            await PauseRecoveryAndCloseAsync();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            _exitingIntentionally = false;
+            FullExitButton.IsEnabled = true;
+            WithOverlaysSuppressed(() => System.Windows.MessageBox.Show(this,
+                "Could not pause automatic recovery. The viewer has stayed open. " + error.Message,
+                "RTSPView", MessageBoxButton.OK, MessageBoxImage.Error));
+        }
+    }
+
+    private async Task PauseRecoveryAndCloseAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var runtime = new ViewerRuntimeState(_dataDirectory);
+        using var gate = await runtime.AcquireAsync(timeout.Token);
+        runtime.Pause();
+        _logger.Write("INFO", "Viewer intentionally exited; automatic recovery paused. Controller remains online.");
+        Close();
+    }
+
     private void CheckCornerGesture()
     {
         var leftButtonDown = System.Windows.Forms.Control.MouseButtons.HasFlag(System.Windows.Forms.MouseButtons.Left);
@@ -923,6 +986,7 @@ public partial class MainWindow : Window
 
     private async Task<ViewerCommandResult> HandleCommandOnUiAsync(ViewerCommand command)
     {
+        if (_exitingIntentionally) return new ViewerCommandResult(command.Id, false, "Viewer is intentionally exiting.") { ExitingIntentionally = true };
         var commandTile = _allTiles.FirstOrDefault(tile => tile.GetTelemetry().Slot == command.Slot);
         switch (command.Type)
         {
@@ -959,7 +1023,7 @@ public partial class MainWindow : Window
                 restartHelper.ArgumentList.Add("-WindowStyle");
                 restartHelper.ArgumentList.Add("Hidden");
                 restartHelper.ArgumentList.Add("-Command");
-                restartHelper.ArgumentList.Add($"Start-Sleep -Seconds 2; Start-Process -FilePath '{escapedExecutable}'");
+                restartHelper.ArgumentList.Add($"Start-Sleep -Seconds 2; Start-Process -FilePath '{escapedExecutable}' -ArgumentList '--respect-viewer-pause'");
                 Process.Start(restartHelper);
                 _logger.Write("INFO", "Remote command: restarting viewer");
                 _ = Dispatcher.BeginInvoke(System.Windows.Application.Current.Shutdown);
@@ -1002,6 +1066,7 @@ public partial class MainWindow : Window
     {
         var previous = _dialogOpen;
         _dialogOpen = true;
+        _hoverExitWindow?.Hide();
         RegisterPointerActivity();
         foreach (var tile in _allTiles) tile.SetOverlaySuppressed(true);
         HideOverlayWindows();
@@ -1061,6 +1126,7 @@ public partial class MainWindow : Window
         _diagnosticsTimer.Stop();
         _cursorTimer.Stop();
         _updateBadge?.Close();
+        _hoverExitWindow?.Close();
         _temperatureWarning?.Close();
         Mouse.OverrideCursor = null;
         foreach (var tile in _allTiles) tile.Dispose();

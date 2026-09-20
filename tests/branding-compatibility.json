@@ -7,6 +7,12 @@
     "docs/branding-audit.md"
   ],
   "files": {
+    ".gitignore": [
+      "SpotMonitor-config*.json"
+    ],
+    "tools/check-privacy.cjs": [
+      "(?:RTSPView|SpotMonitor)-config"
+    ],
     "README.md": [
       "%LOCALAPPDATA%\\SpotMonitor\\settings.json",
       "SPOTMONITOR_DATA_DIR"
@@ -98,6 +104,9 @@
     ],
     "tests/ServiceUpdate.Checks.ps1": [
       "SpotMonitor.Controller.exe", "SpotMonitor.Viewer.exe"
+    ],
+    "src/RTSPView.Controller/ViewerLauncher.cs": [
+      "SpotMonitor.Viewer"
     ]
   }
 }

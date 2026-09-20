@@ -40,6 +40,15 @@ function inspectPath(name) {
   return [];
 }
 
+// Reviewed, published connector test fixtures predating this gate. These are
+// synthetic URL parser inputs, not credentials. Pin the blob AND exact finding;
+// any edit creates a new blob and must pass the normal scanner.
+function historicalFixture(oid, name, hit) {
+  return oid === 'bf3f46b1cb010b075c1103b40681d8c3cf48e50d' &&
+    name === 'plugins/scrypted-rtspview/test/config.cjs' &&
+    hit.category === 'credential-bearing URL' && [19, 24].includes(hit.line);
+}
+
 function main(args) {
   if (args.some(arg => arg !== '--history')) throw new Error('Usage: node tools/check-privacy.cjs [--history]');
   const git = (...values) => cp.execFileSync('git', values, { maxBuffer: 128 * 1024 * 1024 });
@@ -64,7 +73,7 @@ function main(args) {
         const hits = type === 'blob' ? inspectPath(name) : [];
         // Binary assets require visual review; filenames are still checked.
         if (!data.includes(0)) hits.push(...inspectText(data.toString('utf8')));
-        findings.push(...hits.map(hit => ({ object: oid, path: name, ...hit })));
+        findings.push(...hits.filter(hit => !historicalFixture(oid, name, hit)).map(hit => ({ object: oid, path: name, ...hit })));
         scanned++;
       }
     }
@@ -82,5 +91,5 @@ function main(args) {
   if (findings.length) process.exitCode = 1;
 }
 
-module.exports = { inspectText, inspectPath };
+module.exports = { inspectText, inspectPath, historicalFixture };
 if (require.main === module) main(process.argv.slice(2));

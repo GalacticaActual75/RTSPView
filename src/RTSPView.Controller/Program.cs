@@ -59,6 +59,8 @@ builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, 
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
 builder.Services.AddSingleton<ViewerCommandClient>();
+builder.Services.AddSingleton(new ViewerRuntimeState(dataDirectory));
+builder.Services.AddSingleton<ViewerLauncher>();
 builder.Services.AddSingleton(provider => new AutomationService(dataDirectory,
     provider.GetRequiredService<IDataProtectionProvider>(), provider.GetRequiredService<ViewerCommandClient>()));
 if (!builder.Environment.IsEnvironment("Testing"))
@@ -83,6 +85,9 @@ builder.Services.AddSingleton(provider => new RestartScheduler(dataDirectory, as
 {
     if (action == "viewer")
     {
+        var runtime = provider.GetRequiredService<ViewerRuntimeState>();
+        using var gate = await runtime.AcquireAsync(token);
+        if (runtime.Paused) return "Viewer intentionally stopped; scheduled viewer restart skipped.";
         var result = await provider.GetRequiredService<ViewerCommandClient>().SendAsync(ViewerCommandType.RestartViewer, null, token);
         return result.Success ? "Viewer accepted the scheduled restart." : "Viewer restart failed: " + result.Message;
     }
@@ -241,11 +246,12 @@ app.MapGet("/api/status", () => Results.Ok(new
     processMemoryMb = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1024d / 1024d, 1),
     currentTime = DateTimeOffset.Now
 })).RequireAuthorization();
-app.MapGet("/api/telemetry", () =>
+app.MapGet("/api/telemetry", (ViewerRuntimeState runtime, ViewerLauncher launcher) =>
 {
     var viewer = viewerTelemetry.Latest;
     var temperature = temperatures.Status(DateTimeOffset.UtcNow);
     return Results.Ok(new ApplianceTelemetry { ViewerConnected = viewer is not null, Viewer = viewer,
+        ViewerRunning = ViewerRuntimeState.IsRunning(), ViewerStarting = launcher.Starting, ViewerPaused = runtime.Paused,
         System = systemMetrics.GetSnapshot() with { CpuTemperatureC = temperature.CpuC, GpuTemperatureC = temperature.GpuC } });
 }).RequireAuthorization();
 app.MapGet("/api/temperatures", () => Results.Ok(temperatures.Status(DateTimeOffset.UtcNow))).RequireAuthorization();
@@ -529,11 +535,12 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
             ShowCameraStats = display.ShowCameraStats,
             ShowTileBorders = display.ShowTileBorders,
             DiagnosticsAutoOpenExcludedSlots = display.DiagnosticsAutoOpenExcludedSlots,
-            KeepViewerAlwaysOnTop = display.KeepViewerAlwaysOnTop
+            KeepViewerAlwaysOnTop = display.KeepViewerAlwaysOnTop,
+            ShowHoverExitButton = display.ShowHoverExitButton
         }).Normalize();
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", "Display settings changed from web admin");
-        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, ShowTileBorders = updated.ShowTileBorders, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop });
+        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, ShowTileBorders = updated.ShowTileBorders, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop, ShowHoverExitButton = updated.ShowHoverExitButton });
     }
     finally { configGate.Release(); }
 }).RequireAuthorization();
@@ -633,8 +640,20 @@ app.MapPost("/api/control/cameras/{slot:int}/restart", async (int slot, Cancella
     auditLog.Write("AUDIT", $"Remote camera {slot} restart requested: {result.Message}");
     return CommandResult(result);
 }).RequireAuthorization();
-app.MapPost("/api/control/viewer/{action}", async (string action, CancellationToken cancellationToken) =>
+app.MapPost("/api/control/viewer/{action}", async (string action, ViewerRuntimeState runtime, ViewerLauncher launcher, CancellationToken cancellationToken) =>
 {
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    timeout.CancelAfter(TimeSpan.FromSeconds(15));
+    if (action.Equals("start", StringComparison.OrdinalIgnoreCase))
+    {
+        if (pawnIo.Busy || (await pawnIo.StatusAsync()).State is "installing" or "downloading" or "update-installing")
+            return Results.Conflict(new { error = "Wait for maintenance to finish before starting the viewer." });
+        try { var message = await launcher.StartAsync(timeout.Token); auditLog.Write("AUDIT", message); return Results.Ok(new { success = true, message }); }
+        catch (Exception error) when (error is IOException or System.ComponentModel.Win32Exception or OperationCanceledException)
+        { return Results.Problem("Unable to start viewer: " + error.Message, statusCode: 503); }
+    }
+    using var gate = await runtime.AcquireAsync(timeout.Token);
+    if (runtime.Paused) return Results.Conflict(new { error = "Viewer is intentionally stopped. Use Start viewer to resume." });
     var type = action.ToLowerInvariant() switch
     {
         "restart-cameras" => (ViewerCommandType?)ViewerCommandType.RestartAllCameras,

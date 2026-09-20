@@ -1,5 +1,13 @@
 const assert = require('node:assert/strict');
-const { inspectText, inspectPath } = require('../tools/check-privacy.cjs');
+const { inspectText, inspectPath, historicalFixture } = require('../tools/check-privacy.cjs');
+const fixtureOid = 'bf3f46b1cb010b075c1103b40681d8c3cf48e50d';
+const fixturePath = 'plugins/scrypted-rtspview/test/config.cjs';
+const fixtureHit = { category: 'credential-bearing URL', line: 19 };
+assert(historicalFixture(fixtureOid, fixturePath, fixtureHit));
+assert(!historicalFixture('changed', fixturePath, fixtureHit));
+assert(!historicalFixture(fixtureOid, 'another-file.cjs', fixtureHit));
+assert(!historicalFixture(fixtureOid, fixturePath, { ...fixtureHit, line: 20 }));
+assert(!historicalFixture(fixtureOid, fixturePath, { ...fixtureHit, category: 'provider credential' }));
 // Construct canaries so the tests themselves never publish complete risky literals.
 const ip = ['192', '168', '12', '34'].join('.');
 const secret = 'synthetic-canary';
