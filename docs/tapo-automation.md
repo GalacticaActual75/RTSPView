@@ -1,4 +1,4 @@
-# Tapo sensor automations (1.0.44-beta.3)
+# Tapo sensor automations (1.0.44-beta.4)
 
 Configure direct Tapo access in **Automation → Tapo**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. This beta has automated reader, Controller, HTTP and native-viewer tests; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
 
@@ -38,7 +38,7 @@ Choose **Activate standard layout** and its target in the sensor rule, or **Acti
 
 **Automation → Priority** lists saved MQTT and Tapo rules together. Drag to reorder or use Move up/down, then **Save order** to assign priority 1 to the top rule, 2 to the next, and so on. Save or discard edits in MQTT/Tapo first. Disabled rules retain their place. Switching subtabs preserves drafts; a stale priority save is rejected if another session changed the rules.
 
-- Every MQTT and Tapo rule has priority **1–100; 1 is highest**. Existing rules default to 50.
+- Priority is managed only in **Automation → Priority**, rather than the individual rule editors. Existing priorities are preserved when editing a rule; new rules start at 50 until reordered. **1 is highest**.
 - Priority applies to competing wall views and, separately, to actions targeting the same overlay. Independent overlays can remain visible together.
 - Higher priority interrupts lower priority immediately after a trigger is received, regardless of the lower-priority rule's hold/takeover setting. A priority-1 doorbell rule therefore replaces a priority-2 garage view.
 - When the winner clears, a lower-priority rule resumes only if its sensor action is still active or its MQTT lease has not expired.

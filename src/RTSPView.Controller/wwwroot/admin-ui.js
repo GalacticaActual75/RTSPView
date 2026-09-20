@@ -62,8 +62,7 @@ const adminUi = (() => {
       ['[data-action="start"]','Start viewer','Open the viewer and enable automatic recovery. Unavailable while the viewer is already running.'],
       ['[data-action="restart-cameras"]','Restart all streams','Reconnect every stream without restarting the viewer application.'],
       ['[data-action="enter-fullscreen"]','Enter full screen','Fill the selected display with the live wall.'],
-      ['[data-action="exit-fullscreen"]','Exit full screen','Return to a window. Always-on-top remains a separate setting.'],
-      ['[data-action="restart"]','Restart viewer application','Close and relaunch the viewer, including all streams.'],
+      ['[data-action="restart"]','Restart viewer','Close and relaunch the viewer, including all streams.'],
       ['[data-system="reboot"]','Reboot host','Restart Windows and interrupt all applications on this host.']
     ]) {
       const button = document.querySelector(selector), group = document.createElement('div'); group.className = 'restart-action';

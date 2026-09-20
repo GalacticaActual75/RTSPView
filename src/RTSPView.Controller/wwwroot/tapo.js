@@ -28,7 +28,7 @@ const tapoUi = (() => {
       <p class="tapo-status" role="status">Loading sensor status…</p>
       <div class="tapo-inventory"></div>
       <h3>Sensor rules</h3><p>For an overlay only while a door is open, choose Open → Show overlay and When the state clears → Hide overlay. No layout change is needed. Restore normal behavior returns to the saved overlay setting and other active rules.</p>
-      <p>Priority 1 is highest. Higher-priority rules interrupt lower-priority views immediately, including person-detection rules. After they clear, a still-active lower-priority rule can resume. Manual camera focus takes priority.</p>
+
       <div class="tapo-rules"></div><button type="button" class="secondary tapo-add-rule">Add sensor rule</button>
       <details class="tapo-connection"><summary>Tapo hubs and account</summary>
       <p>Add both hubs if you are unsure where a door sensor is paired. Use each hub's IPv4 address or hostname. Enable Third-Party Compatibility in Tapo if authentication fails.</p>
@@ -74,9 +74,9 @@ const tapoUi = (() => {
     const card = document.createElement('fieldset'); card.className = 'tapo-rule'; card.dataset.id = rule.id;
     const legend = document.createElement('legend'); legend.textContent = 'Door sensor rule'; card.append(legend);
     const grid = document.createElement('div'); grid.className = 'automation-grid';
-    grid.append(input('Rule name', 'sensor-name', rule.name), input('Enabled', 'sensor-enabled', rule.enabled, 'checkbox'), input('Priority · 1 is highest', 'sensor-priority', rule.priority ?? 50, 'number'));
+    grid.append(input('Rule name', 'sensor-name', rule.name), input('Enabled', 'sensor-enabled', rule.enabled, 'checkbox'));
     grid.querySelector('.sensor-name').required = true; grid.querySelector('.sensor-name').maxLength = 100;
-    Object.assign(grid.querySelector('.sensor-priority'), {min: '1', max: '100', step: '1', required: true});
+    card.dataset.priority = String(rule.priority ?? 50);
     const choice = select('Sensor', sensorChoices(), rule.deviceId ? JSON.stringify([rule.hubId, rule.deviceId]) : '');
     choice.querySelector('select').className = 'sensor-choice'; choice.querySelector('select').required = true;
     const state = select('While the door is', [[2, 'Open'], [1, 'Closed']], rule.match); state.querySelector('select').className = 'sensor-match';
@@ -118,7 +118,7 @@ const tapoUi = (() => {
         const get = cls => r.querySelector('.sensor-' + cls).value;
         const [hubId, deviceId] = JSON.parse(get('choice') || '["",""]');
         return {id: r.dataset.id, name: get('name').trim(), enabled: r.querySelector('.sensor-enabled').checked, hubId, deviceId,
-          match: Number(get('match')), priority: Number(get('priority')), action: Number(get('action')), clearAction: Number(get('clear')),
+          match: Number(get('match')), priority: Number(r.dataset.priority), action: Number(get('action')), clearAction: Number(get('clear')),
           unavailableAction: Number(get('unavailable')), overlaySlot: Number(get('overlay')), layoutId: get('layout'), clearLayoutId: get('clear-layout'), focusCameraSlot: Number(get('focus')), secondFocusCameraSlot: Number(get('second'))};
       })}, password: f.password.value || null, clearPassword: f.clearPassword.checked};
   }

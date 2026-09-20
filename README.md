@@ -13,7 +13,7 @@ Release channels as of September 20, 2026:
 | Channel | Published version | Availability |
 | --- | --- | --- |
 | Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Promotes the beta dashboard, native stream editor, expanded layout/framing controls, per-layout appearance and Scrypted connector support. Adds intentional viewer exit, manual resume, optional fullscreen hover exit and viewer taskbar identity fixes. |
-| Beta | [1.0.44-beta.3](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.3) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
+| Beta | [1.0.44-beta.4](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.4) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
 
 Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. Unless marked beta, this guide describes stable 1.0.43. Tapo integration and numeric rule priorities require 1.0.44-beta.1 or newer; they are not in stable 1.0.43.
 
@@ -21,13 +21,15 @@ Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/lates
 
 Open **Automation → Tapo** to add both hubs, discover your T110, and view Open, Closed or Unavailable status. A rule can show an overlay while a door is open and hide it when closed, without changing the layout. Rules can also activate a standard wall layout or an automation template with selected focus cameras. Everything runs in Controller after the browser closes; Home Assistant and MQTT are not required for Tapo.
 
-Every MQTT and Tapo rule has **Priority**, from 1 (highest) to 100. For example, a priority-1 doorbell detection interrupts a priority-2 garage view immediately, even when the garage rule holds its view. A lower-priority view resumes only while its condition or detection timer remains active. Manual camera focus stays above automation.
+Manage MQTT and Tapo priority together in **Automation → Priority**; 1 is highest. For example, a priority-1 doorbell detection interrupts a priority-2 garage view immediately, even when the garage rule holds its view. A lower-priority view resumes only while its condition or detection timer remains active. Manual camera focus stays above automation.
 
 In **1.0.44-beta.3**, Automation has aligned **MQTT**, **Tapo** and **Priority** tabs with enable toggles. Use Priority to drag rules into one order, or use Move up/down, then Save order. The top rule receives priority 1. **Discover hubs on network** finds local H100/H200 candidates before sensor discovery. Both layout editors have **New layout** (blank or preset) and **Add stream**; new tiles default to Fit, preserving explicit sizing on existing layouts.
 
 See [Tapo setup, overlay recipes and priority behavior](docs/tapo-automation.md), including polling latency, unavailable behavior, and beta hardware-validation limits.
 
 In **1.0.44-beta.2**, custom overlay masks also follow their host camera's Fit/Fill/Stretch/Original framing, zoom and pan across layouts. The mask and overlay video transform together and stay clipped to the host tile. Existing 16:9 editor calibration is retained; no additional setting is required.
+
+In **1.0.44-beta.4**, priority editing and guidance live in the Priority tab, and automation help uses the full panel width. **Quick actions** beside Sign out mirrors Maintenance. Restart viewer is disabled while stopped or starting; one full-screen button follows the viewer’s reported mode.
 
 ### Finding controls after upgrading
 

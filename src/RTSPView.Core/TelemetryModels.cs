@@ -24,6 +24,7 @@ public sealed record CameraTelemetry
 public sealed record ViewerTelemetry
 {
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    public bool? IsFullScreen { get; init; }
     public long ViewerUptimeSeconds { get; init; }
     public double ViewerMemoryMb { get; init; }
     public string HardwareDecoder { get; init; } = "Unknown";
