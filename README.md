@@ -13,7 +13,7 @@ Release channels as of September 20, 2026:
 | Channel | Published version | Availability |
 | --- | --- | --- |
 | Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Promotes the beta dashboard, native stream editor, expanded layout/framing controls, per-layout appearance and Scrypted connector support. Adds intentional viewer exit, manual resume, optional fullscreen hover exit and viewer taskbar identity fixes. |
-| Beta | [1.0.44-beta.1](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.1) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, and shared automation priorities. Live hub validation is pending. |
+| Beta | [1.0.44-beta.2](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.2) | Adds direct Tapo H100/H200 discovery for T110 door sensors, sensor-controlled overlays and saved layouts, shared automation priorities, and custom overlay alignment across layouts. Live hub validation is pending. |
 
 Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. Unless marked beta, this guide describes stable 1.0.43. Tapo integration and numeric rule priorities require 1.0.44-beta.1 or newer; they are not in stable 1.0.43.
 
@@ -24,6 +24,8 @@ Open **Automation → Tapo door sensors** to add both hubs, discover your T110, 
 Every MQTT and Tapo rule has **Priority**, from 1 (highest) to 100. For example, a priority-1 doorbell detection interrupts a priority-2 garage view immediately, even when the garage rule holds its view. A lower-priority view resumes only while its condition or detection timer remains active. Manual camera focus stays above automation.
 
 See [Tapo setup, overlay recipes and priority behavior](docs/tapo-automation.md), including polling latency, unavailable behavior, and beta hardware-validation limits.
+
+In **1.0.44-beta.2**, custom overlay masks also follow their host camera's Fit/Fill/Stretch/Original framing, zoom and pan across layouts. The mask and overlay video transform together and stay clipped to the host tile. Existing 16:9 editor calibration is retained; no additional setting is required.
 
 ### Finding controls after upgrading
 

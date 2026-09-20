@@ -550,6 +550,7 @@ public partial class MainWindow : Window
             overlayWindow.Width = Math.Max(1, WallGrid.ActualWidth);
             overlayWindow.Height = Math.Max(1, WallGrid.ActualHeight);
             var plain = overlay with { ViewportShape = DoorbellViewportShape.Native, ShowBorder = false };
+            overlayWindow.Clip = null;
             overlayTile.ApplyVideoSizing(100, 50, 50, overlayWindow.Width, overlayWindow.Height);
             overlayTile.ApplyViewportEdgeSmoothing(plain, overlayWindow.Width, overlayWindow.Height);
             OverlayWindowOpacity.Apply(overlayWindow, 100);
@@ -578,6 +579,14 @@ public partial class MainWindow : Window
         var targetLeft = screenOrigin.X / dpi.DpiScaleX;
         var targetTop = screenOrigin.Y / dpi.DpiScaleY;
         var bounds = CalculateOverlayBounds(target, overlay);
+        var visibleBounds = Rect.Intersect(bounds, new Rect(0, 0, target.ActualWidth, target.ActualHeight));
+        if (visibleBounds.IsEmpty || visibleBounds.Width < 1 || visibleBounds.Height < 1)
+        {
+            HideOverlayWindowHierarchy(overlayWindow, overlayTile);
+            return;
+        }
+        var reference = overlay.ViewportShape == DoorbellViewportShape.Custom
+            ? OverlayGeometry.Calculate(overlay, 1600, 900) : default;
         var left = targetLeft + bounds.Left;
         var top = targetTop + bounds.Top;
 
@@ -590,8 +599,10 @@ public partial class MainWindow : Window
             overlay.ImageHorizontalPositionPercent,
             overlay.ImageVerticalPositionPercent,
             bounds.Width,
-            bounds.Height);
-        overlayTile.ApplyViewportEdgeSmoothing(overlay, bounds.Width, bounds.Height);
+            bounds.Height, reference.Width, reference.Height);
+        overlayTile.ApplyViewportEdgeSmoothing(overlay, bounds.Width, bounds.Height, reference.Width, reference.Height);
+        overlayWindow.Clip = new RectangleGeometry(new Rect(visibleBounds.Left - bounds.Left,
+            visibleBounds.Top - bounds.Top, visibleBounds.Width, visibleBounds.Height));
         OverlayWindowOpacity.Apply(overlayWindow, overlay.ViewportOpacityPercent);
         overlayWindow.Topmost = false;
         if (!overlayWindow.IsVisible) overlayWindow.Show();
@@ -623,9 +634,16 @@ public partial class MainWindow : Window
     private static Rect CalculateOverlayBounds(CameraTile target, DoorbellOverlaySettings overlay)
     {
         var source = target.GetVideoDimensions();
-        var bounds = OverlayGeometry.Calculate(overlay, target.ActualWidth, target.ActualHeight,
-            source is { Width: > 0, Height: > 0 } dimensions ? (double)dimensions.Width / dimensions.Height : null);
-        return new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        var image = target.GetHostImageLayout();
+        if (overlay.ViewportShape == DoorbellViewportShape.Custom)
+        {
+            var mapped = OverlayGeometry.FollowImage(overlay, source?.Width ?? 1600, source?.Height ?? 900, image);
+            return new Rect(mapped.Left, mapped.Top, mapped.Width, mapped.Height);
+        }
+        var bounds = OverlayGeometry.Calculate(overlay, target.ActualWidth, target.ActualHeight);
+        // Standard picture-in-picture keeps its shape, but uses real picture edges.
+        return new Rect(Math.Clamp(image.OffsetX + (image.RenderWidth - bounds.Width) * overlay.ViewportHorizontalPositionPercent / 100d, 0, Math.Max(0, target.ActualWidth - bounds.Width)),
+            Math.Clamp(image.OffsetY + (image.RenderHeight - bounds.Height) * overlay.ViewportVerticalPositionPercent / 100d, 0, Math.Max(0, target.ActualHeight - bounds.Height)), bounds.Width, bounds.Height);
     }
 
     private static void ApplyOverlayWindowRegion(

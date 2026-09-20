@@ -268,12 +268,25 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         return (videoTrack.Value.Data.Video.Width, videoTrack.Value.Data.Video.Height);
     }
 
+    private double _overlayReferenceWidth, _overlayReferenceHeight;
+
+    public DoorbellVideoLayout GetHostImageLayout()
+    {
+        var source = GetVideoDimensions() ?? (1600u, 900u);
+        var surface = _useCompositedOutput ? (FrameworkElement)CompositedCanvas : VideoView;
+        var origin = surface.TranslatePoint(new System.Windows.Point(), this);
+        var image = WallVideoTransform.Calculate(source.Item1, source.Item2,
+            Math.Max(1, surface.ActualWidth), Math.Max(1, surface.ActualHeight), _wallSizing ?? "fit",
+            _outputTileWidth, _videoZoomPercent, _imageHorizontalPositionPercent, _imageVerticalPositionPercent);
+        return image with { OffsetX = image.OffsetX + origin.X, OffsetY = image.OffsetY + origin.Y };
+    }
+
     public void ApplyVideoSizing(
         int zoomPercent,
         int imageHorizontalPositionPercent,
         int imageVerticalPositionPercent,
         double width,
-        double height)
+        double height, double referenceWidth = 0, double referenceHeight = 0)
     {
         var displayWidth = Math.Max(1, (int)Math.Round(width));
         var displayHeight = Math.Max(1, (int)Math.Round(height));
@@ -283,7 +296,10 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         if (_videoZoomPercent == zoomPercent &&
             _imageHorizontalPositionPercent == imageHorizontalPositionPercent &&
             _imageVerticalPositionPercent == imageVerticalPositionPercent &&
-            _videoDisplayWidth == displayWidth && _videoDisplayHeight == displayHeight) return;
+            _videoDisplayWidth == displayWidth && _videoDisplayHeight == displayHeight &&
+            _overlayReferenceWidth == referenceWidth && _overlayReferenceHeight == referenceHeight) return;
+        _overlayReferenceWidth = referenceWidth;
+        _overlayReferenceHeight = referenceHeight;
         _videoZoomPercent = zoomPercent;
         _imageHorizontalPositionPercent = imageHorizontalPositionPercent;
         _imageVerticalPositionPercent = imageVerticalPositionPercent;
@@ -292,11 +308,21 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         ApplyVideoSizing(_player);
     }
 
-    public void ApplyViewportEdgeSmoothing(DoorbellOverlaySettings overlay, double width, double height)
+    public void ApplyViewportEdgeSmoothing(DoorbellOverlaySettings overlay, double width, double height,
+        double referenceWidth = 0, double referenceHeight = 0)
     {
         TileBorder.BorderThickness = new Thickness(0);
         EllipticalViewportEdge.Visibility = RoundedViewportEdge.Visibility = CustomViewportEdge.Visibility = Visibility.Collapsed;
-        var geometry = OverlayViewportGeometry.Create(overlay, width, height);
+        var geometry = referenceWidth > 0 && referenceHeight > 0
+            ? OverlayViewportGeometry.Create(overlay, referenceWidth, referenceHeight).Clone()
+            : OverlayViewportGeometry.Create(overlay, width, height);
+        if (referenceWidth > 0 && referenceHeight > 0)
+        {
+            var transform = new System.Windows.Media.TransformGroup();
+            transform.Children.Add(geometry.Transform);
+            transform.Children.Add(new System.Windows.Media.ScaleTransform(width / referenceWidth, height / referenceHeight));
+            geometry.Transform = transform;
+        }
         var drawing = new System.Windows.Media.DrawingGroup();
         drawing.Children.Add(new System.Windows.Media.GeometryDrawing(System.Windows.Media.Brushes.Transparent, null,
             new System.Windows.Media.RectangleGeometry(new Rect(0, 0, width, height))));
@@ -635,12 +661,15 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         if (_useCompositedOutput)
         {
             var layout = DoorbellVideoTransform.CalculateLayout(source.Width, source.Height,
-                _videoDisplayWidth, _videoDisplayHeight, _videoZoomPercent,
+                _overlayReferenceWidth > 0 ? _overlayReferenceWidth : _videoDisplayWidth,
+                _overlayReferenceHeight > 0 ? _overlayReferenceHeight : _videoDisplayHeight, _videoZoomPercent,
                 _imageHorizontalPositionPercent, _imageVerticalPositionPercent);
-            CompositedImage.Width = layout.RenderWidth;
-            CompositedImage.Height = layout.RenderHeight;
-            System.Windows.Controls.Canvas.SetLeft(CompositedImage, layout.OffsetX);
-            System.Windows.Controls.Canvas.SetTop(CompositedImage, layout.OffsetY);
+            var scaleX = _overlayReferenceWidth > 0 ? _videoDisplayWidth / _overlayReferenceWidth : 1;
+            var scaleY = _overlayReferenceHeight > 0 ? _videoDisplayHeight / _overlayReferenceHeight : 1;
+            CompositedImage.Width = layout.RenderWidth * scaleX;
+            CompositedImage.Height = layout.RenderHeight * scaleY;
+            System.Windows.Controls.Canvas.SetLeft(CompositedImage, layout.OffsetX * scaleX);
+            System.Windows.Controls.Canvas.SetTop(CompositedImage, layout.OffsetY * scaleY);
             return;
         }
         VideoView.ApplyTemplate();

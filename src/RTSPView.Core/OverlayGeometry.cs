@@ -2,6 +2,19 @@ namespace RTSPView.Core;
 
 public static class OverlayGeometry
 {
+    // Custom masks are calibrated over the editor's 16:9 camera picture.
+    // Project the entire mask and its contents through the host's actual framing.
+    public static (double Left, double Top, double Width, double Height, double ReferenceWidth, double ReferenceHeight) FollowImage(
+        DoorbellOverlaySettings overlay, double sourceWidth, double sourceHeight, DoorbellVideoLayout image)
+    {
+        var reference = Calculate(overlay, 1600, 900);
+        var canvas = WallVideoTransform.Calculate(sourceWidth, sourceHeight, 1600, 900, "fill");
+        var scaleX = image.RenderWidth / canvas.RenderWidth;
+        var scaleY = image.RenderHeight / canvas.RenderHeight;
+        return (image.OffsetX + (reference.Left - canvas.OffsetX) * scaleX,
+            image.OffsetY + (reference.Top - canvas.OffsetY) * scaleY,
+            reference.Width * scaleX, reference.Height * scaleY, reference.Width, reference.Height);
+    }
     // The overlay editor uses a 16:9 host canvas. Fit that reference uniformly
     // into the current tile instead of stretching its axes independently.
     public static (double Left, double Top, double Width, double Height) Calculate(

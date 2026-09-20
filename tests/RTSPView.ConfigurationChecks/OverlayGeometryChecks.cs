@@ -33,6 +33,20 @@ internal static class OverlayGeometryChecks
         Check(Math.Abs(side.Left-(800-400*4d/3)/2)<1e-9,"Overlay did not anchor past pillarbox bar");
         Check(OverlayGeometry.Calculate(anchored,1600,900,16d/9)==OverlayGeometry.Calculate(anchored,1600,900),"Matching aspect placement changed");
         Console.WriteLine("PASS overlay uniform scaling, picture anchors without resizing, all shapes, portrait/landscape/narrow hosts and restoration");
+        var mask = anchored with { ViewportShape = DoorbellViewportShape.Custom };
+        var baseline = OverlayGeometry.Calculate(mask, 1600, 900);
+        foreach (var sizing in new[] { "fit", "fill", "stretch", "original" })
+        foreach (var host in new[] { (1600d, 900d), (510d, 310d), (400d, 700d) })
+        foreach (var zoom in new[] { 100, 175 })
+        {
+            var image = WallVideoTransform.Calculate(1600, 900, host.Item1, host.Item2, sizing, 800, zoom, 25, 75);
+            var mapped = OverlayGeometry.FollowImage(mask, 1600, 900, image);
+            Check(Math.Abs((mapped.Left - image.OffsetX) / image.RenderWidth - baseline.Left / 1600) < 1e-9, "Mask horizontal source anchor drifted");
+            Check(Math.Abs((mapped.Top - image.OffsetY) / image.RenderHeight - baseline.Top / 900) < 1e-9, "Mask vertical source anchor drifted");
+            Check(Math.Abs(mapped.Width / image.RenderWidth - baseline.Width / 1600) < 1e-9 && Math.Abs(mapped.Height / image.RenderHeight - baseline.Height / 900) < 1e-9, "Mask did not follow host distortion");
+            Check(mapped.ReferenceWidth == baseline.Width && mapped.ReferenceHeight == baseline.Height, "Overlay video crop changed with wall layout");
+        }
+        Console.WriteLine("PASS source-anchored custom masks across fit/fill/stretch/original, odd layouts, zoom and pan; stable reference crop.");
     }
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 }
