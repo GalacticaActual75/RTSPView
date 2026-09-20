@@ -38,6 +38,7 @@ internal static class Program
             {
                 // Create the real viewer HWND without starting camera playback.
                 new WindowInteropHelper(viewer).EnsureHandle();
+                SensorViewerChecks.Run(viewer);
                 CheckWindowIcon(viewer);
                 viewer.WindowStyle = WindowStyle.None;
                 viewer.ResizeMode = ResizeMode.NoResize;

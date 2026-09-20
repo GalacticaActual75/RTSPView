@@ -4,6 +4,7 @@
     <AssemblyName>SpotMonitor.Controller</AssemblyName>
     <RootNamespace>RTSPView.Controller</RootNamespace><OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework><RuntimeIdentifier>win-x64</RuntimeIdentifier><ApplicationIcon>Assets\RTSPView.Controller.ico</ApplicationIcon></PropertyGroup>
   <ItemGroup>
+    <Content Include="..\..\artifacts\tapo-reader\tapo-reader\**\*" Link="Tapo\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
     <Content Include="ThirdParty\*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <ProjectReference Include="..\RTSPView.Hardware\RTSPView.Hardware.csproj" />

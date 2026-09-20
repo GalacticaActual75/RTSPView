@@ -20,7 +20,7 @@ public sealed class ViewerCommandClient
         {
             await using var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(command.Type == ViewerCommandType.AutomationOverlays ? 1 : 8));
+            timeout.CancelAfter(TimeSpan.FromSeconds(command.Type is ViewerCommandType.AutomationOverlays or ViewerCommandType.SensorAutomation ? 1 : 8));
             await pipe.ConnectAsync(timeout.Token);
             await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
             using var reader = new StreamReader(pipe, leaveOpen: true);

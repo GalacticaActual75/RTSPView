@@ -59,6 +59,10 @@ builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, 
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
 builder.Services.AddSingleton<ViewerCommandClient>();
+builder.Services.AddSingleton(provider => new TapoService(dataDirectory,
+    provider.GetRequiredService<IDataProtectionProvider>(), provider.GetRequiredService<ViewerCommandClient>()));
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<TapoService>());
 builder.Services.AddSingleton(new ViewerRuntimeState(dataDirectory));
 builder.Services.AddSingleton<ViewerLauncher>();
 builder.Services.AddSingleton(provider => new AutomationService(dataDirectory,
@@ -317,6 +321,7 @@ app.MapPost("/api/update/install", async (UpdateInstallRequest request, Cancella
 }).RequireAuthorization();
 
 app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();
+app.MapTapo(configGate);
 app.MapGet("/api/automation", (AutomationService automation) => Results.Ok(automation.Configuration)).RequireAuthorization();
 app.MapGet("/api/automation/status", (AutomationService automation) => Results.Ok(automation.Status)).RequireAuthorization();
 app.MapGet("/api/automation/diagnostics", (HttpContext context, AutomationService automation) =>
@@ -455,12 +460,12 @@ app.MapPut("/api/overlays/{slot:int}", async (int slot, DoorbellOverlaySettings 
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
-app.MapDelete("/api/overlays/{slot:int}", async (int slot, AutomationService automation) =>
+app.MapDelete("/api/overlays/{slot:int}", async (int slot, AutomationService automation, TapoService tapo) =>
 {
     await configGate.WaitAsync();
     try
     {
-        if (automation.UsesOverlay(slot)) return Results.BadRequest(new { error = "An automation rule uses this overlay or its original stream. Remove that reference before deleting it." });
+        if (automation.UsesOverlay(slot) || tapo.UsesOverlay(slot)) return Results.BadRequest(new { error = "An automation rule uses this overlay or its original stream. Remove that reference before deleting it." });
         var settings = await settingsStore.LoadAsync();
         await settingsStore.SaveAsync(StreamCatalog.DeleteOverlay(settings, slot));
         try { File.Delete(Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg")); } catch (IOException) { }
@@ -617,13 +622,15 @@ app.MapPut("/api/automation/layouts", async (WallLayoutsRequest request, Automat
     catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
     finally { configGate.Release(); }
 }).RequireAuthorization();
-app.MapPut("/api/layouts", async (WallLayoutsRequest request) =>
+app.MapPut("/api/layouts", async (WallLayoutsRequest request, TapoService tapo) =>
 {
     await configGate.WaitAsync();
     try
     {
         WallLayout.Validate(request.Layouts, request.ActiveLayoutId);
         var settings = await settingsStore.LoadAsync();
+        if (settings.Layouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && tapo.UsesLayout(l.Id)))
+            return Results.BadRequest(new { error = "A Tapo sensor rule uses this layout. Remove its rule reference before deleting it." });
         var updated = settings with { Layouts = request.Layouts, ActiveLayoutId = request.ActiveLayoutId };
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", "Wall layouts saved from web admin");

@@ -63,10 +63,11 @@ public enum ViewerCommandType
     EnterFullScreen,
     ExitFullScreen,
     CaptureCameraSnapshot,
-    AutomationOverlays
+    AutomationOverlays,
+    SensorAutomation
 }
 
-public sealed record ViewerCommand(Guid Id, ViewerCommandType Type, int? Slot = null, AutomationPresentation? Automation = null);
+public sealed record ViewerCommand(Guid Id, ViewerCommandType Type, int? Slot = null, AutomationPresentation? Automation = null, SensorPresentation? Sensors = null);
 public sealed record ViewerCommandResult(Guid Id, bool Success, string Message)
 {
     public bool ExitingIntentionally { get; init; }

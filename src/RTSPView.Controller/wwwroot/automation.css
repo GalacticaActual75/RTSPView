@@ -1,4 +1,17 @@
 #automationForm { min-width: 0; }
+#tapoForm { min-width: 0; margin-top: 24px; }
+#tapoForm .tapo-rule { min-width: 0; border: 1px solid var(--line, #334155); border-radius: 8px; padding: 18px; margin: 16px 0; }
+#tapoForm legend { font-weight: 600; padding: 0 8px; }
+#tapoForm input[type=checkbox] { width: auto; margin: 0 8px 0 0; }
+#tapoForm label:has(input[type=checkbox]) { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+#tapoForm .tapo-connection { margin: 24px 0; border-top: 1px solid var(--line, #334155); padding-top: 18px; }
+#tapoForm summary { cursor: pointer; font-weight: 600; }
+#tapoForm .tapo-inventory { overflow-x: auto; }
+#tapoForm table { width: 100%; border-collapse: collapse; }
+#tapoForm th, #tapoForm td { padding: 10px; text-align: left; border-bottom: 1px solid var(--line, #334155); overflow-wrap: anywhere; }
+#tapoForm .tapo-hub { border-bottom: 1px solid var(--line, #334155); padding-bottom: 12px; }
+#tapoForm .tapo-status, #tapoForm .sensor-rule-status { color: var(--muted, #94a3b8); }
+#tapoForm [hidden] { display: none !important; }
 #automationForm fieldset { border: 1px solid var(--line, #334155); border-radius: 8px; margin: 16px 0; padding: 18px; min-width: 0; }
 #automationForm legend { padding: 0 8px; font-weight: 600; }
 .automation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: end; margin: 12px 0; }

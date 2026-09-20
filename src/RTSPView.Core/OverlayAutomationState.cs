@@ -15,9 +15,12 @@ public sealed class OverlayAutomationState
     public void Clear() { _leases = []; _dismissed.Clear(); }
     private IEnumerable<AutomationOverlayLease> Active(DateTimeOffset now) => _leases.Where(l => l.ExpiresAt > now && !_dismissed.Contains(l.Id));
     public HashSet<int> ActiveSlots(DateTimeOffset now) => Active(now).Where(l => l.Action == AutomationAction.Overlay).Select(l => l.Slot).ToHashSet();
+    public int? OverlayPriority(int slot, DateTimeOffset now) => Active(now).Where(l => l.Action == AutomationAction.Overlay && l.Slot == slot).Select(l => (int?)l.Priority).Min();
     public AutomationOverlayLease? Focus(DateTimeOffset now)
     {
-        var candidates = Active(now).Where(l => l.Action != AutomationAction.Overlay).ToArray();
+        var all = Active(now).Where(l => l.Action != AutomationAction.Overlay).ToArray();
+        var priority = all.Select(l => (int?)l.Priority).Min();
+        var candidates = all.Where(l => l.Priority == priority).ToArray();
         var winner = candidates.OrderBy(l => l.Action == AutomationAction.FullScreen ? 0 : 1)
             .ThenBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal).FirstOrDefault();
         if (winner is null) return null;
@@ -29,7 +32,7 @@ public sealed class OverlayAutomationState
     public int[] FocusSlots(DateTimeOffset now, string layoutId)
     {
         var winner = Focus(now);
-        var candidates = Active(now).Where(l => l.Action == AutomationAction.FocusedLayout && l.LayoutId == layoutId);
+        var candidates = Active(now).Where(l => l.Action == AutomationAction.FocusedLayout && l.LayoutId == layoutId && l.Priority == winner?.Priority);
         var ordered = winner?.AllowNewerDetection == true
             ? candidates.OrderByDescending(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal)
             : candidates.OrderBy(l => l.StartedAt).ThenBy(l => l.Id, StringComparer.Ordinal);

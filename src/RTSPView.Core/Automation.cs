@@ -21,6 +21,7 @@ public sealed record AutomationRule
     public bool AllowNewerDetection { get; init; }
     public bool AnyConfiguredSource { get; init; }
     public double ClearMinutes { get; init; } = 2;
+    public int Priority { get; init; } = 50;
 }
 
 public sealed record AutomationSettings
@@ -56,6 +57,7 @@ public sealed record AutomationSettings
         foreach (var rule in ResolveSources().Rules)
         {
             if (!Enum.IsDefined(rule.Action)) throw new InvalidDataException("Select a supported automation action.");
+            if (rule.Priority is < 1 or > 100) throw new InvalidDataException("Priority must be 1–100; 1 is highest.");
             if (rule.LayoutId is null || (rule.Action == AutomationAction.FocusedLayout && rule.LayoutId.Length > 0 && !cameras.AutomationViewLayouts.Any(l => l.Id == rule.LayoutId)))
                 throw new InvalidDataException("Select an available automation layout.");
             if (rule.SecondCameraSlot != 0 && (rule.Action != AutomationAction.FocusedLayout ||
@@ -91,7 +93,7 @@ public sealed record AutomationSettings
 }
 
 public sealed record AutomationOverlayLease(string Id, int Slot, DateTimeOffset ExpiresAt,
-    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "", string LayoutId = "", int SecondCameraSlot = 0, bool AllowNewerDetection = false);
+    AutomationAction Action = AutomationAction.Overlay, DateTimeOffset StartedAt = default, string RuleId = "", string LayoutId = "", int SecondCameraSlot = 0, bool AllowNewerDetection = false, int Priority = 50);
 public sealed record AutomationPresentation(string ConfigurationHash, AutomationOverlayLease[] Leases);
 
 public static class AutomationConfiguration
@@ -138,7 +140,7 @@ public sealed class PersonOverlayEngine
         var sourceTime = eventTime ?? now;
         var expiry = (sourceTime > now ? now : sourceTime).AddMinutes(rule.ClearMinutes);
         if (existing is not null && existing.ExpiresAt > expiry) expiry = existing.ExpiresAt;
-        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id, rule.LayoutId, rule.SecondCameraSlot, rule.AllowNewerDetection);
+        _leases[key] = new(existing?.Id ?? Guid.NewGuid().ToString("N"), target, expiry, rule.Action, existing?.StartedAt ?? now, rule.Id, rule.LayoutId, rule.SecondCameraSlot, rule.AllowNewerDetection, rule.Priority);
     }
     public void Expire(DateTimeOffset now)
     {

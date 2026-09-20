@@ -1,0 +1,40 @@
+// Isolated Controller; no physical hubs, viewer actions or real account credentials.
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),net=require('node:net'),{spawn}=require('node:child_process');
+(async()=>{
+ const root=path.resolve(__dirname,'..'),directory=fs.mkdtempSync(path.join(os.tmpdir(),'rtspview-tapo-http-'));
+ const socket=net.createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
+ const dotnet=process.argv[2]||process.env.DOTNET_HOST_PATH||'dotnet';
+ const assembly=fs.readFileSync(path.join(root,'src/RTSPView.Controller/RTSPView.Controller.csproj'),'utf8').match(/<AssemblyName>([^<]+)<\/AssemblyName>/)[1];
+ const child=spawn(dotnet,[path.join(root,'src/RTSPView.Controller/bin/Release/net8.0-windows/win-x64',assembly+'.dll')],{cwd:root,windowsHide:true,stdio:'ignore',env:{...process.env,RTSPVIEW_DATA_DIR:directory,ASPNETCORE_ENVIRONMENT:'Testing',ASPNETCORE_URLS:'http://127.0.0.1:'+port,AllowedHosts:'127.0.0.1'}});
+ let csrf='',cookies=new Map();
+ async function request(route,method='GET',body,verify=true){const response=await fetch('http://127.0.0.1:'+port+route,{method,headers:{'Content-Type':'application/json',Cookie:[...cookies].map(([k,v])=>k+'='+v).join('; '),...(verify?{'X-CSRF-Token':csrf}:{})},body:body===undefined?undefined:JSON.stringify(body)});for(const cookie of response.headers.getSetCookie()){const pair=cookie.split(';')[0],i=pair.indexOf('=');cookies.set(pair.slice(0,i),pair.slice(i+1))}const text=await response.text();let data;try{data=JSON.parse(text)}catch{}return {status:response.status,data};}
+ const session=async()=>{const r=await request('/api/session');csrf=r.data.csrfToken;return r;};
+ try{
+  let ready=false;for(let i=0;i<100;i++){try{await session();ready=true;break}catch{await new Promise(r=>setTimeout(r,100))}}assert(ready);
+  for(const [route,method,body]of [['/api/tapo','GET'],['/api/tapo/status','GET'],['/api/tapo','PUT',{}],['/api/tapo/discover','POST',{}],['/api/tapo/rules/example/test','POST',{state:2}]])assert.equal((await request(route,method,body)).status,401,route);
+  assert.equal((await request('/api/auth/login','POST',{password:'admin'})).status,200);await session();
+  assert.equal((await request('/api/tapo')).status,403,'Setup gate');
+  const admin='test-'+crypto.randomUUID();
+  assert.equal((await request('/api/auth/password','POST',{currentPassword:'admin',newPassword:admin})).status,200);
+  assert.equal((await request('/api/auth/login','POST',{password:admin})).status,200);await session();
+  const initial=(await request('/api/tapo')).data;assert.equal(initial.hasPassword,false);
+  const config=(await request('/api/config')).data;
+  const overlay={...config.doorbellOverlay,camera:{...config.doorbellOverlay.camera,rtspUrl:'rtsp://camera.example/live',enabled:false}};
+  assert.equal((await request('/api/doorbell','PUT',overlay)).status,200);
+  const hub={id:crypto.randomUUID(),name:'Test hub',host:'hub.example'};
+  const rule={id:crypto.randomUUID(),name:'Test door',enabled:true,hubId:hub.id,deviceId:'test-door',match:2,action:1,clearAction:2,unavailableAction:0,overlaySlot:10,priority:1};
+  const settings={...initial.settings,enabled:true,username:'test@example.invalid',hubs:[hub],rules:[rule]};
+  const secret='synthetic-test-'+crypto.randomUUID();
+  assert.equal((await request('/api/tapo','PUT',{settings,password:secret},false)).status,400,'CSRF');
+  const saved=await request('/api/tapo','PUT',{settings,password:secret});assert.equal(saved.status,200);assert.equal(saved.data.hasPassword,true);assert.equal(saved.data.settings.rules[0].priority,1);
+  assert(!JSON.stringify(saved.data).includes(secret));assert(!fs.readFileSync(path.join(directory,'tapo.json'),'utf8').includes(secret),'Password encrypted at rest');
+  assert.equal((await request('/api/tapo','PUT',{settings})).data.hasPassword,true,'Blank password retains saved secret');
+  assert.equal((await request('/api/tapo','PUT',{settings:{...settings,rules:[{...rule,priority:0}]}})).status,400,'Invalid priority');
+  assert.equal((await request('/api/tapo','PUT',{settings:{...settings,rules:[{...rule,overlaySlot:999}]}})).status,400,'Invalid overlay');
+  assert.equal((await request('/api/tapo/discover','POST',{settings:{...settings,hubs:[]}})).status,400,'Invalid discovery without contacting network');
+  assert.equal((await request('/api/tapo/rules/'+rule.id+'/test','POST',{state:99})).status,400,'Invalid simulation without viewer actions');
+  assert.equal((await request('/api/tapo','PUT',{settings,clearPassword:true})).status,400,'Enabled connection cannot silently lose credentials');
+  assert.equal((await request('/api/tapo','PUT',{settings:{...settings,enabled:false},clearPassword:true})).data.hasPassword,false,'Explicit clear');
+  console.log('PASS Tapo HTTP: authentication, setup gate, CSRF, encrypted secrets, retained/cleared password, persisted priority/actions and validation.');
+ }finally{child.kill();}
+})().catch(e=>{console.error(e);process.exitCode=1});

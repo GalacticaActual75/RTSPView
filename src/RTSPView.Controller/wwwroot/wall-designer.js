@@ -109,6 +109,7 @@ function createWallDesigner(isAutomation = false) {
       if (!draft.layouts.some(layout=>layout.id===selectedId)) selectedId = draft.activeLayoutId;
       render(); dashboardUX.sync(); message(revert ? 'Previous saved layouts restored.' : apply ? 'Layout applied. The viewer will update shortly.' : 'Layouts saved.');
       if(isAutomation){message('Automation layouts saved. Choose one in a focused-layout rule.');await automationUi.refreshLayouts();}
+      else tapoUi.updateTargets({layouts: result.layouts});
     } catch(error) { message(error.message); }
     finally { busy = false; root.inert = false; }
   }

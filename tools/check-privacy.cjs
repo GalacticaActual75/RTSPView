@@ -32,7 +32,7 @@ function inspectPath(name) {
   const normalized = name.replaceAll('\\', '/');
   const base = path.posix.basename(normalized);
   if (/(?:^|\/)(?:exports|backups|screenshots|debug-captures|local-certificates|private|data-protection|snapshots|logs|artifacts|publish|stage|dist|\.toolchain|bin|obj)\//i.test(normalized) ||
-      /^(?:settings\.json(?:\..*)?|web-security\.json.*|automation\.json.*|initial-admin-password\.txt|(?:RTSPView|SpotMonitor)-config.*\.json|update-channel\.json|appsettings\.(?:Local|Development)\.json|appsettings\..*\.local\.json|launchSettings\.json)$/i.test(base) ||
+      /^(?:settings\.json(?:\..*)?|web-security\.json.*|automation\.json.*|tapo\.json.*|initial-admin-password\.txt|(?:RTSPView|SpotMonitor)-config.*\.json|update-channel\.json|appsettings\.(?:Local|Development)\.json|appsettings\..*\.local\.json|launchSettings\.json)$/i.test(base) ||
       (base.startsWith('.env') && base !== '.env.example') ||
       /\.(?:key|pem|pfx|p12|db|sqlite\d*|log|bak|backup|dmp|dump|exe|dll|pdb)$/i.test(base)) {
     return [{ line: 0, category: 'private runtime or generated file' }];

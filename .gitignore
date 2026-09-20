@@ -24,6 +24,8 @@ settings.json
 settings.json.*
 web-security.json*
 automation.json*
+tapo.json*
+__pycache__/
 initial-admin-password.txt
 data-protection/
 snapshots/

@@ -992,6 +992,8 @@ public partial class MainWindow : Window
         {
             case ViewerCommandType.AutomationOverlays:
                 return ApplyAutomation(command);
+            case ViewerCommandType.SensorAutomation:
+                return ApplySensorAutomation(command);
             case ViewerCommandType.RestartCamera when commandTile is not null:
                 commandTile.Start();
                 var streamName = commandTile.GetTelemetry().Name;

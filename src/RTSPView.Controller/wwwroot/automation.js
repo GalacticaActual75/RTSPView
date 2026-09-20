@@ -25,7 +25,7 @@ const automationUi = (() => {
       <div class="automation-rules"></div><button type="button" class="secondary automation-add">Add rule</button>
       <details class="automation-help"><summary>How rules behave</summary><p>Choose <b>Automation only</b> as the target’s Display mode in Overlays to hide it while waiting. Always visible overlays remain on screen after a rule clears.</p>
       <p>Clear means no new person detections; it does not prove the scene is empty. During a broker outage, the existing clear timer still expires.</p>
-      <p>By default fullscreen takes priority and views hold until their timer expires. Enable newer-detection takeover on a rule to let another stream replace it immediately. Any detection-enabled stream uses your configured topic and zone mappings. Manual double-clicks override active automation; saved layouts are restored when focus clears.</p>
+      <p>Priority 1 is highest. A higher-priority rule interrupts a lower-priority view immediately. At equal priority, fullscreen takes precedence and views hold until their timer expires unless newer-detection takeover is enabled. Any detection-enabled stream uses your configured topic and zone mappings. Manual double-clicks override active automation; saved layouts are restored when focus clears.</p>
       </details></fieldset><details class="mqtt-tools automation-section" aria-label="MQTT discovery and details">
       <summary>Find camera events & troubleshoot</summary><p>Discover event topics using your connection settings. Listening lasts five minutes and does not activate rules.</p>
       <details><summary>Advanced discovery settings</summary><label>Topic prefix<input class="mqtt-prefix" value="scrypted" maxlength="400" spellcheck="false"></label></details>
@@ -99,6 +99,7 @@ const automationUi = (() => {
     const card = document.createElement('fieldset'); card.className = 'automation-rule'; card.dataset.id = rule.id;
     card.innerHTML = `<div class="automation-grid rule-identity">
       <label>Rule name<input class="rule-name" maxlength="100" required></label>
+      <label>Priority · 1 is highest<input class="rule-priority" type="number" min="1" max="100" step="1" required></label>
       <label><input class="rule-enabled" type="checkbox"> Enabled</label></div>
       <h4>When a person is detected on</h4>
       <label>Trigger streams<select class="rule-source-mode"><option value="selected">Selected streams</option><option value="any">Any detection-enabled stream</option></select></label>
@@ -110,7 +111,7 @@ const automationUi = (() => {
       <p class="target-help"></p>
       <h4>Keep it shown until</h4>
       <label>When another stream detects a person<select class="rule-takeover"><option value="hold">Hold until clear delay expires</option><option value="newer">Allow a newer detection to take over</option></select></label>
-      <p>Takeover applies to fullscreen and focused views. Repeated detections extend the timer without stealing focus. After a view clears, another still-active rule may resume.</p><label class="rule-timing">No new person detections for (minutes)<input class="rule-delay" type="number" min="0.1" max="120" step="0.1" required></label>
+      <p>Higher-priority rules always take over immediately. This setting controls takeovers between rules of equal priority. Repeated detections extend the timer without stealing focus. After a view clears, another still-active rule may resume.</p><label class="rule-timing">No new person detections for (minutes)<input class="rule-delay" type="number" min="0.1" max="120" step="0.1" required></label>
       <div class="control-buttons rule-actions">
       <button type="button" class="secondary rule-remove">Delete rule</button></div><p class="rule-status" role="status">Not saved</p>`;
     const editor = document.createElement('details'); editor.className = 'rule-editor'; editor.open = !collapsed;
@@ -120,6 +121,7 @@ const automationUi = (() => {
     if (collapsed) card.querySelector('.rule-status').textContent = 'Saved';
     card.querySelector('.rule-name').value = rule.name; card.querySelector('.rule-enabled').checked = rule.enabled;
     card.querySelector('.rule-delay').value = rule.clearMinutes;
+    card.querySelector('.rule-priority').value = rule.priority ?? 50;
     card.querySelector('.rule-takeover').value=rule.allowNewerDetection?'newer':'hold';
     card.querySelector('.rule-source-mode').value=rule.anyConfiguredSource?'any':'selected';
     card.dataset.overlayTarget = rule.overlaySlot || ''; card.dataset.cameraTarget = rule.cameraSlot || 0;
@@ -143,6 +145,7 @@ const automationUi = (() => {
       const description = document.createElement('span'); description.className = 'rule-summary-description';
       const sources = card.querySelector('.rule-source-mode').value==='any'?'any detection-enabled stream': 'any of '+[...card.querySelectorAll('.source-camera')].filter(s => s.value).length+' selected streams';
       description.textContent = `When ${sources} detects a person: ${action.selectedOptions[0].textContent} → ${target.selectedOptions[0]?.textContent || 'Select a target'}. Clear after ${card.querySelector('.rule-delay').value} minutes without detections${card.querySelector('.rule-enabled').checked ? '' : ' · Disabled'}`;
+      description.textContent += ` · Priority ${card.querySelector('.rule-priority').value}`;
       const second=card.querySelector('.rule-second-target');if(second&&Number(second.value)>0)description.textContent+=' · Focus 2: '+second.selectedOptions[0].textContent;
       const zones = [...card.querySelectorAll('.source-zone')].map(z => z.value.trim()).filter(Boolean);
       if (zones.length) description.textContent += ' · Required zones: ' + [...new Set(zones)].join(', ');
@@ -206,7 +209,7 @@ const automationUi = (() => {
         secondCameraSlot: Number(card.querySelector('.rule-second-target')?.value||0),
         overlaySlot: Number(card.querySelector('.rule-action').value) === 0 ? Number(card.querySelector('.rule-target').value) : 0,
         cameraSlot: Number(card.querySelector('.rule-action').value) !== 0 ? Number(card.querySelector('.rule-target').value) : 0,
-        clearMinutes: Number(card.querySelector('.rule-delay').value), sources: [...card.querySelectorAll('.automation-source')].map(row => ({
+        priority: Number(card.querySelector('.rule-priority').value), clearMinutes: Number(card.querySelector('.rule-delay').value), sources: [...card.querySelectorAll('.automation-source')].map(row => ({
           cameraSlot: Number(row.querySelector('.source-camera').value), topic: row.querySelector('.source-topic').value.trim(), requiredZone: row.querySelector('.source-zone').value.trim()})).filter(s=>card.querySelector('.rule-source-mode').value!=='any'||s.topic)}))},
       password: f.password.value || null, clearPassword: f.clearPassword.checked};
   }
@@ -221,6 +224,7 @@ const automationUi = (() => {
     rules.replaceChildren(); settings.rules.forEach(rule => addRule(rule, true)); dirty = false; form.dataset.dirty = 'false'; loaded = true; refreshOverlayLinks();
   }
   async function load(config) {
+    await tapoUi.load(config);
     try {
       if (config) { viewLayouts = config.automationViewLayouts || []; overlays = [config.doorbellOverlay, config.garageOverlay, ...(config.additionalOverlays || [])].map(o => o.camera).filter(c => c.rtspUrl);
         inventory = [...layoutStreamInventory(config), ...overlays].filter(c => c.rtspUrl); }
@@ -244,6 +248,7 @@ const automationUi = (() => {
     finally { busy = false; for (const button of form.querySelectorAll('button')) button.disabled = false; for (const fieldset of form.querySelectorAll('fieldset')) fieldset.disabled = false; }
   }
   async function refresh() {
+    tapoUi.refresh();
     if (!loaded || refreshing) return; refreshing = true;
     try {
       const status = await api('/api/automation/status');
@@ -370,6 +375,7 @@ const automationUi = (() => {
     }
   }
   function updateOverlay(camera) {
+    tapoUi.updateOverlay(camera);
     overlays = overlays.filter(c => c.slot !== camera.slot); if (camera.rtspUrl) overlays.push(camera);
     inventory = inventory.filter(c => c.slot !== camera.slot && c.slot !== camera.slot+23); if (camera.rtspUrl) inventory.push(camera, {...camera,slot:camera.slot+23,name:camera.name+' (overlay source)',enabled:true});
     refreshStreamChoices(); refreshOverlayLinks(); refresh();
