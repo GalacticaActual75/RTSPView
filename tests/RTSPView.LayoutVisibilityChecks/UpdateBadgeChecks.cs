@@ -66,10 +66,15 @@ internal static class UpdateBadgeChecks
         {
             control.Width=width;control.Measure(new Size(width,double.PositiveInfinity));control.Arrange(new Rect(0,0,width,control.DesiredSize.Height));control.UpdateLayout();
             Capture(control,$"viewer-controlbar-{width}.png");
-            var content=(WrapPanel)control.Child;
+            var dock=(DockPanel)control.Child;
+            var content=dock.Children.OfType<WrapPanel>().Single();
             var web=content.Children.OfType<Button>().Single(b=>b.Content?.ToString()=="Open settings");
             var point=web.TranslatePoint(new Point(),control);
             if(point.X<0||point.X+web.ActualWidth>width||point.Y+web.ActualHeight>control.ActualHeight)throw new Exception("Web configuration button clipped");
+            var exit=dock.Children.OfType<Button>().Single(b=>b.Content?.ToString()=="Full exit");
+            var exitPoint=exit.TranslatePoint(new Point(),control);
+            if(exitPoint.X<point.X+web.ActualWidth||exitPoint.X+exit.ActualWidth>width||exitPoint.Y+exit.ActualHeight>control.ActualHeight)
+                throw new Exception("Full exit overlaps controls or is clipped");
         }
         var calls=0;
         var badge=new UpdateBadgeWindow(owner,request=>
