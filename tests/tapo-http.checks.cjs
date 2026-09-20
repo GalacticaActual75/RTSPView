@@ -11,7 +11,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const session=async()=>{const r=await request('/api/session');csrf=r.data.csrfToken;return r;};
  try{
   let ready=false;for(let i=0;i<100;i++){try{await session();ready=true;break}catch{await new Promise(r=>setTimeout(r,100))}}assert(ready);
-  for(const [route,method,body]of [['/api/automation/priorities','GET'],['/api/automation/priorities','PUT',{}],['/api/tapo/discover-hubs','POST',{}],['/api/tapo','GET'],['/api/tapo/status','GET'],['/api/tapo','PUT',{}],['/api/tapo/discover','POST',{}],['/api/tapo/rules/example/test','POST',{state:2}]])assert.equal((await request(route,method,body)).status,401,route);
+  for(const [route,method,body]of [['/api/tapo/account','DELETE'],['/api/automation/priorities','GET'],['/api/automation/priorities','PUT',{}],['/api/tapo/discover-hubs','POST',{}],['/api/tapo','GET'],['/api/tapo/status','GET'],['/api/tapo','PUT',{}],['/api/tapo/discover','POST',{}],['/api/tapo/rules/example/test','POST',{state:2}]])assert.equal((await request(route,method,body)).status,401,route);
   assert.equal((await request('/api/auth/login','POST',{password:'admin'})).status,200);await session();
   assert.equal((await request('/api/tapo')).status,403,'Setup gate');
   const admin='test-'+crypto.randomUUID();
@@ -56,6 +56,15 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal((await request('/api/tapo/rules/'+rule.id+'/test','POST',{state:99})).status,400,'Invalid simulation without viewer actions');
   assert.equal((await request('/api/tapo','PUT',{settings,clearPassword:true})).status,400,'Enabled connection cannot silently lose credentials');
   assert.equal((await request('/api/tapo','PUT',{settings:{...settings,enabled:false},clearPassword:true})).data.hasPassword,false,'Explicit clear');
+  assert.equal((await request('/api/tapo','PUT',{settings,password:secret})).status,200);
+  assert.equal((await request('/api/tapo/account','DELETE',{},false)).status,400,'Account removal requires CSRF');
+  const beforeRemoval=(await request('/api/tapo')).data.settings;
+  const removed=await request('/api/tapo/account','DELETE'); assert.equal(removed.status,200);
+  assert.equal(removed.data.hasPassword,false); assert.equal(removed.data.settings.username,''); assert.equal(removed.data.settings.enabled,false);
+  assert.deepEqual(removed.data.settings.hubs,beforeRemoval.hubs); assert.deepEqual(removed.data.settings.rules,beforeRemoval.rules);
+  const persisted=JSON.parse(fs.readFileSync(path.join(directory,'tapo.json'),'utf8'));
+  assert.equal(persisted.ProtectedPassword,''); assert.equal(persisted.Settings.Username,'');
+  assert.equal((await request('/api/tapo/account','DELETE')).status,200,'Removal is idempotent');
   console.log('PASS Tapo HTTP: authentication, setup gate, CSRF, encrypted secrets, retained/cleared password, persisted priority/actions and validation.');
  }finally{child.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1});

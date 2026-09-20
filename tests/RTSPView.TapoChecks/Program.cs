@@ -81,6 +81,13 @@ Check(commands.Last().Sensors!.Effects.Single().Action == SensorAction.ShowOverl
 await service.SaveAsync(new(settings with { Enabled = false }), default);
 await Until(() => commands.Last().Sensors!.Effects.Length == 0, "Disable did not clear active test and effects");
 Check(service.Status.TestingRules.Length == 0, "Configuration changes retained tests");
+await service.SaveAsync(new(settings), default);
+await service.TestAsync(rule.Id, ContactState.Open, default);
+await service.RemoveAccountAsync(default);
+Check(commands.Last().Sensors!.Effects.Length == 0, "Account removal did not clear active effects");
+Check(service.Status.TestingRules.Length == 0, "Account removal retained active tests");
+Check(!service.CurrentSettings.Enabled && service.CurrentSettings.Username == "", "Account removal retained connection");
+Check(service.CurrentSettings.Rules.Length == settings.Rules.Length && service.CurrentSettings.Hubs.Length == settings.Hubs.Length, "Account removal lost saved rules or hubs");
 await service.StopAsync(default);
 using var reload = new TapoService(directory, protection, (_, _) => Task.FromResult(new ViewerCommandResult(Guid.NewGuid(), true, "")), new FakeReader(reader.Snapshot));
 Check(JsonSerializer.Serialize(reload.Configuration).Contains("hasPassword"), "Saved settings did not reload");

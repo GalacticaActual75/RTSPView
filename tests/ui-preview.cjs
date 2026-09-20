@@ -31,6 +31,7 @@ http.createServer(async(req,res)=>{
   if(req.method==='GET')return json({layouts:config.automationViewLayouts,activeLayoutId:config.automationViewLayouts[0].id});
   let body='';for await(const chunk of req)body+=chunk;const r=JSON.parse(body);config.automationViewLayouts=r.layouts;return json(r);
  }
+ if(route==='/api/tapo/account'&&req.method==='DELETE'){tapo={settings:{...tapo.settings,enabled:false,username:''},hasPassword:false};return json(tapo)}
  if(route.startsWith('/api/tapo')){
   let body='';for await(const chunk of req)body+=chunk;
   if(route==='/api/tapo'&&req.method==='GET')return json(tapo);

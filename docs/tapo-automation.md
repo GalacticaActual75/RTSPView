@@ -53,6 +53,12 @@ Open/Closed reflects the hub's reported state. Missing sensors, failed hubs and 
 
 **Test open**, **Test closed** and **Test unavailable** apply a saved, enabled rule's selected state to the running viewer for ten seconds. They do not operate the sensor or hub. Normal polling resumes afterward; changing or disabling settings clears tests. Status indicates active rule conditions, which may be superseded by a higher-priority rule.
 
+## Rule switches and removing the account (beta branch)
+
+Each MQTT and Tapo rule has an **Enable automation** On/Off switch. Apply or save the form to persist the change. Turning a rule off releases its effects without deleting its settings.
+
+Under **Tapo hubs and account**, **Remove Tapo account** clears the saved email and encrypted password, stops Tapo polling and active tests, and disables Tapo automation. It retains saved hubs and rules and does not delete the TP-Link account. Removal takes effect after confirmation and discards unsaved Tapo edits.
+
 ## Storage and packaging
 
 The Tapo password is encrypted using Windows account-scoped application protection, never returned to the browser, and passed privately to the reader through standard input. It is not placed in process arguments. Leave the password blank to retain it; disable Tapo before removing it.

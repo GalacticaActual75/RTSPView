@@ -101,7 +101,7 @@ const automationUi = (() => {
     card.innerHTML = `<div class="automation-grid rule-identity">
       <label>Rule name<input class="rule-name" maxlength="100" required></label>
 
-      <label><input class="rule-enabled" type="checkbox"> Enabled</label></div>
+      <label><input class="rule-enabled automation-toggle" type="checkbox" role="switch"> Enable automation <span class="toggle-state" aria-hidden="true"></span></label></div>
       <h4>When a person is detected on</h4>
       <label>Trigger streams<select class="rule-source-mode"><option value="selected">Selected streams</option><option value="any">Any detection-enabled stream</option></select></label>
       <p class="source-mode-help" hidden>Uses the stream/topic/zone mappings configured across your rules, including disabled rules. Add mappings with Selected streams first. RTSP feeds without detection mappings cannot trigger this rule.</p><div class="rule-sources"></div>

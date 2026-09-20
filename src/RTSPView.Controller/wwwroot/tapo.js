@@ -36,6 +36,7 @@ const tapoUi = (() => {
       <label>Tapo password<input name="password" type="password" maxlength="1024" autocomplete="new-password"></label>
       <label>Check interval (seconds)<input name="pollSeconds" type="number" min="5" max="60" step="1" value="5" required></label></div>
       <label><input type="checkbox" name="clearPassword"> Remove saved password</label>
+      <div class="tapo-account-actions"><button type="button" class="danger-secondary tapo-remove-account">Remove Tapo account</button><p>Removes the saved email and password from RTSPView and disables Tapo automations. Saved hubs and rules are kept. Your TP-Link account is not deleted.</p></div>
       <div class="tapo-hubs"></div><div class="control-buttons"><button type="button" class="secondary tapo-add-hub">Add hub manually</button>
       <button type="button" class="secondary tapo-scan">Discover hubs on network</button>
       <button type="button" class="secondary tapo-discover">Test connection & discover sensors</button></div>
@@ -49,6 +50,7 @@ const tapoUi = (() => {
     q('.tapo-add-rule').onclick = () => { if (q('.tapo-rules').children.length < 32) { addRule(); mark(); } };
     q('.tapo-discover').onclick = () => mutate(true);
     q('.tapo-scan').onclick = scanHubs;
+    q('.tapo-remove-account').onclick = removeAccount;
     q('.tapo-discard').onclick = async () => { dirty = false; await load(config); };
     form.onsubmit = e => { e.preventDefault(); mutate(false); };
   }
@@ -74,8 +76,10 @@ const tapoUi = (() => {
     const card = document.createElement('fieldset'); card.className = 'tapo-rule'; card.dataset.id = rule.id;
     const legend = document.createElement('legend'); legend.textContent = 'Door sensor rule'; card.append(legend);
     const grid = document.createElement('div'); grid.className = 'automation-grid';
-    grid.append(input('Rule name', 'sensor-name', rule.name), input('Enabled', 'sensor-enabled', rule.enabled, 'checkbox'));
+    grid.append(input('Rule name', 'sensor-name', rule.name), input('Enable automation', 'sensor-enabled automation-toggle', rule.enabled, 'checkbox'));
     grid.querySelector('.sensor-name').required = true; grid.querySelector('.sensor-name').maxLength = 100;
+    const toggle = grid.querySelector('.sensor-enabled'); toggle.setAttribute('role', 'switch');
+    const toggleState = document.createElement('span'); toggleState.className = 'toggle-state'; toggleState.setAttribute('aria-hidden', 'true'); toggle.after(toggleState);
     card.dataset.priority = String(rule.priority ?? 50);
     const choice = select('Sensor', sensorChoices(), rule.deviceId ? JSON.stringify([rule.hubId, rule.deviceId]) : '');
     choice.querySelector('select').className = 'sensor-choice'; choice.querySelector('select').required = true;
@@ -155,6 +159,17 @@ const tapoUi = (() => {
     } catch (e) { q('.tapo-message').textContent = e.message; }
     finally { busy = false; form.querySelectorAll('button, input, select').forEach(b => b.disabled = false); }
   }
+  async function removeAccount() {
+    if (busy || !confirm('Remove the saved Tapo account from RTSPView and disable Tapo automations? Hubs and rules are kept. Unsaved Tapo edits will be discarded.')) return;
+    busy = true; form.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
+    try {
+      const data = await api('/api/tapo/account', {method: 'DELETE'});
+      sensors = []; render(data); q('.tapo-found-hubs').replaceChildren(); inventory({hubs: [], sensors: []});
+      q('.tapo-message').textContent = 'Tapo account removed from RTSPView. Automations are disabled; saved hubs and rules are kept.';
+    } catch (e) { q('.tapo-message').textContent = e.message; }
+    finally { busy = false; form.querySelectorAll('button, input, select').forEach(el => el.disabled = false); }
+    await refresh();
+  }
   async function scanHubs() {
     if (busy) return; busy = true; form.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
     q('.tapo-message').textContent = 'Looking for hubs on the local network…';
@@ -162,7 +177,7 @@ const tapoUi = (() => {
     try {
       const result = await api('/api/tapo/discover-hubs', {method: 'POST', body: '{}'});
       for (const hub of result.discoveredHubs || []) {
-        const row = document.createElement('div'); row.className = 'control-buttons'; const label = document.createElement('span'); label.textContent = `${hub.name} · ${hub.host}`;
+        const row = document.createElement('div'); row.className = 'control-buttons tapo-found-hub'; const label = document.createElement('span'); label.textContent = `${hub.name} · ${hub.host}`;
         const add = button('Add discovered hub', () => { if ([...q('.tapo-hubs').children].some(h => h.querySelector('.hub-host').value.trim().toLowerCase() === hub.host.toLowerCase())) { q('.tapo-message').textContent = 'That address is already added.'; return; } if (q('.tapo-hubs').children.length >= 8) { q('.tapo-message').textContent = 'Up to eight hubs can be configured.'; return; } addHub(hub); mark(); row.remove(); });
         row.append(label, add); area.append(row);
       }

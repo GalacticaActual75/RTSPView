@@ -130,3 +130,11 @@ input:checked ~ .toggle-state::after { content:'On'; }
   .source-connection { margin-top: 0; }
   .automation-source > button { margin-top: 0; justify-self: start; }
 }
+
+#tapoForm .tapo-found-hubs { display:grid; gap:12px; margin:16px 0; }
+#tapoForm .tapo-found-hubs:empty { display:none; }
+#tapoForm .tapo-found-hub { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:12px; border:1px solid var(--line); border-radius:6px; }
+#tapoForm .tapo-found-hub > span { flex:1 1 240px; overflow-wrap:anywhere; }
+#tapoForm .tapo-connection > .control-buttons { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
+#tapoForm .tapo-account-actions { margin:16px 0 24px; }
+#tapoForm .tapo-account-actions p { margin:10px 0 0; }

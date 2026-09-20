@@ -60,6 +60,11 @@ public sealed class TapoProcessReader : ITapoReader
         catch { Stop(); throw; }
         finally { _gate.Release(); }
     }
+    public async Task ResetAsync()
+    {
+        await _gate.WaitAsync();
+        try { Stop(); } finally { _gate.Release(); }
+    }
     private void Stop()
     {
         if (_process is null) return;
@@ -149,15 +154,33 @@ public sealed class TapoService : BackgroundService
             string password; lock (_sync) password = Password(request);
             if (password.Length > 1024 || (request.Settings.Enabled && password.Length == 0)) throw new InvalidDataException("Enter your Tapo password.");
             var stored = new StoredTapo(request.Settings, password.Length == 0 ? "" : _protector.Protect(password));
-            await File.WriteAllTextAsync(_path + ".tmp", JsonSerializer.Serialize(stored), token);
-            File.Move(_path + ".tmp", _path, true);
-            lock (_sync)
-            {
-                _stored = stored; _tests.Clear(); _changed.Cancel(); _changed.Dispose(); _changed = new();
-                _status = new(stored.Settings.Enabled ? "Connecting" : "Disabled", "Settings saved.", null, [], [], [], []);
-            }
+            await PersistAsync(stored, token);
         }
         finally { _save.Release(); }
+    }
+    private async Task PersistAsync(StoredTapo stored, CancellationToken token)
+    {
+        await File.WriteAllTextAsync(_path + ".tmp", JsonSerializer.Serialize(stored), token);
+        File.Move(_path + ".tmp", _path, true);
+        lock (_sync)
+        {
+            _stored = stored; _tests.Clear(); _changed.Cancel(); _changed.Dispose(); _changed = new();
+            _status = new(stored.Settings.Enabled ? "Connecting" : "Disabled", "Settings saved.", null, [], [], [], []);
+        }
+    }
+    public async Task RemoveAccountAsync(CancellationToken token)
+    {
+        await _save.WaitAsync(token);
+        try
+        {
+            StoredTapo stored;
+            lock (_sync) stored = new(_stored.Settings with { Enabled = false, Username = "" }, "");
+            // Removing credentials must work even if an old rule target no longer exists.
+            await PersistAsync(stored, token);
+            if (_reader is TapoProcessReader process) await process.ResetAsync();
+        }
+        finally { _save.Release(); }
+        await PresentAsync(CancellationToken.None);
     }
     public async Task<TapoSnapshot> DiscoverAsync(TapoRequest request, CancellationToken token)
     {

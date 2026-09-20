@@ -8,6 +8,12 @@ public static class TapoEndpoints
     {
         app.MapGet("/api/tapo", (TapoService tapo) => Results.Ok(tapo.Configuration)).RequireAuthorization();
         app.MapGet("/api/tapo/status", (TapoService tapo) => Results.Ok(tapo.Status)).RequireAuthorization();
+        app.MapDelete("/api/tapo/account", async (TapoService tapo, CancellationToken token) =>
+        {
+            await configGate.WaitAsync(token);
+            try { await tapo.RemoveAccountAsync(token); return Results.Ok(tapo.Configuration); }
+            finally { configGate.Release(); }
+        }).RequireAuthorization();
         app.MapPost("/api/tapo/discover-hubs", async (TapoService tapo, CancellationToken token) =>
         {
             try { return Results.Ok(await tapo.DiscoverHubsAsync(token)); }
