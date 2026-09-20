@@ -150,7 +150,7 @@ const adminLayout = (() => {
     const actions = form.querySelector('.actions'), submit = actions.querySelector('[type=submit]'), state = actions.querySelector('.save-state');
     const discard = document.createElement('button'); discard.type = 'button'; discard.className = 'secondary'; discard.textContent = 'Discard'; actions.insertBefore(discard, submit);
     submit.textContent=overlayMode?'Apply to wall':'Save & apply';submit.title='Save this stream and apply it to the wall';state.setAttribute('role','status');
-    const isDirty = () => saved.some(({el,value,checked}) => el.value !== value || el.checked !== checked);
+    const isDirty = () => saved.some(({el,value,checked}) => !el.disabled && (el.value !== value || el.checked !== checked));
     const update = () => {const dirty = isDirty(); submit.hidden = discard.hidden = !dirty; form.dataset.dirty = String(dirty); state.textContent = dirty ? 'Unsaved changes' : ''; };
     form.addEventListener('input', update); form.addEventListener('change', update);
     discard.onclick = () => {

@@ -1,6 +1,6 @@
-# Tapo sensor automations (1.0.44-beta.5)
+# Tapo sensor automations (1.0.44 Beta)
 
-Configure direct Tapo access in **Automation → Tapo**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. This beta has automated reader, Controller, HTTP and native-viewer tests; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
+Configure direct Tapo access in **Automation → Tapo**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. Available in the 1.0.44 betas; Stable remains 1.0.43. Automated reader, Controller, HTTP and native-viewer tests pass; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
 
 ## Connect and discover
 
@@ -53,7 +53,7 @@ Open/Closed reflects the hub's reported state. Missing sensors, failed hubs and 
 
 **Test open**, **Test closed** and **Test unavailable** apply a saved, enabled rule's selected state to the running viewer for ten seconds. They do not operate the sensor or hub. Normal polling resumes afterward; changing or disabling settings clears tests. Status indicates active rule conditions, which may be superseded by a higher-priority rule.
 
-## Rule switches and removing the account (beta.5)
+## Rule switches and removing the account
 
 Each MQTT and Tapo rule has an **Enable automation** On/Off switch. Apply or save the form to persist the change. Turning a rule off releases its effects without deleting its settings.
 
@@ -63,6 +63,6 @@ Under **Tapo hubs and account**, **Remove Tapo account** clears the saved email 
 
 The Tapo password is encrypted using Windows account-scoped application protection, never returned to the browser, and passed privately to the reader through standard input. It is not placed in process arguments. Leave the password blank to retain it; disable Tapo before removing it.
 
-Tapo connection settings and rules are stored separately in `tapo.json`. The standard camera-configuration export does not include this file or the Tapo password; reconfigure Tapo when moving to another Windows account or host.
+Tapo connection settings and rules are stored in `tapo.json` and included in **Settings → Backups** exports without the password. Import keeps a compatible saved local password; otherwise the integration is left disabled until you enter a password and enable it. Re-enter credentials when moving to another Windows account or host. The native Viewer stream editor's export does not include automations.
 
 The installer includes the independent GPL reader, its source, exact dependency source archives and license notices under Controller's `Tapo` directory. See [reader source and build instructions](../integrations/tapo-reader/README.md).

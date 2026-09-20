@@ -28,6 +28,10 @@ internal static class HostOverlayChecks
                     throw new Exception("Bottom-aligned mask left a gap at the actual camera picture edge");
                 overlayTile.ApplyVideoSizing(100, 50, 50, actual.Width, actual.Height, expected.ReferenceWidth, expected.ReferenceHeight);
                 overlayTile.ApplyViewportEdgeSmoothing(overlay, actual.Width, actual.Height, expected.ReferenceWidth, expected.ReferenceHeight);
+                // Overlay-only zoom/pan/mask changes must never rewrite the main tile transform.
+                overlayTile.ApplyVideoSizing(230, 10, 90, actual.Width, actual.Height, expected.ReferenceWidth, expected.ReferenceHeight);
+                if (host.GetHostImageLayout() != image)
+                    throw new Exception("Overlay framing changed the main tile transform");
                 var brush = (DrawingBrush)overlayTile.OpacityMask;
                 var geometry = ((GeometryDrawing)((DrawingGroup)brush.Drawing).Children[1]).Geometry;
                 var reference = OverlayViewportGeometry.Create(overlay, expected.ReferenceWidth, expected.ReferenceHeight);

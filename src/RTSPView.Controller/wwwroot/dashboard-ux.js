@@ -73,7 +73,7 @@ const dashboardUX = (() => {
     for(const select of document.querySelectorAll('select[name="hostCameraSlot"]'))for(const option of select.options){const camera=cameraInventory.find(c=>c.slot===Number(option.value));if(camera)option.textContent=camera.name+' · #'+camera.slot;}
     workspace.sync();
   }
-  function saved(camera) {if(camera.slot<10||camera.slot>25)automationUi.updateCamera(camera);const form=document.querySelector(`.camera-card[data-slot="${camera.slot}"]`);if(form){form.dataset.appliedEnabled=String(camera.enabled);form.dataset.appliedHost=form.elements.hostCameraSlot?.value||'';}const index=cameraInventory.findIndex(c=>c.slot===camera.slot);if(index>=0)cameraInventory[index]=camera;wallDesigner.updateCameras(cameraInventory);sync();}
+  function saved(camera) {if(camera.slot<10||camera.slot>25)automationUi.updateCamera(camera);const form=document.querySelector(`.camera-card[data-slot="${camera.slot}"]`);if(form){form.dataset.appliedEnabled=String(camera.enabled);form.dataset.appliedHost=form.elements.hostCameraSlot?.value||'';}const index=cameraInventory.findIndex(c=>c.slot===camera.slot);if(index>=0)cameraInventory[index]=camera;if(typeof overlaySourceUi!=='undefined')overlaySourceUi.refresh(cameraInventory);wallDesigner.updateCameras(cameraInventory);sync();}
   function health(t) {
     for(const image of document.querySelectorAll('img[data-blob-url]'))caption(image);
   }

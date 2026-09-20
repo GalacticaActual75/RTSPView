@@ -6,47 +6,45 @@ RTSPView is a Windows viewer for RTSP streams: security cameras, encoder feeds, 
 
 RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast RTSP streams and optionally responding to its MQTT detection events. **Scrypted is not required:** you can use compatible RTSP streams directly from cameras, NVRs, or other sources without setting up MQTT automation.
 
-## Current releases and feature availability
+## Current release
 
-Release channels as of September 20, 2026:
+**[Download Beta 1.0.44-beta.8](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.8)** for Windows 10/11 x64 to try the features described in this guide. Stable remains 1.0.43; the 1.0.44 automation and overlay improvements are currently available on Beta.
 
-| Channel | Published version | Availability |
+| Channel | Release | Use |
 | --- | --- | --- |
-| Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Promotes the beta dashboard, native stream editor, expanded layout/framing controls, per-layout appearance and Scrypted connector support. Adds intentional viewer exit, manual resume, optional fullscreen hover exit and viewer taskbar identity fixes. |
-| Beta | [1.0.44-beta.7](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.7) | Completes the automation usability/reliability review: viewer priority status, durable activity, recovery journals and rolling backups; includes automations in web configuration backups and floating feedback/support buttons. Live hub validation is pending. |
+| Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Current stable release. |
+| Beta | [1.0.44-beta.8](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.8) | Automation improvements and linked overlay sources. |
 
-Use [latest stable](https://github.com/GalacticaActual75/RTSPView/releases/latest) for the stable installer or [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for betas. Unless marked beta, this guide describes stable 1.0.43. Tapo integration and numeric rule priorities require 1.0.44-beta.1 or newer; they are not in stable 1.0.43.
+Choose the channel under **Settings → Updates**. Changing channels does not install anything automatically. To try these improvements, select Beta, check for updates and confirm installation. See [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for installers, checksums and version-specific notes.
 
-### Tapo sensors and rule priority (beta)
+### What's new in the 1.0.44 betas
 
-Open **Automation → Tapo** to add both hubs, discover your T110, and view Open, Closed or Unavailable status. A rule can show an overlay while a door is open and hide it when closed, without changing the layout. Rules can also activate a standard wall layout or an automation template with selected focus cameras. Everything runs in Controller after the browser closes; Home Assistant and MQTT are not required for Tapo.
+- Direct Tapo H100/H200 hub discovery and T110 door-sensor automations, without Home Assistant or MQTT.
+- A shared priority list for MQTT and Tapo, compact rule editors, protected drafts and viewer-reported priority status.
+- Persistent automation activity, rolling backups and recovery for interrupted priority saves and configuration imports.
+- MQTT and Tapo rules included in normal web configuration export/import, with passwords excluded.
+- Custom overlays that follow host-camera framing, refreshed stream/layout choices and separate Restart Live View / Restart Application controls.
+- Floating feedback and Buy me a coffee buttons at the bottom left of every administration page.
+- Reuse an existing main stream as an overlay source, with automatic connection updates and independent overlay framing.
 
-Manage MQTT and Tapo priority together in **Automation → Automation Priority**; 1 is highest. For example, a priority-1 doorbell detection interrupts a priority-2 garage view immediately, even when the garage rule holds its view. A lower-priority view resumes only while its condition or detection timer remains active. Manual camera focus stays above automation.
+See the [beta.8 release notes](docs/releases/1.0.44-beta.8.md) and [Tapo setup guide](docs/tapo-automation.md) for details. Physical Tapo H100/H200/T110 validation remains pending; firmware compatibility can vary. The separate [Scrypted connector](plugins/scrypted-rtspview/README.md) remains a beta component.
 
-In **1.0.44-beta.3**, Automation has aligned **MQTT**, **Tapo** and **Priority** tabs with enable toggles. Use Priority to drag rules into one order, or use Move up/down, then Save order. The top rule receives priority 1. **Discover hubs on network** finds local H100/H200 candidates before sensor discovery. Both layout editors have **New layout** (blank or preset) and **Add stream**; new tiles default to Fit, preserving explicit sizing on existing layouts.
+### Find a setting
 
-See [Tapo setup, overlay recipes and priority behavior](docs/tapo-automation.md), including polling latency, unavailable behavior, and beta hardware-validation limits.
-
-In **1.0.44-beta.2**, custom overlay masks also follow their host camera's Fit/Fill/Stretch/Original framing, zoom and pan across layouts. The mask and overlay video transform together and stay clipped to the host tile. Existing 16:9 editor calibration is retained; no additional setting is required.
-
-In **1.0.44-beta.4**, priority editing and guidance live in the Priority tab, and automation help uses the full panel width. **Quick actions** beside Sign out mirrors Maintenance. Restart viewer is disabled while stopped or starting; one full-screen button follows the viewer’s reported mode.
-
-In **1.0.44-beta.5**, each MQTT and Tapo rule has an On/Off switch. Apply or save to persist it. Tapo discovery buttons and hub rows have clearer spacing. **Remove Tapo account** clears RTSPView’s saved email/password and disables Tapo automation while keeping saved hubs and rules.
-
-In **1.0.44-beta.6**, **Restart Live View** restarts the camera wall, while **Restart Application** restarts the wall, dashboard, watchdog and sensor readers. Quick actions matches the header buttons. Stream, sensor and layout choices refresh while preserving rule drafts. **Automation Priority** shows priorities by row position; Save order applies the displayed order.
-
-### Finding controls after upgrading
-
-| Task | Previous stable 1.0.42 | Stable 1.0.43 |
-| --- | --- | --- |
-| Snapshot overview | Overview | Monitor, with active-layout and All streams views |
-| Edit a stream | Streams | Streams → Edit opens a side drawer; Save & apply commits changes |
-| Display and global border preferences | System → Viewer | Settings → Display |
-| LAN access and password | System → Network & security | Settings → Network & security |
-| Temperature reporting | System → Viewer | Settings → Diagnostics |
-| Updates, backups and maintenance | Corresponding tabs under System | Corresponding tabs under Settings |
-| Logs | System → Logs | Settings → Diagnostics |
-| Saved standard and automation layouts | Layouts | Layouts; Canvas settings contains output and appearance controls |
+| Task | Where to go |
+| --- | --- |
+| View snapshots and stream health | Monitor |
+| Add or edit RTSP sources | Streams |
+| Edit the normal wall or automation templates | Layouts → Standard View layouts / Automation layouts |
+| Configure picture-in-picture streams and appearance | Overlays |
+| Configure person detections or door sensors | Automation → MQTT / Tapo |
+| Set the order of competing rules | Automation → Automation Priority |
+| Set fullscreen, monitor and display preferences | Settings → Display |
+| Enable LAN access or change the admin password | Settings → Network & security |
+| Select an update channel or install an update | Settings → Updates |
+| Export or import configuration | Settings → Backups |
+| Start/restart the viewer or schedule restarts | Settings → Maintenance; immediate controls also appear in Quick actions |
+| Inspect logs, temperatures and diagnostics | Settings → Diagnostics |
 
 ## Install and first setup
 
@@ -96,8 +94,8 @@ Open the top-level **Automation** tab to configure the broker and person-detecti
 Saved rules collapse to a summary; click a rule to expand and edit it. New rules
 stay open, and validation expands any rule that needs attention.
 Rules are shown first; connection settings, event discovery and troubleshooting
-are expandable sections. In Stable, opening a category closes its peers at the
-same level. The dashboard uses independent inspectors and disclosure controls.
+are expandable sections. Use **Save changes** to apply edits or **Discard changes**
+to reload the saved rules. Saved enabled state is shown separately from drafts.
 An **Entered topic (not observed)** option is a saved or typed topic that discovery
 has not received during the listening session; it does not confirm event support.
 The Controller maintains the MQTT connection even with the browser closed; the
@@ -117,7 +115,7 @@ Viewer must be running to display overlays. Automation is disabled by default.
    shown beneath the display mode. Existing enabled overlays stay Always visible
    after upgrading; previously disabled overlays are shown as Automation only.
 4. Select **Add rule**. Choose **Show overlay**, **Fullscreen camera**, or
-   **Focused layout**, then choose the target and add one or more source
+   **Automation layout**, then choose the target and add one or more source
    cameras. Click **Discover topics / Start listening** and trigger camera activity.
    Choose the observed camera/topic from the dropdown; a unique matching camera
    name or an existing saved mapping can fill it automatically. Verify the selected
@@ -128,8 +126,10 @@ Viewer must be running to display overlays. Automation is disabled by default.
    stream slots. An example event is
    `{"timestamp":1789318449255,"detections":[{"className":"person","score":0.827}]}`.
 5. Set **Clear delay (minutes)**, enable the rule, and use **Test connection**.
-   Testing checks the draft broker connection without saving
-   or activating actions. Turn on **Enable automation**, then **Save automation**.
+   With unsaved edits, testing checks only the draft broker connection. Without
+   draft edits, it also checks the saved enabled rule subscriptions. Neither test
+   activates actions or saves settings. Turn on **Enable MQTT automations**, then
+   **Save changes**.
 
 **Raw MQTT details** expands a feed grouped by camera and topic, showing received
 time, payload, retained flag, and delivered QoS. Use Pause/Resume, Clear, and the
@@ -178,14 +178,14 @@ Scrypted and Windows clocks synchronized: retained messages, events older than
 that tolerance are ignored. Reconnection uses a clean session, backoff, and no
 queued action replay. Loss of MQTT updates lets the existing timer expire.
 
-Connection settings and rules live in `automation.json`, separate from general
-configuration exports. Passwords are protected for the Controller's Windows
+Connection settings and rules live in `automation.json` and are included in web
+configuration exports without passwords. Passwords are protected for the Controller's Windows
 identity and never returned to the GUI. Leave the password blank to keep it;
 use **Clear saved password** to remove it. Re-enter credentials when moving to a
 different Windows account/host. RTSPView does not modify the Scrypted broker.
 
 **Fullscreen camera** fills the Viewer with a selected main stream or overlay;
-the Viewer’s window/fullscreen setting is preserved. **Focused layout** gives the
+the Viewer’s window/fullscreen setting is preserved. **Automation layout** gives the
 selected main camera a larger tile and includes every enabled, configured main
 stream (up to 16), using the saved layout’s landscape or portrait orientation.
 Both restore the saved layout when their timers expire, without editing it.
@@ -195,7 +195,7 @@ For a custom arrangement, open **Layouts → Automation layouts**, or use **Edit
 automation layouts** in Automation. Separate **Standard View layouts** and
 **Automation layouts** tabs keep the normal wall and automation templates independent.
 Start with **One large camera** or **Two large cameras**, then move, resize, add or
-remove tiles and save. Select that saved layout in a **Focused layout** rule.
+remove tiles and save. Select that saved layout in an **Automation layout** rule.
 Saving a template does not select it as the standard wall layout.
 
 Each automation template has one or two **Focus tiles**, with no camera assigned
@@ -226,12 +226,11 @@ camera warnings, counts and statistics remain available in manual diagnostics;
 issues on other cameras still open the panel normally. Settings persist across
 restarts and include main cameras and overlays.
 
-Overlays scale uniformly when their host camera tile changes size or proportions.
-Their proportions follow the 16:9 overlay-editor canvas, so custom shapes do not
-stretch when a host becomes tall, wide, or focused. Width/height percentages act
-as maximum bounds; horizontal/vertical positioning retains the selected anchor.
-Zoom, image positioning, shape and opacity remain configured as saved. Fullscreen
-actions targeting the overlay itself still display the camera across the Viewer.
+Custom overlay masks and video follow the host camera's Fit/Fill/Stretch/Original
+framing, zoom and pan, and stay clipped to its tile. Standard picture-in-picture
+overlays retain their proportions and selected anchor as the host tile changes
+size. The overlay editor retains its 16:9 calibration canvas. Fullscreen actions
+targeting the overlay itself still display that stream across the Viewer.
 
 Each saved rule has a **Test** button, also available while the rule is collapsed.
 Each source also has an optional **Required zone** field. Enter the exact,
@@ -255,8 +254,10 @@ not Scrypted detection or MQTT delivery.
 Choose **Camera that detected the person** to follow sources automatically. Each
 source then has its own clear timer; one camera’s detections do not keep another
 camera active. For a fixed target, all sources renew one shared timer. Fullscreen
-rules take priority over focused-layout rules. Within the same action, the earliest
-active episode keeps focus until it clears; pending cameras only take over if their
+rules take priority over automation-layout rules only when their numeric priorities
+are equal. Lower numbers win first across both integrations; Tapo wins an equal-priority
+conflict with MQTT. Within equal-priority MQTT candidates, the earliest
+active episode keeps focus unless newer-detection takeover is enabled; pending cameras only take over if their
 detection timers are still active. Renewals do not reorder them. Overlay actions can
 coexist with focused layouts when their host tiles are visible; fullscreen hides
 other overlays. Manual double-clicks dismiss active and pending automation episodes
@@ -280,7 +281,7 @@ Choose **Any detection-enabled stream** to use the stream/topic/zone mappings
 configured across rules, including disabled rules. Configure mappings using
 Selected streams first; unmapped RTSP feeds cannot trigger automation. Each
 stream must have a consistent topic and zone mapping across rules in this mode.
-Select **Focused layout**, your saved layout, and **Camera that detected the
+Select **Automation layout**, your saved layout, and **Camera that detected the
 person** to follow detections. With takeover enabled and dynamic Focus 2, the
 newest detecting stream fills Focus 1 and the previous still-active stream fills
 Focus 2. A fixed Focus 2 selection continues to take precedence.
@@ -291,7 +292,7 @@ Under **Settings → Diagnostics → Temperature reporting**, enable CPU/GPU war
 
 CPU temperatures may require [PawnIO](https://pawnio.eu/). LibreHardwareMonitor is bundled with RTSPView; sensor support still depends on the hardware and drivers. Error 1060 for the PawnIO service means that dependency is missing.
 
-1. Install RTSPView under the default, administrator-protected **Program Files** folder. The maintenance helper is included in Stable 1.0.42.
+1. Install RTSPView under the default, administrator-protected **Program Files** folder. The maintenance helper is bundled with the installer.
 2. In Temperature reporting, select **Enable maintenance helper** and approve the Windows administrator prompt on the host once. Keep UAC enabled; no UAC bypass is needed.
 3. Select **Install PawnIO on host** and confirm. The helper downloads the pinned official PawnIO 2.2.0 installer and verifies its SHA-256 before running it. The viewer stays open; temperature readings pause during installation and resume afterward.
 4. Follow the progress message. If Windows requires a restart, restart the host when convenient; RTSPView does not reboot it automatically. A successful driver installation does not guarantee that every CPU/GPU exposes a temperature sensor.
@@ -306,7 +307,7 @@ The helper is bundled but is not enabled automatically. To disable it, stop **RT
 
 ## Access the admin panel from the LAN
 
-**Version 1.0.34 adds a built-in LAN switch. No certificates, environment variables or manual firewall commands are needed for normal trusted-LAN use.**
+**Use the built-in LAN switch for trusted-LAN administration. No certificates, environment variables or manual firewall commands are needed.**
 
 1. On the RTSPView host, open **http://127.0.0.1:5080**, sign in, and finish the required first-time password change.
 2. Open **Settings → Network & security → LAN access**, turn on the **Enable LAN access** toggle, and click **Save LAN access**.
@@ -338,6 +339,8 @@ The dashboard calls source entries **Streams**; some controls still use camera t
 | Administration | Check stream health, view logs, manage Stable/Beta updates, change the admin password and export/import configuration. |
 | Diagnostics | Inspect simultaneous main-stream and overlay errors in a shared panel; restart one feed and choose which warnings automatically open it. |
 | MQTT automation | Show overlays, focus one stream or activate a saved one/two-focus layout; filter by zone, test rules and optionally follow newer detections. |
+| Tapo automation | Read T110 sensors through H100/H200 hubs; show/hide overlays or activate layouts on Open, Closed or Unavailable conditions. |
+| Automation priority and activity | Order MQTT/Tapo rules together, inspect the viewer's winner and review recent decisions and delivery results. |
 | Temperature monitoring | Read supported CPU/GPU sensors and show configurable warnings. The optional maintenance helper can install the PawnIO dependency. |
 | Maintenance | Schedule Viewer or host restarts; use the optional helper for compatible updates after one-time administrator approval. |
 | Source management | Delete/reuse stream slots without renumbering others; use original overlay feeds in standard or automation layouts. |
@@ -452,7 +455,9 @@ Picture-in-picture overlays belong to the viewer and track their host tiles. The
 
 ## Picture-in-picture overlays
 
-Open **Overlays**, select Doorbell or Garage, or use **+** to add another overlay. Each overlay has its own RTSP stream and enabled switch. Choose the main camera tile that will host it, configure the stream, adjust the preview and save. Overlay streams stay visible while enabled and their host tile is displayed; the Doorbell label does not imply an automatic doorbell-press trigger.
+Open **Overlays**, select Doorbell or Garage, or use **+** to add another overlay. Under **Connection → Video source**, choose an existing main stream or **Own RTSP URL**. An existing source follows its saved URL and connection settings automatically; you do not need to enter the connection twice. The same URL is also allowed in separate stream entries. Each overlay keeps its own name, display mode, shape, zoom, pan, position and opacity. Changing overlay framing never changes the source's main tile. Playback uses a separate player and may open another camera connection.
+
+Choose the host tile under **Position → Show over**, adjust the preview and save. **Always visible** displays the overlay whenever its host is on the wall; **Automation only** lets rules show it. The Doorbell label does not imply an automatic doorbell-press trigger. Linked sources are included in configuration exports. Before deleting a linked main stream, select another video source or switch its overlays to **Own RTSP URL** and save.
 
 | Control | Effect |
 | --- | --- |
@@ -554,7 +559,7 @@ Docker is not supported: WPF requires an interactive Windows desktop and graphic
 
 ## Troubleshooting and security
 
-- Dashboard unavailable: open it on the same host, verify Controller is running, and check bindings and port conflicts. Enable LAN access from System for a trusted private LAN; see the LAN guide above.
+- Dashboard unavailable: open it on the same host, verify Controller is running, and check bindings and port conflicts. Enable LAN access from **Settings → Network & security** for a trusted private LAN; see the LAN guide above.
 - Blank cameras: fresh installations intentionally have empty URLs. Check credentials, RTSP reachability, transport, codecs, and layout assignments.
 - Update unavailable: check Internet connectivity, GitHub rate limits, repository visibility, manifest and checksum. Manual installer upgrades remain available.
 - Configuration recovery: preserve the data directory before inspecting `settings.json.bak` or pre-import backups. Do not share raw settings, screenshots or logs in bug reports.

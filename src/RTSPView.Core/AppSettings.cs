@@ -76,8 +76,8 @@ public sealed record AppSettings
             var index = Array.IndexOf(MainCameraSlots, slot);
             if (index >= 0) normalized[index] = normalized[index] with { Enabled = false, RtspUrl = "" };
         }
-        var overlay = NormalizeOverlay(DoorbellOverlay ?? new DoorbellOverlaySettings(), 10, "Doorbell");
-        var garageOverlay = NormalizeOverlay(GarageOverlay ?? CreateGarageOverlay(), 11, "Garage");
+        var overlay = NormalizeOverlay(DoorbellOverlay ?? new DoorbellOverlaySettings(), 10, "Doorbell", normalized);
+        var garageOverlay = NormalizeOverlay(GarageOverlay ?? CreateGarageOverlay(), 11, "Garage", normalized);
         var layouts = SchemaVersion < 15 ? new WallLayout[] { new() } : Layouts;
         var activeId = SchemaVersion < 15 ? "default" : ActiveLayoutId;
         WallLayout.Validate(layouts, activeId);
@@ -105,7 +105,7 @@ public sealed record AppSettings
             DoorbellOverlay = overlay,
             GarageOverlay = garageOverlay,
             AdditionalOverlays = (AdditionalOverlays ?? []).Take(MaximumAdditionalOverlays)
-                .Select((item, index) => NormalizeOverlay(item ?? new(), index + 12, $"Overlay {index + 3}")).ToArray(),
+                .Select((item, index) => NormalizeOverlay(item ?? new(), index + 12, $"Overlay {index + 3}", normalized)).ToArray(),
             StartFullScreen = SchemaVersion < 3 || StartFullScreen,
             PreferredMonitor = Math.Max(0, PreferredMonitor),
             MouseCursorHideSeconds = Math.Clamp(MouseCursorHideSeconds, 1, 30)
@@ -115,10 +115,20 @@ public sealed record AppSettings
     private DoorbellOverlaySettings NormalizeOverlay(
         DoorbellOverlaySettings overlay,
         int cameraSlot,
-        string defaultName)
+        string defaultName, IReadOnlyList<CameraSettings> sources)
     {
         if ((DeletedOverlaySlots ?? []).Contains(cameraSlot))
             overlay = new DoorbellOverlaySettings { Camera = new CameraSettings { Slot = cameraSlot, Name = defaultName, Enabled = false } };
+        if (overlay.SourceCameraSlot != 0)
+        {
+            var source = sources.FirstOrDefault(c => c.Slot == overlay.SourceCameraSlot);
+            if (source is null || (DeletedCameraSlots ?? []).Contains(overlay.SourceCameraSlot))
+                throw new InvalidDataException("An overlay references an unavailable source stream. Select an existing main stream or use its own RTSP URL.");
+            var identity = overlay.Camera ?? new CameraSettings { Name = defaultName, Enabled = false };
+            // Copy connection settings only. Each overlay keeps its identity, visibility and its own renderer/transforms.
+            overlay = overlay with { Camera = source with { Slot = cameraSlot, Name = identity.Name, Enabled = identity.Enabled,
+                ScryptedId = identity.ScryptedId, ScryptedTopic = identity.ScryptedTopic } };
+        }
         var position = Enum.IsDefined(overlay.Position) ? overlay.Position : PictureInPicturePosition.BottomLeft;
         var viewportShape = Enum.IsDefined(overlay.ViewportShape) ? overlay.ViewportShape : DoorbellViewportShape.Native;
         var customViewportIsValid = CustomViewportPathValidator.IsValid(
@@ -210,6 +220,8 @@ public enum DoorbellViewportShape { Native, Square, RoundedSquare, Circle, Oval,
 
 public sealed record DoorbellOverlaySettings
 {
+    // Zero keeps an independent connection. A main-stream slot follows that saved connection.
+    public int SourceCameraSlot { get; init; }
     public int HostCameraSlot { get; init; } = 2;
     public PictureInPicturePosition Position { get; init; } = PictureInPicturePosition.BottomLeft;
     // Retained for migration from schema 8 and earlier.
