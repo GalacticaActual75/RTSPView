@@ -18,7 +18,7 @@
       <li>Check existing issues to see whether someone has already reported it. Add a comment there if they have.</li>
       <li>Open a new issue with a clear title. Describe your idea, or explain what happened, what you expected, and how to reproduce it. Include your RTSPView version and screenshots when helpful.</li>
     </ol>
-    <p class="feedback-note">Issues are public. Remove passwords, stream credentials, and private details from screenshots or logs before posting.</p>
+    <p class="feedback-note">Issues and uploaded attachments are public. Use a synthetic example or crop to the control you are reporting. Remove camera pictures, location and camera names, IP addresses, hostnames, schedules, file paths, passwords and stream credentials before uploading. Do not attach configuration exports. Closing an issue or removing an image from its description does not necessarily delete the uploaded file.</p>
     <div class="feedback-links">
       <a class="feedback-primary" href="https://github.com/GalacticaActual75/RTSPView/issues/new/choose" target="_blank" rel="noopener noreferrer">Open a new issue ↗</a>
       <a href="https://github.com/GalacticaActual75/RTSPView/issues" target="_blank" rel="noopener noreferrer">Browse existing issues ↗</a>

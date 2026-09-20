@@ -14,7 +14,7 @@ Reviewed Overview, Streams, Layouts (both editors), Overlays, Automation (includ
 
 Browser: visited all main pages and System tabs; inspected expanded automation rule; visually inspected the cleaned layout page; verified outside-click and Escape dismissal. Fixture uses synthetic images and no live cameras. Some host-only services intentionally return unavailable responses; live service configuration was not exercised. No mobile-device or installed-host visual verification was performed.
 
-JavaScript syntax, layout geometry/configuration checks, and solution build pass. Doorbell full-frame rendering has a decoded-video regression test. Overlay placement now anchors to the host's visible aspect-fit picture without changing overlay size, with letterbox/pillarbox geometry checks. Installed-host confirmation of the driveway overlay remains necessary.
+JavaScript syntax, layout geometry/configuration checks, and solution build pass. Doorbell full-frame rendering has a decoded-video regression test. Overlay placement now anchors to the host's visible aspect-fit picture without changing overlay size, with letterbox/pillarbox geometry checks. Installed-host confirmation of overlay placement remains necessary.
 
 ## Canvas-first follow-up
 
