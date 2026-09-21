@@ -99,3 +99,28 @@ public static class WeatherConfiguration
         return Signature(previous) == Signature(updated);
     }
 }
+
+public static class WeatherGeometry
+{
+    public static (double Width, double Height, double Left, double Top) Bounds(WeatherOverlay overlay, double width, double height)
+    {
+        var o = overlay.Weather;
+        var margin = Math.Min(overlay.Margin, Math.Min(width / 2, height / 2));
+        var available = Math.Max(0, width - margin * 2);
+        var availableHeight = Math.Max(0, height - margin * 2);
+        var w = available * overlay.WidthPercent / 100;
+        if (o.Preset == "minimal") w = Math.Min(w, Math.Max(160, o.FontSize * 4 + o.IconSize + 10) + o.Padding * 2);
+        var size = Math.Min(o.FontSize, Math.Max(12, (w - o.Padding * 2) / 5));
+        bool Has(string field) => o.Fields.Contains(field);
+        double h = o.Padding * 2 + 24;
+        if (Has("location")) h += Math.Max(12, size * .6) * 1.4 + 2;
+        if (Has("temperature") || Has("condition")) h += Math.Max(size * 1.5, Math.Min(o.IconSize, Math.Max(14, (w - o.Padding * 2) * .2))) * 1.4 + 2;
+        if (Has("condition") && o.Preset != "minimal") h += Math.Max(12, size * .65) * 1.4 + 2;
+        if (Has("highLow")) h += Math.Max(12, size * .6) * 1.4 + 2;
+        h += new[] { "feelsLike", "humidity", "wind", "precipitation", "sun", "clock" }.Count(Has) * (Math.Max(12, size * .55) * 1.4 + 2);
+        if (Has("hourly")) h = Math.Max(h + 90, 320 + o.Padding * 2);
+        if (Has("daily")) h = Math.Max(h + 140, 480 + o.Padding * 2);
+        h = Math.Min(availableHeight, Math.Ceiling(h));
+        return (w, h, margin + (available - w) * overlay.X / 100, margin + (availableHeight - h) * overlay.Y / 100);
+    }
+}

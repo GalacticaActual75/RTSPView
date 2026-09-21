@@ -52,11 +52,11 @@ public partial class MainWindow
     {
         if (!_weatherOverlays.TryGetValue(slot, out var entry)) return;
         var o = _settings.WeatherOverlays.FirstOrDefault(o => o.Enabled && o.HostCameraSlot == slot); if (o is null) return;
-        var width = Math.Max(0, entry.Host.ActualWidth - o.Margin * 2); var height = Math.Max(0, entry.Host.ActualHeight - o.Margin * 2);
-        entry.View.Width = width * o.WidthPercent / 100;
-        entry.View.Height = Math.Min(height, o.Weather.Preset is "detailed" or "forecast" or "dashboard" ? 400 : o.Weather.Preset == "minimal" ? 100 : 170);
-        Canvas.SetLeft(entry.View, o.Margin + (width - entry.View.Width) * o.X / 100);
-        Canvas.SetTop(entry.View, o.Margin + (height - entry.View.Height) * o.Y / 100);
+        var bounds = WeatherGeometry.Bounds(o, entry.Host.ActualWidth, entry.Host.ActualHeight);
+        entry.View.Width = bounds.Width;
+        entry.View.Height = bounds.Height;
+        Canvas.SetLeft(entry.View, bounds.Left);
+        Canvas.SetTop(entry.View, bounds.Top);
     }
     private async Task ReadWeatherAsync()
     {

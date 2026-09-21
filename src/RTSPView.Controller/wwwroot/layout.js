@@ -8,7 +8,7 @@ const adminLayout = (() => {
     banner.remove();
     document.querySelector('header .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
-    for (const [id, title] of Object.entries({overview:'Monitor', cameras:'Streams', layouts:'Layouts',overlays:'Overlays', automation:'Automation', system:'Settings'})) {
+    for (const [id, title] of Object.entries({overview:'Monitor', cameras:'Streams', layouts:'Layouts',overlays:'Stream Overlays', automation:'Automation', system:'Settings'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
       button.dataset.page = id; button.onclick = () => select(id); nav.append(button);
       const page = document.createElement('section'); page.id = 'page-' + id; page.className = 'admin-page'; page.setAttribute('aria-label', title);
@@ -44,7 +44,7 @@ const adminLayout = (() => {
     }
     const overlayHead = document.createElement('div'); overlayHead.className = 'section-title';
     pages.overlays.prepend(overlayHead, overlayNav);
-    const add = document.createElement('button');add.type='button';add.id='addOverlay';add.textContent='+ Add overlay';add.setAttribute('aria-label','Add overlay');add.title='Add overlay';add.onclick=()=>addOverlay();overlayNav.append(add);
+    const add = document.createElement('button');add.type='button';add.id='addOverlay';add.textContent='+ Add stream overlay';add.setAttribute('aria-label','Add stream overlay');add.title='Add stream overlay';add.onclick=()=>addOverlay();overlayNav.append(add);
     const addState=document.createElement('p');addState.id='addOverlayState';addState.setAttribute('role','status');overlayHead.append(addState);
     const viewer = document.querySelector('.viewer-display-panel'), display = document.querySelector('#displayForm'), updates = document.querySelector('#updatePanel');
     display.className = 'panel control-panel'; updates.className = 'panel control-panel';
@@ -79,7 +79,7 @@ const adminLayout = (() => {
       button.setAttribute('aria-current', button.dataset.page === id ? 'page' : 'false');
     }
 
-    document.querySelector('.hero h1').textContent = {overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Overlays',automation:'Automation',system:'Settings'}[id];
+    document.querySelector('.hero h1').textContent = {overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Stream Overlays',automation:'Automation',system:'Settings'}[id];
     adminUi.page(id);workspace.sync();
     window.dispatchEvent(new Event('resize'));
     window.scrollTo({top:0, behavior:'instant'});

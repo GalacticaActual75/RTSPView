@@ -65,7 +65,7 @@ public sealed class WeatherView : Border
             }
             if (Has("condition") && o.Preset != "minimal") Text(WeatherFormatting.Condition(s.Code), Math.Max(12, size * .65));
             if (Has("highLow") && today is not null) Text("H " + WeatherFormatting.Temperature(today.High, o.Units) + "  L " + WeatherFormatting.Temperature(today.Low, o.Units), Math.Max(12, size * .6), true);
-            if (height >= 180)
+            if (height > 0)
             {
                 var metrics = new List<string>();
                 if (Has("feelsLike")) metrics.Add("Feels like " + WeatherFormatting.Temperature(s.FeelsLike, o.Units));
@@ -74,8 +74,7 @@ public sealed class WeatherView : Border
                 var hour = s.Hourly.FirstOrDefault(h => h.Time <= now && h.Time.AddHours(1) > now);
                 if (Has("precipitation")) metrics.Add("Rain chance " + (hour?.RainChance?.ToString("0") ?? "—") + "%");
                 if (Has("sun") && today is not null) metrics.Add("Rise " + (today.Sunrise is { } rise ? WeatherFormatting.LocalTime(rise, s.TimeZone).ToString("HH:mm") : "—") + " · Set " + (today.Sunset is { } set ? WeatherFormatting.LocalTime(set, s.TimeZone).ToString("HH:mm") : "—"));
-                var max = Math.Max(0, (int)((height - 155) / 24));
-                foreach (var metric in metrics.Take(max)) Text(metric, Math.Max(12, size * .55), true);
+                foreach (var metric in metrics) Text(metric, Math.Max(12, size * .55), true);
             }
             if (width >= 240 && height >= 280 && Has("hourly"))
             {

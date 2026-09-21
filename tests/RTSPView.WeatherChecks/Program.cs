@@ -43,6 +43,16 @@ internal static class Program
         Check(FindText(compact).Any(t=>t.Text=="Weather unavailable"),"expired native current weather is hidden");
         compact.Update(new() { Location="Stale test" }, data with { FetchedAt=now.AddHours(-2), ValidAt=now.AddHours(-2) });
         Check(FindText(compact).Any(t=>t.Text.StartsWith("Outdated")),"small native cards retain stale warning");
+        foreach (var font in new[] { 12, 24, 64 })
+        {
+            var options = new WeatherOptions { Preset = "minimal", FontSize = font, Fields = ["temperature", "condition", "highLow"] };
+            var bounds = WeatherGeometry.Bounds(new() { Weather = options, X = 100, Y = 100 }, 640, 360);
+            compact.Width = bounds.Width; compact.Height = bounds.Height;
+            compact.Update(options, data); compact.Measure(new Size(bounds.Width, bounds.Height));
+            compact.Arrange(new Rect(0, 0, bounds.Width, bounds.Height)); compact.UpdateLayout();
+            Check(FindText(compact).Any(t => t.Text.StartsWith("H ")), "Minimal retains selected high/low at font " + font);
+            Check(bounds.Left + bounds.Width <= 640 && bounds.Top + bounds.Height <= 360, "weather geometry stays in camera bounds");
+        }
         foreach(var size in new[]{new Size(180,100),new Size(300,180),new Size(640,360),new Size(360,640)})
         {
             detailed.Width=size.Width;detailed.Height=size.Height;detailed.Measure(size);detailed.Arrange(new Rect(size));detailed.UpdateLayout();

@@ -10,6 +10,22 @@ const weatherUi = (() => {
   const icon=c=>c===0?'☀':[1,2].includes(c)?'⛅':[3,45,48].includes(c)?'☁':c>=71&&c<=77||[85,86].includes(c)?'❄':c>=95&&c<=99?'ϟ':c>=51&&c<=82?'☂':'◇';
   const time=(value,zone,options={hour:'2-digit',minute:'2-digit'})=>{try{return new Intl.DateTimeFormat(undefined,{...options,timeZone:zone==='auto'?'UTC':zone}).format(new Date(value));}catch{return '—';}};
   const sample=()=>({temperature:22.2,feelsLike:22.8,humidity:48,wind:2.7,windDirection:225,code:2,isDay:true,timeZone:'UTC',fetchedAt:new Date().toISOString(),validAt:new Date().toISOString(),daily:[{date:new Date().toISOString().slice(0,10),high:24.4,low:12.2}],hourly:[1,2,3,4,5,6].map((n)=>({time:new Date(Date.now()+n*3600000).toISOString(),temperature:22+n/2,code:2,rainChance:10}))});
+  function overlayBounds(overlay, width, height) {
+    const o=overlay.weather, margin=Math.min(overlay.margin,width/2,height/2),available=Math.max(0,width-margin*2),availableHeight=Math.max(0,height-margin*2);
+    let w=available*overlay.widthPercent/100;
+    if(o.preset==='minimal')w=Math.min(w,Math.max(160,o.fontSize*4+o.iconSize+10)+o.padding*2);
+    const size=Math.min(o.fontSize,Math.max(12,(w-o.padding*2)/5)),has=f=>o.fields.includes(f);
+    let h=o.padding*2+24;
+    if(has('location'))h+=Math.max(12,size*.6)*1.4+2;
+    if(has('temperature')||has('condition'))h+=Math.max(size*1.5,Math.min(o.iconSize,Math.max(14,(w-o.padding*2)*.2)))*1.4+2;
+    if(has('condition')&&o.preset!=='minimal')h+=Math.max(12,size*.65)*1.4+2;
+    if(has('highLow'))h+=Math.max(12,size*.6)*1.4+2;
+    h+=['feelsLike','humidity','wind','precipitation','sun','clock'].filter(has).length*(Math.max(12,size*.55)*1.4+2);
+    if(has('hourly'))h=Math.max(h+90,320+o.padding*2);
+    if(has('daily'))h=Math.max(h+140,480+o.padding*2);
+    h=Math.min(availableHeight,Math.ceil(h));
+    return {width:w,height:h,left:margin+(available-w)*overlay.x/100,top:margin+(availableHeight-h)*overlay.y/100};
+  }
   function preview(o, sampleAllowed=false) {
     const node=el('div',undefined,'weather-card'); node.dataset.preset=o.preset;node.dataset.theme=o.theme;
     const bg=o.theme==='light'?'240,244,249':'18,22,29';Object.assign(node.style,{background:`rgba(${bg},${o.backgroundOpacity/100})`,padding:o.padding+'px',borderRadius:o.cornerRadius+'px',textAlign:o.alignment,'--weather-font':o.fontSize+'px','--weather-icon':o.iconSize+'px','--weather-accent':o.accent});
@@ -38,7 +54,7 @@ const weatherUi = (() => {
     }
     if(has('clock'))text(time(new Date(),s?.timeZone||o.timeZone||'UTC',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),'weather-clock');
     const credit=el('a','Open-Meteo.com · CC BY 4.0','weather-credit');credit.href='https://open-meteo.com/';credit.target='_blank';credit.rel='noopener noreferrer';node.append(credit);
-    if(!actual&&sampleAllowed)text('Sample weather','weather-age');
+    if(!actual&&sampleAllowed)text('Sample weather','weather-age weather-sample');
     views.set(node,{options:structuredClone(o),sampleAllowed});
     return node;
   }
@@ -54,11 +70,11 @@ const weatherUi = (() => {
     const previewNote=el('p','Preview uses sample weather until this location has been saved and fetched.','weather-note');left.append(previewNote);
     left.append(el('p','Small displays omit details that do not fit. The camera keeps playing behind an overlay.','weather-note'));
     const state=el('p','','weather-editor-state');state.setAttribute('role','status');
-    function paint(){previewHost.replaceChildren(preview(o,true));if(placement){const scale=stage.clientWidth/640,margin=placement.margin,w=Math.max(0,640-margin*2),h=Math.max(0,360-margin*2),pw=w*placement.widthPercent/100,ph=Math.min(h,['detailed','forecast','dashboard'].includes(o.preset)?400:o.preset==='minimal'?100:170);Object.assign(previewHost.style,{position:'absolute',width:pw+'px',height:ph+'px',left:(margin+(w-pw)*placement.x/100)*scale+'px',top:(margin+(h-ph)*placement.y/100)*scale+'px',transformOrigin:'top left',transform:'scale('+scale+')'});}previewNote.textContent=snapshots.some(s=>s.key===key(o))?'Cached weather preview · '+o.location:'Sample weather preview · save to fetch your location';}
-    const field=(label,input,parent=controls)=>{const wrap=el('label',label);wrap.append(input);parent.append(wrap);return input;};
+    function paint(){previewHost.replaceChildren(preview(o,true));if(placement){previewHost.style.visibility=placement.enabled?'visible':'hidden';previewHost.querySelector('.weather-sample')?.remove();const scale=stage.clientWidth/640,b=overlayBounds({...placement,weather:o},640,360);Object.assign(previewHost.style,{position:'absolute',width:b.width+'px',height:b.height+'px',left:b.left*scale+'px',top:b.top*scale+'px',transformOrigin:'top left',transform:'scale('+scale+')'});}previewNote.textContent=snapshots.some(s=>s.key===key(o))?'Cached weather preview · '+o.location:'Sample weather preview · save to fetch your location';}
+    const field=(label,input,parent=controls)=>{input.setAttribute('aria-label',label);const wrap=el('label',label);if(input.type==='checkbox'){wrap.className='weather-toggle';const track=el('span',undefined,'switch');input.setAttribute('role','switch');track.append(input,el('span'));wrap.append(track);}else if(input.type==='range'){const output=el('output',input.value);const update=input.oninput;input.oninput=()=>{output.textContent=input.value;update?.();};wrap.append(output,input);}else wrap.append(input);parent.append(wrap);return input;};
     const btn=(label,action,parent=controls)=>{const b=el('button',label,'secondary');b.type='button';b.onclick=action;parent.append(b);return b;};
     const input=(label,name,type='text',parent=controls,min,max)=>{const n=el('input');n.type=type;n.value=o[name]??'';if(min!==undefined)n.min=min;if(max!==undefined)n.max=max;n.oninput=()=>{o[name]=['number','range'].includes(type)?(n.value===''?null:Number(n.value)):n.value;paint();};return field(label,n,parent);};
-    if(placement){const enabled=el('input');enabled.type='checkbox';enabled.checked=placement.enabled;enabled.onchange=()=>placement.enabled=enabled.checked;field('Enable weather overlay',enabled);}
+    if(placement){const enabled=el('input');enabled.type='checkbox';enabled.checked=placement.enabled;enabled.onchange=()=>{placement.enabled=enabled.checked;paint();};field('Enable weather overlay',enabled);}
     const search=el('input');search.type='search';search.placeholder='City or postal code';field('Find your location',search);const results=el('div',undefined,'weather-search-results');controls.append(results);
     let searchSequence=0;
     btn('Search',async()=>{const sequence=++searchSequence;state.textContent='Searching…';try{const data=await api('/api/weather/search?q='+encodeURIComponent(search.value));if(sequence!==searchSequence||!dialog.isConnected)return;results.replaceChildren();for(const hit of data.results||[])btn([hit.name,hit.admin1,hit.country].filter(Boolean).join(', '),()=>{Object.assign(o,{location:hit.name,latitude:hit.latitude,longitude:hit.longitude,timeZone:hit.timezone||'auto'});name.value=o.location;latitude.value=o.latitude;longitude.value=o.longitude;results.replaceChildren();paint();},results);state.textContent=(data.results||[]).length?'Choose a location.':'No matches. Try a nearby city or coordinates.';}catch(e){state.textContent=e.message;}});
@@ -75,10 +91,10 @@ const weatherUi = (() => {
     select('Theme','theme',[['auto','Automatic (RTSPView dark)'],['dark','Dark'],['light','Light']],appearance);
     select('Text alignment','alignment',[['left','Left'],['center','Center'],['right','Right']],appearance);
     input('Accent color','accent','color',appearance);
-    for(const [label,id,min,max] of [['Background opacity (%)','backgroundOpacity',0,100],['Text size','fontSize',12,64],['Icon size','iconSize',16,96],['Padding','padding',0,48],['Corner radius','cornerRadius',0,48]])input(label,id,'number',appearance,min,max);
-    btn('Reset appearance',()=>{const d=defaults();for(const id of ['theme','alignment','accent','backgroundOpacity','fontSize','iconSize','padding','cornerRadius'])o[id]=d[id];for(const n of appearance.querySelectorAll('label')){const c=n.querySelector('input,select');const text=n.firstChild.textContent;const map={'Theme':'theme','Text alignment':'alignment','Accent color':'accent','Background opacity (%)':'backgroundOpacity','Text size':'fontSize','Icon size':'iconSize','Padding':'padding','Corner radius':'cornerRadius'};if(c&&map[text])c.value=o[map[text]];}paint();},appearance);
-    if(placement){const group=el('details');group.open=true;group.append(el('summary','Position and size'));controls.append(group);const corners=el('div',undefined,'weather-corners');group.append(corners);for(const [label,x,y] of [['Top left',0,0],['Top right',100,0],['Bottom left',0,100],['Bottom right',100,100]])btn(label,()=>{placement.x=x;placement.y=y;for(const n of group.querySelectorAll('input[data-placement]'))n.value=placement[n.dataset.placement];paint();},corners);
-      for(const [label,id,min,max] of [['Width (%)','widthPercent',15,95],['Horizontal position (%)','x',0,100],['Vertical position (%)','y',0,100],['Edge margin','margin',0,80]]){const n=el('input');n.type='number';n.min=min;n.max=max;n.value=placement[id];n.dataset.placement=id;n.oninput=()=>{placement[id]=Number(n.value);paint();};field(label,n,group);}
+    for(const [label,id,min,max] of [['Background opacity (%)','backgroundOpacity',0,100],['Text size','fontSize',12,64],['Icon size','iconSize',16,96],['Padding','padding',0,48],['Corner radius','cornerRadius',0,48]])input(label,id,'range',appearance,min,max);
+    btn('Reset appearance',()=>{const d=defaults();for(const id of ['theme','alignment','accent','backgroundOpacity','fontSize','iconSize','padding','cornerRadius'])o[id]=d[id];for(const n of appearance.querySelectorAll('label')){const c=n.querySelector('input,select');const text=n.firstChild.textContent;const map={'Theme':'theme','Text alignment':'alignment','Accent color':'accent','Background opacity (%)':'backgroundOpacity','Text size':'fontSize','Icon size':'iconSize','Padding':'padding','Corner radius':'cornerRadius'};if(c&&map[text]){c.value=o[map[text]];const output=n.querySelector('output');if(output)output.textContent=c.value;}}paint();},appearance);
+    if(placement){const group=el('details');group.open=true;group.append(el('summary','Position and size'));controls.append(group);const corners=el('div',undefined,'weather-corners');group.append(corners);for(const [label,x,y] of [['Top left',0,0],['Top right',100,0],['Bottom left',0,100],['Bottom right',100,100]])btn(label,()=>{placement.x=x;placement.y=y;for(const n of group.querySelectorAll('input[data-placement]')){n.value=placement[n.dataset.placement];n.parentElement.querySelector('output').textContent=n.value;}paint();},corners);
+      for(const [label,id,min,max] of [['Maximum width (%)','widthPercent',15,95],['Horizontal position (%)','x',0,100],['Vertical position (%)','y',0,100],['Edge margin','margin',0,80]]){const n=el('input');n.type='range';n.min=min;n.max=max;n.value=placement[id];n.dataset.placement=id;n.oninput=()=>{placement[id]=Number(n.value);paint();};field(label,n,group);}
     }
     controls.append(el('p','Location coordinates are sent to Open-Meteo. No account or API key is required.','weather-note'));
     const actions=el('div',undefined,'weather-editor-actions');form.append(state,actions);btn('Cancel',()=>dialog.close(),actions);
@@ -86,7 +102,6 @@ const weatherUi = (() => {
     form.onsubmit=async e=>{e.preventDefault();if(!o.location.trim()){name.reportValidity();return;}if(!Number.isFinite(o.latitude)||!Number.isFinite(o.longitude)){state.textContent='Choose a search result or enter both coordinates.';return;}save.disabled=true;try{await onSave(o,placement?{...placement,weather:o}:null);dialog.close();}catch(error){state.textContent=error.message;}finally{save.disabled=false;}};
     const resize=new ResizeObserver(paint);resize.observe(stage);dialog.onclose=()=>{resize.disconnect();dialog.remove();};document.body.append(dialog);dialog.showModal();paint();search.focus();refresh().then(()=>{if(dialog.isConnected)paint();});
   }
-  async function overlayEditor(slot){try{const config=await api('/api/config');const existing=(config.weatherOverlays||[]).find(o=>o.hostCameraSlot===slot)||{hostCameraSlot:slot,enabled:true,widthPercent:40,x:0,y:100,margin:12,weather:{...defaults(),preset:'overlay',fields:[...presets.overlay]}};editor(existing.weather,async(_,overlay)=>{await api('/api/weather/overlays/'+slot,{method:'PUT',body:JSON.stringify(overlay)});},existing,slot);}catch(error){alert(error.message);}}
-  function attach(){for(const card of document.querySelectorAll('#cameras .camera-card[data-slot]')){const slot=Number(card.dataset.slot);if(![1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32].includes(slot)||card.querySelector('.weather-open'))continue;const b=el('button','Weather overlay','secondary weather-open');b.type='button';b.onclick=()=>overlayEditor(slot);(card.querySelector('.actions')||card).append(b);}}
-  return {defaults,preview,editor,attach,overlayEditor,refresh};
+  async function overlayEditor(slot){try{const config=await api('/api/config');const existing=(config.weatherOverlays||[]).find(o=>o.hostCameraSlot===slot)||{hostCameraSlot:slot,enabled:true,widthPercent:40,x:0,y:100,margin:12,weather:{...defaults(),preset:'overlay',fields:[...presets.overlay]}};editor(existing.weather,async(_,overlay)=>{const saved=await api('/api/weather/overlays/'+slot,{method:'PUT',body:JSON.stringify(overlay)});window.dispatchEvent(new CustomEvent('weather-overlay-saved',{detail:saved}));},existing,slot);}catch(error){alert(error.message);}}
+  return {defaults,preview,editor,overlayEditor,overlayBounds,refresh};
 })();
