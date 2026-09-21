@@ -8,16 +8,16 @@ RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast R
 
 ## Current release
 
-**[Download Beta 1.0.44-beta.8](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.8)** for Windows 10/11 x64 to try the features described in this guide. Stable remains 1.0.43; the 1.0.44 automation and overlay improvements are currently available on Beta.
+**[Download Stable 1.0.44](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44)** for Windows 10/11 x64. This release promotes all features and fixes from 1.0.44-beta.8, including automation reliability improvements and linked overlay sources.
 
 | Channel | Release | Use |
 | --- | --- | --- |
-| Stable | [1.0.43](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.43) | Current stable release. |
-| Beta | [1.0.44-beta.8](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.8) | Automation improvements and linked overlay sources. |
+| Stable | [1.0.44](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44) | Recommended release; includes the current beta features. |
+| Beta | [1.0.44-beta.8](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.8) | Previous prerelease, now promoted to Stable 1.0.44. |
 
-Choose the channel under **Settings → Updates**. Changing channels does not install anything automatically. To try these improvements, select Beta, check for updates and confirm installation. See [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for installers, checksums and version-specific notes.
+Choose the channel under **Settings → Updates**. Changing channels does not install anything automatically. To install this release, select Stable, check for updates and confirm installation. Hosts on Beta remain on that channel until switched. See [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for installers, checksums and version-specific notes.
 
-### What's new in the 1.0.44 betas
+### What's new in 1.0.44
 
 - Direct Tapo H100/H200 hub discovery and T110 door-sensor automations, without Home Assistant or MQTT.
 - A shared priority list for MQTT and Tapo, compact rule editors, protected drafts and viewer-reported priority status.
@@ -27,7 +27,7 @@ Choose the channel under **Settings → Updates**. Changing channels does not in
 - Floating feedback and Buy me a coffee buttons at the bottom left of every administration page.
 - Reuse an existing main stream as an overlay source, with automatic connection updates and independent overlay framing.
 
-See the [beta.8 release notes](docs/releases/1.0.44-beta.8.md) and [Tapo setup guide](docs/tapo-automation.md) for details. Physical Tapo H100/H200/T110 validation remains pending; firmware compatibility can vary. The separate [Scrypted connector](plugins/scrypted-rtspview/README.md) remains a beta component.
+See the [1.0.44 release notes](docs/releases/1.0.44.md) and [Tapo setup guide](docs/tapo-automation.md) for details. Physical Tapo H100/H200/T110 validation remains pending; firmware compatibility can vary. The separate [Scrypted connector](plugins/scrypted-rtspview/README.md) remains a beta component.
 
 ### Find a setting
 

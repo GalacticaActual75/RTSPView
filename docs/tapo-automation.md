@@ -1,6 +1,6 @@
-# Tapo sensor automations (1.0.44 Beta)
+# Tapo sensor automations (1.0.44)
 
-Configure direct Tapo access in **Automation → Tapo**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. Available in the 1.0.44 betas; Stable remains 1.0.43. Automated reader, Controller, HTTP and native-viewer tests pass; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
+Configure direct Tapo access in **Automation → Tapo**. Controller reads T110 contact sensors through H100/H200 hubs on your network using the bundled python-kasa reader. No separate Python installation, Home Assistant connection, MQTT broker or Scrypted plugin is needed. Available in Stable 1.0.44 and the preceding 1.0.44 betas. Automated reader, Controller, HTTP and native-viewer tests pass; physical H100/H200/T110 validation is still pending. Firmware and Third-Party Compatibility settings may affect connectivity.
 
 ## Connect and discover
 
