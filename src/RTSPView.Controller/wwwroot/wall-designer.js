@@ -1,3 +1,10 @@
+// getRandomValues is available on ordinary LAN HTTP; randomUUID requires a secure context.
+function layoutItemId() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function createWallDesigner(isAutomation = false) {
   let config, saved, draft, selectedId, selectedTile = -1, previous, dirty = false, busy = false;
   let root, board, status, observer, armedCamera = null;
@@ -100,7 +107,7 @@ function createWallDesigner(isAutomation = false) {
     dialog.onclose = () => dialog.remove();
     form.onsubmit = e => {
       e.preventDefault(); if (!name.value.trim()) { name.setCustomValidity('Enter a layout name.'); name.reportValidity(); return; }
-      const item = {id: 'layout-' + crypto.randomUUID(), name: name.value.trim(), rows: 3, columns: 3, aspectRatio: '16:9', outputWidth: 1920, outputHeight: 1080, rowWeights: [], columnWeights: [], tiles: [], focusSlots: []};
+      const item = {id: 'layout-' + layoutItemId(), name: name.value.trim(), rows: 3, columns: 3, aspectRatio: '16:9', outputWidth: 1920, outputHeight: 1080, rowWeights: [], columnWeights: [], tiles: [], focusSlots: []};
       if (start.value === 'blank') { if (isAutomation) { item.tiles = [{cameraSlot: -1, row: 0, column: 0, rowSpan: 1, columnSpan: 1, sizing: 'fit'}]; item.focusSlots = [-1]; } }
       else { const slots = config.cameras.map(c => c.slot); if (isAutomation) slots.unshift(...(start.value === 'dual' ? [-1, -2] : [-1])); Object.assign(item, wallLayoutPresets.create(start.value, '16:9', slots)); if (isAutomation) item.focusSlots = item.tiles.filter(t => t.cameraSlot < 0).map(t => t.cameraSlot); }
       dialog.close(); draft.layouts.push(item); selectedId = item.id; selectedTile = -1; drawer = 'add'; changed();
@@ -164,13 +171,13 @@ function createWallDesigner(isAutomation = false) {
     const actions=el('div',undefined,'designer-actions');top.append(actions);
     if(!isAutomation)button('Add weather',()=>{
       let place;for(let row=0;row<layout.rows&&!place&&layout.tiles.length<16;row++)for(let column=0;column<layout.columns;column++){
-        const candidate={kind:'weather',itemId:crypto.randomUUID(),cameraSlot:0,row,column,rowSpan:1,columnSpan:1,sizing:'fit'};if(validTile(candidate,-1)){place=candidate;break;}
+        const candidate={kind:'weather',itemId:layoutItemId(),cameraSlot:0,row,column,rowSpan:1,columnSpan:1,sizing:'fit'};if(validTile(candidate,-1)){place=candidate;break;}
       }
       if(!place){
         const dialog=el('dialog',undefined,'weather-choice');dialog.append(el('h2','Add weather'),el('p','This grid is full. Choose a camera, then add an overlay or replace its tile.'));
         const choices=el('select');layout.tiles.forEach((t,i)=>{if(t.kind!=='weather')choices.add(new Option(config.cameras.find(c=>c.slot===t.cameraSlot)?.name||'Stream',i));});if(selectedTile>=0)choices.value=String(selectedTile);if(!choices.value&&choices.options.length)choices.selectedIndex=0;field('Camera tile',choices,dialog);
         const addOverlayButton=button('Add weather overlay',()=>{const t=layout.tiles[Number(choices.value)];dialog.close();weatherUi.overlayEditor(t.cameraSlot);},dialog);choices.onchange=()=>{const slot=layout.tiles[Number(choices.value)]?.cameraSlot;addOverlayButton.disabled=!slot||slot>32;};choices.onchange();
-        button('Replace tile with weather',()=>{const index=Number(choices.value);dialog.close();weatherUi.editor(weatherUi.defaults(),weather=>{layout.tiles[index]={...layout.tiles[index],kind:'weather',itemId:crypto.randomUUID(),cameraSlot:0,weather};selectedTile=index;drawer='tile';changed();});},dialog).disabled=!choices.options.length;
+        button('Replace tile with weather',()=>{const index=Number(choices.value);dialog.close();weatherUi.editor(weatherUi.defaults(),weather=>{layout.tiles[index]={...layout.tiles[index],kind:'weather',itemId:layoutItemId(),cameraSlot:0,weather};selectedTile=index;drawer='tile';changed();});},dialog).disabled=!choices.options.length;
         button('Cancel',()=>dialog.close(),dialog);dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();return;
       }
       weatherUi.editor(weatherUi.defaults(),weather=>{layout.tiles.push({...place,weather});selectedTile=layout.tiles.length-1;drawer='tile';changed();});
@@ -333,7 +340,7 @@ function createWallDesigner(isAutomation = false) {
       button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=-1;changed();},tilePanel);
     }
     if(tile&&tile.kind!=='weather'){
-      if(!isAutomation)button('Replace with weather',()=>weatherUi.editor(weatherUi.defaults(),weather=>updateTile({...tile,kind:'weather',itemId:crypto.randomUUID(),cameraSlot:0,weather},selectedTile)),tilePanel);
+      if(!isAutomation)button('Replace with weather',()=>weatherUi.editor(weatherUi.defaults(),weather=>updateTile({...tile,kind:'weather',itemId:layoutItemId(),cameraSlot:0,weather},selectedTile)),tilePanel);
       if(!isAutomation&&tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25))button('Weather overlay',()=>weatherUi.overlayEditor(tile.cameraSlot),tilePanel);
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Unavailable camera '+tile.cameraSlot};
       const selected=el('div',undefined,'designer-selected');selected.append(el('span','SELECTED TILE','designer-eyebrow'),el('h3',camera.name));tilePanel.append(selected);

@@ -65,4 +65,4 @@ http.createServer(async(req,res)=>{
  const file=path.resolve(root,'.'+(route==='/'?'/index.html':route));
  if(!file.startsWith(root+path.sep)||!fs.existsSync(file)){res.statusCode=404;return res.end('Not found')}
  res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.ico':'image/x-icon'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
-}).listen(Number(process.env.PREVIEW_PORT||5099),'127.0.0.1',()=>console.log('UI fixture: http://127.0.0.1:5099'));
+}).listen(Number(process.env.PREVIEW_PORT||5099),process.env.PREVIEW_HOST||'127.0.0.1',()=>console.log('UI fixture ready'));

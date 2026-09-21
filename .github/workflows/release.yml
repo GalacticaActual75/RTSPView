@@ -123,6 +123,8 @@ jobs:
 
       - name: Check landscape and portrait presets
         run: |
+          node tests/layout-lan-http.checks.cjs
+          if ($LASTEXITCODE -ne 0) { throw "LAN HTTP layout actions failed." }
           node tests/wall-layout-presets.checks.cjs
           node tests/wall-proportions.checks.cjs
 
