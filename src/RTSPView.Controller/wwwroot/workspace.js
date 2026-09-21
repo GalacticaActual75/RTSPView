@@ -118,6 +118,9 @@ const workspace = (() => {
       const proportions=active?wallProportions(active):null;
       const tiles=monitorMode==='wall'?(active?.tiles||[]):cameraInventory.map(c=>({cameraSlot:c.slot}));
       for(const tile of tiles){
+        if(tile.kind==='weather'){
+          const card=node('div',undefined,'monitor-tile');const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});card.append(weatherUi.preview(tile.weather));board.append(card);continue;
+        }
         const camera=cameraInventory.find(c=>c.slot===tile.cameraSlot);if(!camera)continue;
         const card=button('',()=>showDetails(camera),'monitor-tile');card._tile=tile;
         if(monitorMode==='wall')Object.assign(card.style,{background:active?.backgroundColor||'#000000',borderColor:active?.borderColor||'#24272b',borderWidth:(active?.showTileBorders??config?.showTileBorders??true)?'1px':'0px'});
@@ -134,7 +137,7 @@ const workspace = (() => {
   function fitMonitor() {
     const active=wallDesigner.active();if(!active||monitorMode!=='wall')return;
     for(const card of document.querySelectorAll('.monitor-tile')){
-      const image=card.querySelector('img'),tile=card._tile;if(!image||!tile)return;
+      const image=card.querySelector('img'),tile=card._tile;if(!image||!tile)continue;
       const size=telemetry?.viewer?.cameras.find(c=>c.slot===tile.cameraSlot);
       const width=size?.width||image.naturalWidth||16,height=size?.height||image.naturalHeight||9,w=card.clientWidth,h=card.clientHeight;
       const mode=tile.sizing||'fit',scale=mode==='original'&&size?.width?$('#monitorBoard').clientWidth/(active.outputWidth||1920):mode==='fill'?Math.max(w/width,h/height):Math.min(w/width,h/height);

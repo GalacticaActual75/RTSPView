@@ -90,6 +90,11 @@ jobs:
           dotnet run --project tests/RTSPView.LayoutVisibilityChecks -c Release
           if ($LASTEXITCODE -ne 0) { throw "Native tile background or layout regression." }
 
+      - name: Check weather isolation, persistence, provider data and rendering
+        run: |
+          dotnet run --project tests/RTSPView.WeatherChecks -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Weather checks failed." }
+
       - name: Check stream editor drafts and theme
         run: |
           dotnet run --project tests/RTSPView.UiChecks -c Release

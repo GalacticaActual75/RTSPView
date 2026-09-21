@@ -22,6 +22,10 @@ const mutations=[];
 http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1'),route=url.pathname;
  const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value))};
+ if(route==='/api/weather')return json([]);
+ if(route==='/api/weather/search')return json({results:[{name:'Seattle',admin1:'Washington',country:'United States',latitude:47.6062,longitude:-122.3321,timezone:'America/Los_Angeles'}]});
+ if(route.startsWith('/api/weather/overlays/')){let body='';for await(const chunk of req)body+=chunk;const o=JSON.parse(body);config.weatherOverlays=[...(config.weatherOverlays||[]).filter(w=>w.hostCameraSlot!==o.hostCameraSlot),o];return json(o);}
+
  if(route==='/api/automation/priorities'){
   const snapshot=()=>({revision:'fixture',rules:[...automation.settings.rules.map(r=>({...r,source:'MQTT'})),...tapo.settings.rules.map(r=>({...r,source:'Tapo'}))].sort((a,b)=>a.priority-b.priority)});
   if(req.method==='GET')return json(snapshot());

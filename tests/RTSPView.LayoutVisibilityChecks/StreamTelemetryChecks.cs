@@ -72,6 +72,17 @@ internal static class StreamTelemetryChecks
                         await Task.Delay(200);
                         if (player.Hwnd != handle || !ReferenceEquals(media, player.Media) && player.Media?.Mrl != media.Mrl || !player.IsPlaying)
                             throw new Exception("Assigning native camera interrupted playback");
+                        var weather = new WeatherView { Width = 180, Height = 120 };
+                        tile.ContentOverlayRoot.Children.Insert(0, weather);
+                        weather.Update(new() { Location = "Weather isolation" }, new WeatherSnapshot { FetchedAt = DateTimeOffset.UtcNow, ValidAt = DateTimeOffset.UtcNow, Temperature = 20 });
+                        window.UpdateLayout();
+                        var weatherFrame = tile.GetTelemetry().LastFrameAt;
+                        weather.Update(new() { Location = "Changed style", Theme = "light" }, null);
+                        await Task.Delay(200); tile.Tick();
+                        if (player.Hwnd != handle || !ReferenceEquals(player, typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)) || !player.IsPlaying || tile.GetTelemetry().LastFrameAt <= weatherFrame)
+                            throw new Exception("Weather overlay update interrupted native decoding");
+                        tile.ContentOverlayRoot.Children.Remove(weather);
+                        Console.WriteLine("PASS native weather add, style change, unavailable state and removal preserve player, HWND and decoding");
                         tile.SetWallVisibility(false);
                         tile.Apply(new CameraSettings { Enabled = false });
                         for (var wait = 0; wait < 30 && player.IsPlaying; wait++) await Task.Delay(100);

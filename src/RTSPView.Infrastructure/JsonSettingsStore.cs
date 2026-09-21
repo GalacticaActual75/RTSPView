@@ -40,6 +40,13 @@ public sealed class JsonSettingsStore
             if (original.RootElement.TryGetProperty("SchemaVersion", out var schema) && schema.GetInt32() < 15)
                 File.Copy(_path, migrationBackup, false);
         }
+        var weatherBackup = _path + ".before-weather.json";
+        if (File.Exists(_path) && !File.Exists(weatherBackup))
+        {
+            using var original = JsonDocument.Parse(await File.ReadAllTextAsync(_path, cancellationToken));
+            if (original.RootElement.TryGetProperty("SchemaVersion", out var oldSchema) && oldSchema.GetInt32() < 16)
+                File.Copy(_path, weatherBackup, false);
+        }
         var temporary = _path + ".tmp";
         await WriteAsync(temporary, normalized, cancellationToken);
         // Windows readers from the Viewer, Controller or an older process may

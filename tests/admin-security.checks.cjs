@@ -14,6 +14,7 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal(hostileHostStatus,400,'untrusted host rejected');
   const program=fs.readFileSync(path.join(root,'src/RTSPView.Controller/Program.cs'),'utf8');
   const routes=[...program.matchAll(/app\.Map(Get|Post|Put|Delete)\("([^"\n]+)"/g)].map(m=>[m[1].toUpperCase(),m[2].replace(/\{slot:int\}/g,'1')]).filter(([,p])=>!['/api/session','/api/auth/login'].includes(p));
+  routes.push(['GET','/api/weather'],['GET','/api/weather/search?q=Seattle'],['PUT','/api/weather/overlays/1']);
   for(const[method,url]of routes)assert.equal((await request(a,url,method,method==='GET'?undefined:{})).status,401,'anonymous blocked: '+url);
   assert.equal((await request(a,'/api/auth/login','POST',{password:'admin'})).json.passwordChangeRequired,true);
   assert.equal((await session(a)).passwordChangeRequired,true);
@@ -37,6 +38,18 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const savedCsrf=a.csrf;a.csrf='';
   assert.equal((await request(a,'/api/control/application/restart','POST',{confirmed:true})).status,400,'restart requires CSRF');a.csrf=savedCsrf;
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  const weather={location:'Seattle',latitude:47.6062,longitude:-122.3321,preset:'compact',units:'imperial',fields:['temperature','condition','highLow']};
+  const weatherOverlay={hostCameraSlot:1,enabled:true,weather,widthPercent:40,x:0,y:100,margin:12};
+  assert.equal((await request(a,'/api/weather/overlays/1','PUT',weatherOverlay)).status,200,'weather overlay saves');
+  const withWeather=(await request(a,'/api/config')).json;
+  assert.equal(withWeather.weatherOverlays[0].weather.location,'Seattle','weather location persists');
+  assert.deepEqual(withWeather.cameras,config.cameras,'weather save preserves camera connections');
+  assert.equal((await request(a,'/api/weather/overlays/1','PUT',{...weatherOverlay,weather:{...weather,latitude:91}})).status,400,'invalid weather location rejected');
+  const weatherLayouts=config.layouts.map((l,i)=>i===0?{...l,tiles:l.tiles.map((t,j)=>j===8?{...t,kind:'weather',cameraSlot:0,itemId:'weather-1',weather}:t)}:l);
+  assert.equal((await request(a,'/api/layouts','PUT',{layouts:weatherLayouts,activeLayoutId:config.activeLayoutId})).status,200,'mixed weather layout saves');
+  assert.equal((await request(a,'/api/config')).json.layouts[0].tiles[8].kind,'weather','weather tile survives reload');
+  const weatherCsrf=a.csrf;a.csrf='';assert.equal((await request(a,'/api/weather/overlays/1','PUT',weatherOverlay)).status,400,'weather mutations require CSRF');a.csrf=weatherCsrf;
+  assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore camera layout after weather checks');
   const appearanceLayouts=config.layouts.map(l=>({...l,borderColor:'#ff0000',backgroundColor:'#123456',showTileBorders:false}));
   const appearanceSave=await request(a,'/api/layouts','PUT',{layouts:appearanceLayouts,activeLayoutId:config.activeLayoutId});
   assert.equal(appearanceSave.status,200,'real layout appearance API saves: '+appearanceSave.text);
@@ -96,7 +109,9 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/cameras/2','DELETE')).status,400,'second focus camera deletion guarded');
   assert.equal((await request(a,'/api/automation/layouts','PUT',{layouts:[editedLayouts[0],{...editedLayouts[1],focusSlots:[editedLayouts[1].focusSlots[0]],tiles:editedLayouts[1].tiles.filter(t=>t.cameraSlot!==editedLayouts[1].focusSlots[1])}]})).status,400,'second focus position removal guarded');
 
-  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:10}]}})).status,400,'focused layout rejects overlay target');
+  // Stable 1.0.44 permits incomplete targets in disabled automation drafts.
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,rules:[{...focusRule,action:2,cameraSlot:10}]}})).status,200,'disabled automation retains incomplete draft');
+  assert.equal((await request(a,'/api/automation','PUT',{settings:{...automation.settings,enabled:true,host:'localhost',rules:[{...focusRule,action:2,cameraSlot:10}]}})).status,400,'enabled focused layout rejects overlay target');
   await request(a,'/api/automation','PUT',{settings:automation.settings});
   await request(a,'/api/doorbell','PUT',automaticOverlay);
   const overlayRule={...focusRule,action:0,cameraSlot:0,overlaySlot:10};

@@ -279,6 +279,7 @@ public partial class MainWindow : Window
         SizeWall();
         CameraWallPresentation.Apply(WallGrid, [.._tiles, .._rawOverlaySources.Values.Select(e => e.Tile)], layout, EffectiveFocusedSlot, _settings.ShowTileBorders);
         WallViewport.Background = WallGrid.Background;
+        SyncWeather();
         QueueOverlayLayouts();
     }
 
@@ -1110,6 +1111,14 @@ public partial class MainWindow : Window
         try
         {
             var updated = (await _settingsStore.LoadAsync()).Normalize();
+            var previousSettings = _settings;
+            if (WeatherConfiguration.OnlyPresentationChanged(previousSettings, updated))
+            {
+                _settings = updated;
+                SyncWeather();
+                _settingsLastWriteUtc = writeTime;
+                return;
+            }
             ClearAutomation();
             var previousDoorbell = _settings.DoorbellOverlay.Camera;
             var previousGarage = _settings.GarageOverlay.Camera;
@@ -1127,8 +1136,8 @@ public partial class MainWindow : Window
             if (previousGarage != updated.GarageOverlay.Camera)
                 GarageTile.Apply(updated.GarageOverlay.Camera);
             ApplyOverlayPreferences();
-            PositionOnPreferredMonitor();
-            SetFullScreen(updated.StartFullScreen);
+            if (previousSettings.PreferredMonitor != updated.PreferredMonitor) PositionOnPreferredMonitor();
+            if (previousSettings.StartFullScreen != updated.StartFullScreen) SetFullScreen(updated.StartFullScreen);
             _settingsLastWriteUtc = writeTime;
             LoadEditor(Math.Max(0, SlotBox.SelectedIndex));
             _logger.Write("INFO", "External configuration change applied live");
@@ -1145,6 +1154,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        _weatherTimer?.Stop();
+        _weatherTimer = null;
         _diagnosticsTimer.Stop();
         _cursorTimer.Stop();
         _updateBadge?.Close();

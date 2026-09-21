@@ -65,6 +65,8 @@ builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, 
     message => provider.GetRequiredService<RollingFileLogger>().Write("TEMPERATURE", message)));
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
+builder.Services.AddSingleton(new WeatherService(dataDirectory));
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService(provider => provider.GetRequiredService<WeatherService>());
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(provider => new TapoService(dataDirectory,
     provider.GetRequiredService<IDataProtectionProvider>(), provider.GetRequiredService<ViewerCommandClient>()));
@@ -799,6 +801,7 @@ app.MapPost("/api/auth/password", async (HttpContext context, PasswordChangeRequ
 }).RequireAuthorization();
 
 app.MapFallbackToFile("index.html");
+app.MapWeather(settingsStore, configGate);
 await app.RunAsync();
 
 static string[] GetLanAddresses() => NetworkInterface.GetAllNetworkInterfaces()

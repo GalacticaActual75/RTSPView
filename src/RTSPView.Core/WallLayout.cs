@@ -2,6 +2,9 @@ namespace RTSPView.Core;
 
 public sealed record WallTile
 {
+    public string Kind { get; init; } = "camera";
+    public string ItemId { get; init; } = "";
+    public WeatherOptions? Weather { get; init; }
     public int CameraSlot { get; init; }
     public int Row { get; init; }
     public int Column { get; init; }
@@ -68,13 +71,20 @@ public sealed record WallLayout
                 throw new InvalidDataException("Custom sizing needs both row and column proportions.");
             var occupied = new HashSet<(int, int)>();
             var cameras = new HashSet<int>();
+            var widgets = new HashSet<string>();
             foreach (var tile in layout.Tiles)
             {
                 if (tile?.Sizing is not ("original" or "fit" or "fill" or "stretch"))
                     throw new InvalidDataException("Choose original, fit, fill, or stretch for tile sizing.");
                 if (tile.ZoomPercent is < 25 or > 400 || tile.HorizontalPositionPercent is < 0 or > 100 || tile.VerticalPositionPercent is < 0 or > 100)
                     throw new InvalidDataException("Tile zoom must be 25–400%; image positions must be 0–100%.");
-                if (tile is null || !(AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || StreamCatalog.IsOverlaySource(tile.CameraSlot) || (allowFocusTiles && tile.CameraSlot is -1 or -2)) || !cameras.Add(tile.CameraSlot))
+                if (tile.Kind == "weather")
+                {
+                    if (allowFocusTiles || tile.CameraSlot != 0 || string.IsNullOrWhiteSpace(tile.ItemId) || tile.ItemId.Length > 64 || !widgets.Add(tile.ItemId) || tile.Weather is null)
+                        throw new InvalidDataException("Weather tiles need unique IDs and weather settings in a standard layout.");
+                    tile.Weather.Validate();
+                }
+                else if (tile.Kind != "camera" || !(AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || StreamCatalog.IsOverlaySource(tile.CameraSlot) || (allowFocusTiles && tile.CameraSlot is -1 or -2)) || !cameras.Add(tile.CameraSlot))
                     throw new InvalidDataException("Each tile must reference a different main camera.");
                 if (tile.Row < 0 || tile.Column < 0 || tile.RowSpan < 1 || tile.ColumnSpan < 1 ||
                     tile.RowSpan > layout.Rows || tile.ColumnSpan > layout.Columns ||

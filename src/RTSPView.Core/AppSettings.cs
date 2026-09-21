@@ -2,12 +2,13 @@ namespace RTSPView.Core;
 
 public sealed record AppSettings
 {
-    public const int CurrentSchemaVersion = 15;
+    public const int CurrentSchemaVersion = 16;
     // IDs 10–25 remain reserved for existing overlay streams.
     public static readonly int[] MainCameraSlots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
     public IReadOnlyList<WallLayout> Layouts { get; init; } = [new()];
     public IReadOnlyList<WallLayout> AutomationViewLayouts { get; init; } = AutomationLayouts.Defaults();
     public string ActiveLayoutId { get; init; } = "default";
+    public IReadOnlyList<WeatherOverlay> WeatherOverlays { get; init; } = [];
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
@@ -60,6 +61,9 @@ public sealed record AppSettings
 
     public AppSettings Normalize()
     {
+        if (WeatherOverlays is null || WeatherOverlays.Count > 16 || WeatherOverlays.Any(o => o is null) || WeatherOverlays.Select(o => o.HostCameraSlot).Distinct().Count() != WeatherOverlays.Count)
+            throw new InvalidDataException("Keep at most one weather overlay per camera.");
+        foreach (var weather in WeatherOverlays) weather.Validate();
         var normalized = CreateCameraSlots().ToArray();
         foreach (var camera in Cameras.Take(16))
         {
@@ -81,6 +85,8 @@ public sealed record AppSettings
         var layouts = SchemaVersion < 15 ? new WallLayout[] { new() } : Layouts;
         var activeId = SchemaVersion < 15 ? "default" : ActiveLayoutId;
         WallLayout.Validate(layouts, activeId);
+        if (layouts.SelectMany(l => l.Tiles).Where(t => t.Kind == "weather").Select(t => t.Weather!.CacheKey).Concat(WeatherOverlays.Where(o => o.Enabled).Select(o => o.Weather.CacheKey)).Distinct().Count() > 32)
+            throw new InvalidDataException("Keep at most 32 different weather locations across saved layouts and overlays.");
         var automationLayouts = AutomationLayouts.Normalize(AutomationViewLayouts);
         var cameraCount = Math.Clamp(CameraCount, 9, MainCameraSlots.Length);
         for (var index = 9; index < normalized.Length; index++)

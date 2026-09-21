@@ -32,6 +32,7 @@ public static class StreamCatalog
             throw new InvalidDataException("An overlay uses this stream as its host. Choose another host in Overlays before deleting it.");
         return settings with {
             DeletedCameraSlots = [..settings.DeletedCameraSlots, slot],
+            WeatherOverlays = settings.WeatherOverlays.Where(o => o.HostCameraSlot != slot).ToArray(),
             Camera = slot == 1 ? new CameraSettings() : settings.Camera,
             Cameras = settings.Cameras.Select(c => c.Slot == slot ? new CameraSettings { Slot = slot, Name = "Camera " + (Array.IndexOf(AppSettings.MainCameraSlots, slot) + 1), Enabled = false } : c).ToArray(),
             Layouts = settings.Layouts.Select(l => l with { Tiles = l.Tiles.Where(t => t.CameraSlot != slot).ToArray() }).ToArray(),

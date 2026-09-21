@@ -130,6 +130,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private static string FourCc(uint value) => new string([(char)(value & 0xff), (char)((value >> 8) & 0xff), (char)((value >> 16) & 0xff), (char)((value >> 24) & 0xff)]).Trim('\0').ToUpperInvariant();
 
+    public System.Windows.Controls.Grid ContentOverlayRoot => OverlayRoot;
+
     public CameraTile()
     {
         InitializeComponent();

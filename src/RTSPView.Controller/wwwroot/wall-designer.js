@@ -23,6 +23,7 @@ function createWallDesigner(isAutomation = false) {
       const zoom=(tile.zoomPercent??100)/100,rw=(mode==='stretch'?w:sw*fit)*zoom,rh=(mode==='stretch'?h:sh*fit)*zoom;
       Object.assign(image.style,{width:rw+'px',height:rh+'px',left:(w-rw)*(tile.horizontalPositionPercent??50)/100+'px',top:(h-rh)*(tile.verticalPositionPercent??50)/100+'px',objectFit:'fill'});
     });
+    board.querySelectorAll('.designer-weather-preview').forEach(host=>{const bounds=wallProportions(current()).bounds(current().tiles[Number(host.dataset.weatherIndex)]),[w,h]=resolution(current());const card=host.firstElementChild;Object.assign(card.style,{width:w*bounds.width+'px',height:h*bounds.height+'px',transformOrigin:'top left',transform:'scale('+host.clientWidth/(w*bounds.width)+')'});});
     const note=root.querySelector('[data-dimensions-note]');if(note)note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));
   }
 
@@ -59,7 +60,7 @@ function createWallDesigner(isAutomation = false) {
     return [candidate.row,candidate.column,candidate.rowSpan,candidate.columnSpan].every(Number.isInteger) &&
       candidate.row >= 0 && candidate.column >= 0 && candidate.rowSpan >= 1 && candidate.columnSpan >= 1 &&
       candidate.row + candidate.rowSpan <= layout.rows && candidate.column + candidate.columnSpan <= layout.columns &&
-      !layout.tiles.some((tile,i) => i !== index && (tile.cameraSlot === candidate.cameraSlot ||
+      !layout.tiles.some((tile,i) => i !== index && ((tile.kind === "weather" || candidate.kind === "weather" ? tile.itemId && tile.itemId === candidate.itemId : tile.cameraSlot === candidate.cameraSlot) ||
         candidate.row < tile.row+tile.rowSpan && candidate.row+candidate.rowSpan > tile.row &&
         candidate.column < tile.column+tile.columnSpan && candidate.column+candidate.columnSpan > tile.column));
   }
@@ -159,6 +160,14 @@ function createWallDesigner(isAutomation = false) {
     },menu);deleteButton.disabled=isAutomation?draft.layouts.length===1:selectedId===saved.activeLayoutId;deleteButton.classList.add('designer-danger');
     const revert=button('Revert last save',()=>persist(false,true),menu);revert.disabled=!previous;
     const actions=el('div',undefined,'designer-actions');top.append(actions);
+    if(!isAutomation)button('Add weather',()=>{
+      if(layout.tiles.length>=16){message('Remove a tile first; the wall supports 16 items.');return;}
+      let place;for(let row=0;row<layout.rows&&!place;row++)for(let column=0;column<layout.columns;column++){
+        const candidate={kind:'weather',itemId:crypto.randomUUID(),cameraSlot:0,row,column,rowSpan:1,columnSpan:1,sizing:'fit'};if(validTile(candidate,-1)){place=candidate;break;}
+      }
+      if(!place){message('The grid is full. Select a tile and choose Replace with weather, or remove a tile first.');return;}
+      weatherUi.editor(weatherUi.defaults(),weather=>{layout.tiles.push({...place,weather});selectedTile=layout.tiles.length-1;drawer='tile';changed();});
+    },actions);
     for(const [id,label] of [['add','Add stream'],['presets','Presets'],['sizing','Sizing'],['advanced','Canvas settings'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
 
     button('Undo',()=>{const state=undoHistory.pop();if(!state)return;redoHistory.push(copy({draft,selectedId,selectedTile}));draft=state.draft;selectedId=state.selectedId;selectedTile=state.selectedTile;dirty=JSON.stringify(draft)!==JSON.stringify(saved);render();message('Last layout edit undone.');},actions).disabled=!undoHistory.length;
@@ -169,7 +178,7 @@ function createWallDesigner(isAutomation = false) {
     const workspace=el('div',undefined,'designer-workspace'+(drawer?' has-drawer':''));root.append(workspace);
     const preview=el('section',undefined,'designer-preview');workspace.append(preview);
     const previewHead=el('div',undefined,'designer-preview-head');preview.append(previewHead);
-    const title=el('div');title.append(el('h2','Wall preview'),el('span',layout.rows+' × '+layout.columns+' grid · '+layout.tiles.length+' streams','designer-meta'));previewHead.append(title);
+    const title=el('div');title.append(el('h2','Wall preview'),el('span',layout.rows+' × '+layout.columns+' grid · '+layout.tiles.length+' items','designer-meta'));previewHead.append(title);
     const gridSettings=el('details',undefined,'designer-settings');gridSettings.append(el('summary','Grid settings'));gridSettings.open=true;
     const canvasControls=el('div',undefined,'designer-canvas-controls');gridSettings.append(canvasControls);
     const dragMode=el('select');dragMode.add(new Option('Move tiles','tiles'));dragMode.add(new Option('Reposition images','images'));dragMode.value=panImage?'images':'tiles';dragMode.onchange=()=>{panImage=dragMode.value==='images';board.classList.toggle('pan-images',panImage);};field('Drag action',dragMode,canvasControls);
@@ -234,13 +243,14 @@ function createWallDesigner(isAutomation = false) {
       board.onpointerup=()=>{const t=region();stop();addCamera(t.cameraSlot,t.row,t.column,t.rowSpan,t.columnSpan);};board.onpointercancel=stop;
     };
     layout.tiles.forEach((tile,index)=>{
-      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
+      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.kind==='weather'?'Weather · '+tile.weather.location:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
       const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
       const rect=proportions.bounds(tile);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
       const previewSlot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);
-      const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);image.dataset.tileIndex=index;image.addEventListener('load',sizeImages);
-      const guide=el('span','','designer-aspect-guide');guide.hidden=index!==selectedTile;node.append(guide);
+      const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);if(tile.kind!=='weather')image.dataset.tileIndex=index;image.addEventListener('load',sizeImages);
+      if(tile.kind==='weather'){image.hidden=true;const host=el('div',undefined,'designer-weather-preview');host.dataset.weatherIndex=index;host.append(weatherUi.preview(tile.weather,true));node.append(host);}
+      const guide=el('span','','designer-aspect-guide');guide.hidden=tile.kind==='weather'||index!==selectedTile;node.append(guide);
       const updateGuide=r=>{const ratio=streamAspects.get(previewSlot);guide.textContent=ratio?'Picture fit '+Math.round(Math.min(r.width/r.height*(outputWidth/outputHeight)/ratio,ratio/(r.width/r.height*(outputWidth/outputHeight)))*100)+'%':'Load a preview for sizing';};
       image.onload=()=>{if(image.naturalWidth&&image.naturalHeight){streamAspects.set(previewSlot,image.naturalWidth/image.naturalHeight);image.style.visibility='';updateGuide(rect);}};updateGuide(rect);
       node.append(el('span',camera.name,'designer-caption'));
@@ -262,7 +272,7 @@ function createWallDesigner(isAutomation = false) {
         const edge=e.target.dataset.edge||'',resize=!!edge,startX=e.clientX,startY=e.clientY,bounds=board.getBoundingClientRect();let candidate=copy(tile);
         node.setPointerCapture(e.pointerId);
         node.onpointermove=move=>{
-          if(panImage&&!resize){
+          if(panImage&&!resize&&tile.kind!=="weather"){
             const slackX=node.clientWidth-parseFloat(image.style.width),slackY=node.clientHeight-parseFloat(image.style.height);
             candidate={...tile,horizontalPositionPercent:Math.abs(slackX)>1?Math.round(Math.max(0,Math.min(100,(tile.horizontalPositionPercent??50)+(move.clientX-startX)/slackX*100))):(tile.horizontalPositionPercent??50),verticalPositionPercent:Math.abs(slackY)>1?Math.round(Math.max(0,Math.min(100,(tile.verticalPositionPercent??50)+(move.clientY-startY)/slackY*100))):(tile.verticalPositionPercent??50)};
             sizeImages(candidate,index);return;
@@ -286,6 +296,7 @@ function createWallDesigner(isAutomation = false) {
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
     sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Choose Original, Fit, Fill or Stretch per tile. Small tiles remain equal in size.','designer-help'));
     button('Fit tiles to streams',()=>{
+      if(layout.tiles.some(t=>t.kind==='weather')){message('Use Fine sizing for a wall containing weather.');return;}
       const targets={};
       for(const tile of layout.tiles){const slot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);const ratio=streamAspects.get(slot);
         if(!ratio){message('Load each stream preview and choose preview streams for focus tiles before fitting.');return;}targets[tile.cameraSlot]=ratio;}
@@ -305,7 +316,15 @@ function createWallDesigner(isAutomation = false) {
     }
     const tilePanel=el('div',undefined,'designer-tile-panel');tilePanel.hidden=drawer!=='tile';side.append(tilePanel);
     const tile=layout.tiles[selectedTile];
-    if(tile){
+    if(tile?.kind==='weather'){
+      tilePanel.append(el('h3',tile.weather.location||'Weather'),el('p','Drag or resize this tile just like a stream. Changes stay in the layout draft.','designer-help'));
+      button('Edit weather',()=>weatherUi.editor(tile.weather,weather=>updateTile({...tile,weather},selectedTile)),tilePanel);
+      for(const [key,label,offset] of [['row','Row',1],['column','Column',1],['rowSpan','Height',0],['columnSpan','Width',0]]){const n=el('input');n.type='number';n.min=1;n.max=key==='row'||key==='rowSpan'?layout.rows:layout.columns;n.value=tile[key]+offset;n.onchange=()=>updateTile({...tile,[key]:Number(n.value)-offset},selectedTile);field(label,n,tilePanel);}
+      button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=-1;changed();},tilePanel);
+    }
+    if(tile&&tile.kind!=='weather'){
+      if(!isAutomation)button('Replace with weather',()=>weatherUi.editor(weatherUi.defaults(),weather=>updateTile({...tile,kind:'weather',itemId:crypto.randomUUID(),cameraSlot:0,weather},selectedTile)),tilePanel);
+      if(!isAutomation&&tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25))button('Weather overlay',()=>weatherUi.overlayEditor(tile.cameraSlot),tilePanel);
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Unavailable camera '+tile.cameraSlot};
       const selected=el('div',undefined,'designer-selected');selected.append(el('span','SELECTED TILE','designer-eyebrow'),el('h3',camera.name));tilePanel.append(selected);
       const cameraSelect=el('select');for(const camera of config.cameras)cameraSelect.add(new Option(camera.name+' · #'+camera.slot,camera.slot));cameraSelect.value=tile.cameraSlot;
