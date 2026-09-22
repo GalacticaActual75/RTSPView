@@ -134,7 +134,7 @@ public sealed record AppSettings
         {
             var source = sources.FirstOrDefault(c => c.Slot == overlay.SourceCameraSlot);
             if (source is null || (DeletedCameraSlots ?? []).Contains(overlay.SourceCameraSlot))
-                throw new InvalidDataException("An overlay references an unavailable source stream. Select an existing main stream or use its own RTSP URL.");
+                throw new InvalidDataException("An overlay references an unavailable source stream. Select an existing main stream or use its own source URL.");
             var identity = overlay.Camera ?? new CameraSettings { Name = defaultName, Enabled = false };
             // Copy connection settings only. Each overlay keeps its identity, visibility and its own renderer/transforms.
             overlay = overlay with { Camera = source with { Slot = cameraSlot, Name = identity.Name, Enabled = identity.Enabled,

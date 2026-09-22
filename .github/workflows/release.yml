@@ -40,6 +40,21 @@ jobs:
           python integrations/tapo-reader/check_package.py
           if ($LASTEXITCODE -ne 0) { throw "Tapo packaged reader failed." }
 
+      - name: Build bundled website stream resolver
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m venv artifacts/streaming-venv
+          if ($LASTEXITCODE -ne 0) { throw "Streaming environment failed." }
+          $python = 'artifacts/streaming-venv/Scripts/python.exe'
+          & $python -m pip install -r integrations/stream-resolver/requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw "Streaming dependency installation failed." }
+          & $python integrations/stream-resolver/test_resolver.py
+          if ($LASTEXITCODE -ne 0) { throw "Streaming checks failed." }
+          & $python integrations/stream-resolver/build.py
+          if ($LASTEXITCODE -ne 0) { throw "Streaming packaging failed." }
+          & $python integrations/stream-resolver/check_package.py
+          if ($LASTEXITCODE -ne 0) { throw "Packaged streaming checks failed." }
+
       - name: Resolve version
         id: version
         env:
@@ -63,6 +78,17 @@ jobs:
       - name: Run regression checks
         shell: pwsh
         run: ./tools/checks.ps1
+
+      - name: Verify native streaming playback
+        # Synthetic media only; never contacts cameras or public streaming accounts.
+        # The test generator is installed after helper packaging so it is not shipped.
+        # Actual publishing follows successful playback checks.
+        shell: pwsh
+        run: |
+          & artifacts/streaming-venv/Scripts/python.exe -m pip install -r integrations/stream-resolver/requirements-test.txt
+          if ($LASTEXITCODE -ne 0) { throw "Streaming test dependencies failed." }
+          & artifacts/streaming-venv/Scripts/python.exe tests/stream-playback.checks.py
+          if ($LASTEXITCODE -ne 0) { throw "Native streaming playback checks failed." }
 
       - name: Publish self-contained applications
         shell: pwsh

@@ -26,6 +26,18 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 {
     private MediaPlayer? _player;
     private Media? _media;
+    private ResolvedStream? _streamLease;
+    private CancellationTokenSource? _resolutionCancellation;
+    private bool _resolving;
+
+    private void CancelResolution()
+    {
+        _resolutionCancellation?.Cancel();
+        _resolutionCancellation = null;
+        _resolving = false;
+        _streamLease?.Dispose();
+        _streamLease = null;
+    }
     private LibVLC? _libVlc;
     private RollingFileLogger? _logger;
     private CameraSettings _settings = new();
@@ -490,7 +502,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         if (_sharedSource is not null) { _status = _sharedSource.Status; ApplyVideoSizing(null); UpdateOverlayPresentation(DateTimeOffset.UtcNow); return; }
         if (_pendingNativeStart) { ResumeNativeStart(); return; }
-        if (_disposed || !_settings.Enabled) return;
+        if (_disposed || !_settings.Enabled || _resolving) return;
         if (_videoDisplayWidth > 0 && _videoDisplayHeight > 0)
         {
             var dimensions = GetVideoDimensions();
@@ -513,7 +525,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             return;
         }
 
-        if (_status.State is CameraConnectionState.Connecting or CameraConnectionState.Buffering &&
+        if (!_resolving && _status.State is CameraConnectionState.Connecting or CameraConnectionState.Buffering &&
             now - _attemptStartedAt > TimeSpan.FromSeconds(Math.Clamp(_settings.StartupTimeoutSeconds, 8, 120)))
         {
             ScheduleRecovery("Stream startup timed out");
@@ -640,8 +652,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             var effectiveOptions = string.Join(' ', _settings.ToMediaOptions().Where(option => option.StartsWith(":rtsp-", StringComparison.Ordinal) || option.StartsWith(":network-caching=", StringComparison.Ordinal)));
             _logger?.Write("INFO", $"Camera {_settings.Slot} connected: {RtspUrlSanitizer.Redact(_settings.RtspUrl)}; transport={_settings.EffectiveTransport}; cache={_settings.EffectiveNetworkCacheMilliseconds} ms; lowLatency={_settings.EffectiveLowLatency}; videoOutput={(_useCompositedOutput ? "WPF frames / software decode" : "default")}; mediaOptions=[{effectiveOptions}]");
         };
-        player.EndReached += (_, _) => { if (!_disposed && ReferenceEquals(_player, player)) ScheduleRecovery("Stream ended"); };
-        player.EncounteredError += (_, _) => { if (!_disposed && ReferenceEquals(_player, player)) ScheduleRecovery("LibVLC reported a decoder or stream error"); };
+        player.EndReached += (_, _) => { if (!_disposed && !_resolving && ReferenceEquals(_player, player)) ScheduleRecovery("Stream ended"); };
+        player.EncounteredError += (_, _) => { if (!_disposed && !_resolving && ReferenceEquals(_player, player)) ScheduleRecovery("LibVLC reported a decoder or stream error"); };
     }
 
     private string? _wallSizing;
@@ -725,12 +737,12 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         }
     }
 
-    private void StartPlayer(bool recreatePlayer)
+    private async void StartPlayer(bool recreatePlayer)
     {
         if (_disposed || _libVlc is null) return;
-        if (!Uri.TryCreate(_settings.RtspUrl, UriKind.Absolute, out var uri) || !uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
+        if (!StreamSource.IsValidUrl(_settings.RtspUrl))
         {
-            ScheduleRecovery("Invalid RTSP URL");
+            ScheduleRecovery("Invalid stream URL");
             return;
         }
 
@@ -747,6 +759,31 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         }
         recreatePlayer |= _pendingNativeRecreate;
         _pendingNativeStart = _pendingNativeRecreate = false;
+        CancelResolution();
+        using var resolution = new CancellationTokenSource();
+        _resolutionCancellation = resolution;
+        _resolving = true;
+        _status = _status with { NextReconnectAt = null };
+        SetState(CameraConnectionState.Connecting, StreamSource.NeedsResolver(_settings) ? "Resolving website stream…" : "Connecting…");
+        ResolvedStream resolved;
+        try { resolved = await StreamResolver.ResolveAsync(_settings, resolution.Token); }
+        catch (OperationCanceledException) { return; }
+        catch (Exception error)
+        {
+            if (!resolution.IsCancellationRequested && !_disposed) ScheduleRecovery(error.Message);
+            return;
+        }
+        finally
+        {
+            if (ReferenceEquals(_resolutionCancellation, resolution))
+            {
+                _resolutionCancellation = null;
+                _resolving = false;
+            }
+        }
+        if (_disposed || resolution.IsCancellationRequested) { resolved.Dispose(); return; }
+        _streamLease = resolved;
+        var uri = resolved.Uri;
         var oldPlayer = _player;
         var oldMedia = _media;
         var oldPresenter = recreatePlayer ? _compositedPresenter : null;
@@ -906,6 +943,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             return;
         }
         if (_disposed || _status.NextReconnectAt is not null) return;
+        CancelResolution();
         var failures = _status.ConsecutiveFailures + 1;
         var backoffSeconds = _settings.ReconnectDelaySeconds(failures);
         var jitterMilliseconds = Random.Shared.Next(0, 750);
@@ -925,6 +963,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void Stop(CameraConnectionState state)
     {
+        CancelResolution();
         _pendingNativeStart = _pendingNativeRecreate = false;
         var player = _player;
         var media = _media;
@@ -973,6 +1012,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         if (_disposed) return;
         _disposed = true;
+        CancelResolution();
         foreach (var mirror in _frameMirrors.ToArray()) mirror.CompositedImage.Source = null;
         if (_sharedSource is not null) { _sharedSource._frameMirrors.Remove(this); _sharedSource._compositedPresenter?.RemoveMirror(CompositedImage); CompositedImage.Source = null; return; }
         _backgroundSource?.RemoveHook(ColorNativeVideoBackground);

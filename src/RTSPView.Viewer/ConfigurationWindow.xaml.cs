@@ -48,6 +48,8 @@ public partial class ConfigurationWindow : Window
         EnabledBox.IsChecked = camera.Enabled;
         NameBox.Text = camera.Name;
         UrlBox.Text = camera.RtspUrl;
+        SourceModeBox.SelectedIndex = (int)camera.SourceMode;
+        QualityBox.SelectedIndex = Array.IndexOf(new[] { 360, 480, 720, 1080, 1440, 2160, 0 }, camera.MaximumHeight);
         TransportBox.SelectedIndex = (int)camera.Transport;
         CacheBox.Text = camera.NetworkCacheMilliseconds.ToString();
         StartupBox.Text = camera.StartupTimeoutSeconds.ToString();
@@ -70,6 +72,8 @@ public partial class ConfigurationWindow : Window
             Enabled = EnabledBox.IsChecked == true,
             Name = NameBox.Text.Trim(),
             RtspUrl = UrlBox.Text.Trim(),
+            SourceMode = (StreamSourceMode)Math.Max(0, SourceModeBox.SelectedIndex),
+            MaximumHeight = new[] { 360, 480, 720, 1080, 1440, 2160, 0 }[Math.Max(0, QualityBox.SelectedIndex)],
             Transport = (RtspTransport)Math.Max(0, TransportBox.SelectedIndex),
             NetworkCacheMilliseconds = Parse(CacheBox.Text, current.NetworkCacheMilliseconds),
             StartupTimeoutSeconds = Parse(StartupBox.Text, current.StartupTimeoutSeconds),

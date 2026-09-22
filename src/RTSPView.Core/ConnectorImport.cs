@@ -37,7 +37,7 @@ public static class ConnectorImport
             }
             if (index < 0) throw new InvalidDataException("Not enough free main-stream slots. RTSPView supports 16 main streams.");
             var previous = cameras[index];
-            cameras[index] = previous with { Name = incoming.Name, RtspUrl = incoming.RtspUrl,
+            cameras[index] = previous with { Name = incoming.Name, RtspUrl = incoming.RtspUrl, SourceMode = StreamSourceMode.Auto,
                 ScryptedId = identity, ScryptedTopic = incoming.Topic,
                 Enabled = previous.RtspUrl.Length == 0 || previous.Enabled };
             deleted.Remove(previous.Slot);

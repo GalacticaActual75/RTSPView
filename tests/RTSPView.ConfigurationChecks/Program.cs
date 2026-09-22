@@ -8,6 +8,7 @@ try
 {
     await AuditRegressionChecks.Run(root);
     await OverlaySourceChecks.Run(root);
+    await StreamSourceChecks.Run(root);
     var borderStore = new JsonSettingsStore(Path.Combine(root, "borders.json"));
     await borderStore.SaveAsync(new AppSettings { ShowTileBorders = false, DoorbellOverlay = new() { ShowBorder = false } });
     var borders = await borderStore.LoadAsync();
@@ -85,7 +86,7 @@ try
     await multiStore.ExportWithoutCredentialsAsync(multiLoaded, sanitizedMultiPath);
     Check(!(await File.ReadAllTextAsync(sanitizedMultiPath)).Contains("extra:private"), "added overlay credentials removed from sanitized export");
     Check(JsonSettingsStore.ParseImport("{\"SchemaVersion\":14,\"Cameras\":[]}").AdditionalOverlays.Count == 0, "legacy configuration remains compatible");
-    foreach (var invalidMulti in new[] { multi with { AdditionalOverlays = multi.AdditionalOverlays.Append(new DoorbellOverlaySettings()).ToArray() }, multi with { AdditionalOverlays = [new DoorbellOverlaySettings { Camera = new CameraSettings { RtspUrl = "https://invalid.test" } }] } })
+    foreach (var invalidMulti in new[] { multi with { AdditionalOverlays = multi.AdditionalOverlays.Append(new DoorbellOverlaySettings()).ToArray() }, multi with { AdditionalOverlays = [new DoorbellOverlaySettings { Camera = new CameraSettings { RtspUrl = "ftp://invalid.test" } }] } })
     {
         var rejected = false;
         try { await multiStore.SaveAsync(invalidMulti); } catch (InvalidDataException) { rejected = true; }
@@ -202,7 +203,7 @@ try
     Check((await transferStore.LoadAsync()).PreferredMonitor == 2, "camelCase import applies settings");
     Check((await transferStore.ImportAsync(Path.Combine(root, backupName))).PreferredMonitor == 3, "import preserves previous configuration backup");
     Check((await transferStore.LoadAsync()).Cameras[0].RtspUrl.Contains("user:secret"), "full import retains camera credentials");
-    foreach (var invalid in new[] { "{}", "null", "{\"SchemaVersion\":999,\"Cameras\":[]}", "{\"SchemaVersion\":14,\"Cameras\":null}", "{\"SchemaVersion\":14,\"Cameras\":[{\"RtspUrl\":\"https://example.test\"}]}" })
+    foreach (var invalid in new[] { "{}", "null", "{\"SchemaVersion\":999,\"Cameras\":[]}", "{\"SchemaVersion\":14,\"Cameras\":null}", "{\"SchemaVersion\":14,\"Cameras\":[{\"RtspUrl\":\"ftp://example.test\"}]}" })
     {
         var rejected = false;
         try { await transferStore.ImportAndSaveAsync(invalid); }

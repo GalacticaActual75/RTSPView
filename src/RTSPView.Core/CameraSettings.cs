@@ -7,6 +7,9 @@ public sealed record CameraSettings
     public int Slot { get; init; } = 1;
     public string Name { get; init; } = "Camera 1";
     public string RtspUrl { get; init; } = string.Empty;
+    // Retain RtspUrl as the storage/API key for backwards compatibility.
+    public StreamSourceMode SourceMode { get; init; } = StreamSourceMode.Auto;
+    public int MaximumHeight { get; init; } = 720;
     // Connector identity is independent of the viewer slot; retained through edits.
     public string ScryptedId { get; init; } = "";
     public string ScryptedTopic { get; init; } = "";
@@ -34,7 +37,7 @@ public sealed record CameraSettings
         var options = new List<string> { $":network-caching={EffectiveNetworkCacheMilliseconds}" };
         if (!UsesStreamGridCompositePolicy()) options.Add(":clock-jitter=0");
         if (!DecodeAudio) options.Add(":no-audio");
-        if (EffectiveTransport != RtspTransport.Auto)
+        if (RtspUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase) && EffectiveTransport != RtspTransport.Auto)
             options.Add(EffectiveTransport == RtspTransport.Tcp ? ":rtsp-tcp" : ":rtsp-udp");
         if (EffectiveLowLatency)
         {

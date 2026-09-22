@@ -1,0 +1,2 @@
+# Test-only media generator; not part of the shipping helper.
+imageio-ffmpeg==0.6.0

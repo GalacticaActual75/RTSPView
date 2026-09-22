@@ -248,9 +248,8 @@ public sealed class JsonSettingsStore
 
     private static void ValidateCameraUrl(CameraSettings camera, string label)
     {
-        if (string.IsNullOrWhiteSpace(camera.RtspUrl)) return;
-        if (!Uri.TryCreate(camera.RtspUrl, UriKind.Absolute, out var uri) || !uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"{label} does not contain a valid RTSP URL.");
+        try { StreamSource.Validate(camera); }
+        catch (InvalidDataException error) { throw new InvalidDataException($"{label}: {error.Message}"); }
     }
 
     private static async Task WriteAsync(string path, AppSettings settings, CancellationToken cancellationToken)

@@ -8,12 +8,16 @@ RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast R
 
 ## Current release
 
+**Beta 1.0.46-beta.3** adds direct HTTP/HLS/DASH sources and bundled
+Streamlink + yt-dlp website resolution to the wall and overlays. See
+[website stream setup and current limitations](docs/website-streams.md).
+
 **[Download Stable 1.0.45](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45)** for Windows 10/11 x64. This release promotes all features and fixes from 1.0.45-beta.4, including native weather tiles, Weather Widgets and LAN HTTP layout fixes.
 
 | Channel | Release | Use |
 | --- | --- | --- |
 | Stable | [1.0.45](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45) | Recommended stable release. |
-| Beta | [1.0.46-beta.2](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.46-beta.2) | Restart/MQTT fixes, display controls, recovery and shared overlay frames; see [beta release notes](docs/releases/1.0.46-beta.2.md). |
+| Beta | [1.0.46-beta.3](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.46-beta.3) | Website streams through Streamlink and yt-dlp, direct HTTP/HLS/DASH, source controls and quality limits; see [beta release notes](docs/releases/1.0.46-beta.3.md). |
 
 Choose the channel under **Settings → Updates**. Changing channels does not install anything automatically. To install this release, select Stable, check for updates and confirm installation. Hosts on Beta remain on that channel until switched. See [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for installers, checksums and version-specific notes.
 

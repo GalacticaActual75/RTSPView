@@ -630,6 +630,30 @@ app.MapDelete("/api/cameras/{slot:int}", async (int slot, AutomationService auto
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
+app.MapPost("/api/streams/test", async (CameraSettings camera, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        StreamSource.Validate(camera);
+        if (string.IsNullOrWhiteSpace(camera.RtspUrl)) return Results.BadRequest(new { error = "Enter a source URL first." });
+        if (!StreamSource.NeedsResolver(camera))
+            return Results.Ok(new { message = "Direct stream URL accepted. Save & apply to verify playback in the wall." });
+        using var stream = await StreamResolver.ResolveAsync(camera, cancellationToken);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
+        using var response = await client.GetAsync(stream.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(25));
+        await using var body = await response.Content.ReadAsStreamAsync(timeout.Token);
+        if (await body.ReadAsync(new byte[1], timeout.Token) == 0) throw new IOException("Empty stream");
+        return Results.Ok(new { message = $"{stream.Provider} resolved the source and received media. Save & apply to verify video playback." });
+    }
+    catch (Exception error) when (error is InvalidDataException or InvalidOperationException)
+    { return Results.BadRequest(new { error = error.Message }); }
+    catch (Exception error) when (error is HttpRequestException or IOException or OperationCanceledException)
+    { return Results.BadRequest(new { error = "The source did not deliver media in time. Check availability, quality and source type." }); }
+}).RequireAuthorization();
+
 app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
 {
     if (!AppSettings.MainCameraSlots.Contains(slot) || camera.Slot != slot) return Results.BadRequest(new { error = "Choose a valid main camera ID matching the payload." });
