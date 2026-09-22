@@ -13,15 +13,22 @@ function Stop-ScheduledTask { param($TaskName, $ErrorAction) $global:RTSPViewTes
 function Start-ScheduledTask { param($TaskName, $ErrorAction) if ($global:RTSPViewTestrestartFails -and $ErrorAction -eq 'Stop') { throw 'Simulated restart failure' } }
 function Stop-Process { param([Parameter(ValueFromPipeline)]$InputObject, [switch]$Force) process {} }
 function Get-Process { param($Name, $ErrorAction) if ($Name -eq 'SpotMonitor.Controller') { [pscustomobject]@{Path=$controllerPath} } elseif ($Name -eq 'SpotMonitor.Viewer') { [pscustomobject]@{Path=$viewerPath} } }
-function Get-Item { param($LiteralPath) [pscustomobject]@{VersionInfo=[pscustomobject]@{ProductVersion=$global:RTSPViewTestproductVersion}} }
+function Get-Item { param($LiteralPath)
+    $version = if ($global:RTSPViewTestmixedViewer -and $LiteralPath -like '*Viewer.exe') {'1.0.29-beta.5'} else {$global:RTSPViewTestproductVersion}
+    [pscustomobject]@{VersionInfo=[pscustomobject]@{ProductVersion=$version}}
+}
 function Start-Process {
     param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
-    if ($FilePath -ne 'powershell.exe') { $global:RTSPViewTeststarted++ }
-    $fake = [pscustomobject]@{Handle=1;ExitCode=$global:RTSPViewTestinstallerExit}
+    if ($FilePath -ne 'powershell.exe') {
+        if ($ArgumentList -notlike '*/LOG="*installer-*.log"*') { throw 'Installer log path missing' }
+        $global:RTSPViewTeststarted++
+    }
+    $fake = [pscustomobject]@{Handle=1;ExitCode=$(if ($FilePath -eq 'powershell.exe') {0} else {$global:RTSPViewTestinstallerExit})}
     $fake | Add-Member ScriptMethod WaitForExit { param($Milliseconds) return $true }
     return $fake
 }
-foreach ($case in @('success','bad-hash','installer-failure','version-mismatch','restart-failure')) {
+foreach ($case in @('success','bad-hash','installer-failure','version-mismatch','mixed-viewer','restart-failure')) {
+    $global:RTSPViewTestmixedViewer = $case -eq 'mixed-viewer'
     $global:RTSPViewTeststopped=0; $global:RTSPViewTeststarted=0; $global:RTSPViewTestinstallerExit=0; $global:RTSPViewTestrestartFails=$false; $global:RTSPViewTestproductVersion='1.0.29-beta.6+test'
     $installer=Join-Path $scratch ($case + '.exe'); 'Synthetic installer - never executed' | Set-Content -LiteralPath $installer
     $hash=(Get-FileHash -LiteralPath $installer).Hash

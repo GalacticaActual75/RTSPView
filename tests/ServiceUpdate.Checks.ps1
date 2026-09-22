@@ -34,6 +34,9 @@ function Get-Service {
 function Start-Service { $global:rtspTeststarted++ }
 function Start-Process {
     param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
+    if ($FilePath -like '*\powershell.exe' -and $ArgumentList -like '*Prepare-Installation.ps1*') {
+        $p = [pscustomobject]@{ExitCode=0}; $p | Add-Member ScriptMethod WaitForExit { return $true }; return $p
+    }
     if ($FilePath -notlike '*\installer.exe' -or $ArgumentList -notlike '*/SERVICEUPDATE=1*') { throw 'Unexpected process request' }
     if ($ArgumentList -notlike '*/LOG="*installer.log"*') { throw 'Installer diagnostics were not enabled' }
     $global:rtspTestinstalls++

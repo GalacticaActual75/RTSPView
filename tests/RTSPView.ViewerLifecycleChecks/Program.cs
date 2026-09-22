@@ -78,4 +78,13 @@ try
 }
 finally { Directory.Delete(directory, true); }
 
+using (var metrics = new SystemMetricsCollector())
+{
+    await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
+    {
+        metrics.GetSnapshot(); await Task.Delay(5500); metrics.GetSnapshot();
+    })));
+    Console.WriteLine("PASS concurrent telemetry sampling across GPU counter rediscovery.");
+}
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }

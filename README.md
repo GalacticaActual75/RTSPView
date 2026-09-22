@@ -8,7 +8,7 @@ RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast R
 
 ## Current release
 
-**Beta 1.0.46-beta.4** adds [ONVIF network discovery and stream-profile selection](docs/onvif.md). It retains direct HTTP/HLS/DASH sources and bundled
+**Beta 1.0.46-beta.5** repairs updater shutdown and telemetry concurrency and improves website playback errors. It includes [ONVIF network discovery and stream-profile selection](docs/onvif.md), direct HTTP/HLS/DASH sources and bundled
 Streamlink + yt-dlp website resolution to the wall and overlays. See
 [website stream setup and current limitations](docs/website-streams.md).
 
@@ -17,7 +17,7 @@ Streamlink + yt-dlp website resolution to the wall and overlays. See
 | Channel | Release | Use |
 | --- | --- | --- |
 | Stable | [1.0.45](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45) | Recommended stable release. |
-| Beta | [1.0.46-beta.4](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.46-beta.4) | ONVIF discovery and profile selection, source help and a website resolver compatibility fix; see [beta release notes](docs/releases/1.0.46-beta.4.md). |
+| Beta | [1.0.46-beta.5](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.46-beta.5) | Updater shutdown repair, telemetry synchronization and clearer website playback failures; YouTube live remains unresolved. See [beta release notes](docs/releases/1.0.46-beta.5.md). |
 
 Choose the channel under **Settings → Updates**. Changing channels does not install anything automatically. To install this release, select Stable, check for updates and confirm installation. Hosts on Beta remain on that channel until switched. See [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for installers, checksums and version-specific notes.
 

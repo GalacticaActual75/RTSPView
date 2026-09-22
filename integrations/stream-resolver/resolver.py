@@ -59,9 +59,15 @@ def resolve(request):
     if mode not in (0, 2, 3) or height not in (0, 360, 480, 720, 1080, 1440, 2160):
         raise SourceError("Invalid source mode or quality limit.")
     session = Streamlink()
+    session.rtspview_http_status = None
+    def remember_response(response, **kwargs):
+        if response.status_code >= 400:
+            session.rtspview_http_status = response.status_code
+    session.http.hooks.setdefault("response", []).append(remember_response)
     session.set_option("http-timeout", 15)
     session.set_option("stream-timeout", 20)
     session.set_option("hls-playlist-reload-attempts", 3)
+    session.set_option("hls-segment-attempts", 1)
     if mode in (0, 2):
         try:
             streams = session.streams(url)
@@ -100,6 +106,47 @@ def resolve(request):
         raise
     except Exception:
         raise SourceError("yt-dlp could not open this source. It may be offline, require login, or lack a combined video/audio format at this quality.") from None
+
+
+class PrefetchedStream:
+    """Preserve the bytes used to verify HLS playback before announcing readiness."""
+    def __init__(self, stream, reader, first):
+        self.stream, self.reader, self.first = stream, reader, first
+
+    def open(self):
+        if self.reader is None:
+            return self.stream.open()
+        reader, first = self.reader, self.first
+        self.reader = None
+        class Reader:
+            def __init__(self): self.pending = first
+            def read(self, size):
+                if self.pending:
+                    data, self.pending = self.pending[:size], self.pending[size:]
+                    return data
+                return reader.read(size)
+            def __enter__(self): return self
+            def __exit__(self, *args): reader.close()
+        return Reader()
+
+
+def prepare_stream(stream):
+    from streamlink.stream.http import HTTPStream
+    reader = None
+    try:
+        reader = stream.open()
+        first = reader.read(188)
+        if not first: raise SourceError("Empty media response")
+        if type(stream) is HTTPStream:
+            reader.close()  # Keep HTTP Range/seek handling on subsequent requests.
+            return stream
+        return PrefetchedStream(stream, reader, first)
+    except Exception:
+        if reader is not None: reader.close()
+        status = getattr(getattr(stream, "session", None), "rtspview_http_status", None)
+        if status in (401, 403):
+            raise SourceError(f"The website refused access to the video (HTTP {status}). Resolving the page succeeded, but playback is unavailable through this provider.") from None
+        raise SourceError("The website resolved, but no video data arrived. The source may be offline or refusing playback through this provider.") from None
 
 
 def make_server(stream):
@@ -163,6 +210,7 @@ def main():
     threading.Thread(target=watch_parent, daemon=True).start()
     try:
         stream, provider = resolve(request)
+        stream = prepare_stream(stream)
         server, url = make_server(stream)
         print(json.dumps({"url": url, "provider": provider}), flush=True)
         server.serve_forever()

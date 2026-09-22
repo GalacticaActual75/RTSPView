@@ -30,6 +30,11 @@
       "SpotMonitor\\settings.json",
       "SpotMonitor\\logs"
     ],
+    "deployment/Prepare-Installation.ps1": [
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer",
+      "SpotMonitor Camera Wall"
+    ],
     "deployment/Enable-LanAccess.ps1": [
       "SpotMonitor Web Admin - Private LAN",
       "SpotMonitor Web Admin - Block Public",

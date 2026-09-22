@@ -14,6 +14,19 @@ import resolver
 
 
 class ResolverChecks(unittest.TestCase):
+    def test_media_preflight_preserves_bytes_and_reports_refusal(self):
+        class Stream:
+            def open(self): return io.BytesIO(b"video" * 100)
+        prepared = resolver.prepare_stream(Stream())
+        with prepared.open() as reader:
+            self.assertEqual(reader.read(188) + reader.read(65536), b"video" * 100)
+        class Blocked:
+            session = type("Session", (), {"rtspview_http_status": 403})()
+            def open(self): raise OSError("https://private.example/secret")
+        with self.assertRaises(resolver.SourceError) as error: resolver.prepare_stream(Blocked())
+        self.assertIn("HTTP 403", str(error.exception))
+        self.assertNotIn("private", str(error.exception))
+
     def test_provider_imports_preserve_hostname_requests(self):
         # A fresh process uses the real production import order. Loopback IP
         # fixtures bypass urllib3 hostname normalization and missed this crash.

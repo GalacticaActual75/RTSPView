@@ -47,6 +47,7 @@ Name: "autostart"; Description: "Start and supervise RTSPView when this user sig
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Files]
+Source: "..\deployment\Prepare-Installation.ps1"; Flags: dontcopy
 Source: "{#MyStageRoot}\Controller\*"; DestDir: "{app}\Controller"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#MyStageRoot}\Viewer\*"; DestDir: "{app}\Viewer"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#MyStageRoot}\Maintenance\*"; DestDir: "{app}\Maintenance"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -57,6 +58,7 @@ Source: "..\deployment\Open-Web-Admin.cmd"; DestDir: "{app}"; Flags: ignoreversi
 Source: "..\deployment\Repair-LAN-Firewall.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\deployment\Enable-LanAccess.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 Source: "..\deployment\Apply-Update.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
+Source: "..\deployment\Prepare-Installation.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 Source: "..\deployment\Show-UpdateProgress.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 
 [InstallDelete]
@@ -100,6 +102,30 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""SpotMonitor Web Admin - LAN Only"""; Flags: runhidden waituntilterminated
 
 [Code]
+var
+  ShutdownPrepared: Boolean;
+  MaintenanceNeedsRestart: Boolean;
+
+function InstallationShutdownParameters(): String;
+begin
+  Result := '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' +
+    ExpandConstant('{tmp}\Prepare-Installation.ps1') + '" -InstallRoot "' +
+    ExpandConstant('{app}') + '" -StatePath "' + ExpandConstant('{tmp}\shutdown-state.json') + '"';
+end;
+
+procedure DeinitializeSetup();
+var
+  ResultCode: Integer;
+begin
+  if ShutdownPrepared then
+    if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      InstallationShutdownParameters() + ' -Restore', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      Log('Could not restore the RTSPView startup task. Check Task Scheduler.');
+  { PrepareToInstall can abort before [Run]. Restore a helper that we stopped. }
+  if MaintenanceNeedsRestart then
+    Exec(ExpandConstant('{sys}\sc.exe'), 'start RTSPViewMaintenance', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 function NotServiceUpdate(): Boolean;
 begin
   Result := ExpandConstant('{param:SERVICEUPDATE|0}') <> '1';
@@ -110,8 +136,9 @@ var
   ResultCode: Integer;
 begin
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -WindowStyle Hidden -Command "try { $s=Get-Service RTSPViewMaintenance -ErrorAction SilentlyContinue; if ($s -and $s.Status -ne ''Stopped'') { $s.Stop(); $s.WaitForStatus(''Stopped'', [TimeSpan]::FromSeconds(30)) }; exit 0 } catch { exit 1 }"',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+    '-NoProfile -WindowStyle Hidden -Command "try { $s=Get-Service RTSPViewMaintenance -ErrorAction SilentlyContinue; if ($s -and $s.Status -ne ''Stopped'') { $s.Stop(); $s.WaitForStatus(''Stopped'', [TimeSpan]::FromSeconds(30)); exit 10 }; exit 0 } catch { exit 1 }"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and ((ResultCode = 0) or (ResultCode = 10));
+  if Result and (ResultCode = 10) then MaintenanceNeedsRestart := True;
 end;
 
 function InitializeUninstall(): Boolean;
@@ -124,16 +151,23 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
+  Detail: AnsiString;
 begin
   if not StopMaintenance() then
   begin
     Result := 'Wait for PawnIO maintenance to finish, then retry installing RTSPView.';
     exit;
   end;
-  { Stop the supervisor before replacing either executable. }
-  Exec(ExpandConstant('{sys}\schtasks.exe'), '/End /TN "SpotMonitor Camera Wall"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM SpotMonitor.Controller.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM SpotMonitor.Viewer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(500);
+  ExtractTemporaryFile('Prepare-Installation.ps1');
+  ShutdownPrepared := True;
+  if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    InstallationShutdownParameters(), '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+  begin
+    Result := 'RTSPView could not release its installed files. Close the camera wall and retry.';
+    if LoadStringFromFile(ExpandConstant('{tmp}\shutdown-state.json.error'), Detail) then
+      Result := Result + ' ' + String(Detail);
+    Log(Result);
+    exit;
+  end;
   Result := '';
 end;

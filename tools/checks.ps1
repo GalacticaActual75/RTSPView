@@ -21,6 +21,6 @@ foreach($project in @('Configuration','Reliability','Connector','ViewerLifecycle
 foreach($check in @('admin-security','connector-http','tapo-http','onvif-http','layout-lan-http','wall-layout-presets','wall-proportions','shape-editor','dashboard-ux','viewer-controls','application-restart','automation-health','related-choices','preview-refresh','lan-firewall','branding','privacy')) {
     Run-Native 'node' @("tests/$check.checks.cjs",$env:DOTNET_HOST_PATH)
 }
-foreach($check in @('UpdateHelper','ServiceUpdate','UpdateProgress','ControllerSupervision')) {
+foreach($check in @('UpdateHelper','ServiceUpdate','UpdateProgress','ControllerSupervision','InstallationShutdown')) {
     Run-Native 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',"tests/$check.Checks.ps1")
 }
