@@ -14,6 +14,24 @@ import resolver
 
 
 class ResolverChecks(unittest.TestCase):
+    def test_provider_imports_preserve_hostname_requests(self):
+        # A fresh process uses the real production import order. Loopback IP
+        # fixtures bypass urllib3 hostname normalization and missed this crash.
+        code = """
+import resolver
+try:
+    resolver.resolve({'url': 'invalid'})
+except resolver.SourceError:
+    pass
+from requests import Request
+from streamlink import Streamlink
+url = Streamlink().http.prepare_request(Request('GET', 'https://media.example/video%2fpart')).url
+assert url == 'https://media.example/video%2fpart', url
+"""
+        result = subprocess.run([sys.executable, '-c', code], cwd=Path(__file__).parent,
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_quality(self):
         streams = {"360p": "low", "720p60": "mid", "1080p": "high", "best": "high"}
         self.assertEqual(resolver.choose_stream(streams, 720), "mid")

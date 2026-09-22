@@ -25,7 +25,9 @@ try:
     for mode in (0, 3):
         process = subprocess.Popen([str(executable)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
-            process.stdin.write(json.dumps({"url": f"http://127.0.0.1:{server.server_port}/watch", "mode": mode, "maximumHeight": 720}) + "\n")
+            # Hostnames exercise shared urllib3 normalization; numeric loopback
+            # addresses bypass it and hid the provider import-order conflict.
+            process.stdin.write(json.dumps({"url": f"http://localhost:{server.server_port}/watch", "mode": mode, "maximumHeight": 720}) + "\n")
             process.stdin.flush()
             line = Queue()
             threading.Thread(target=lambda: line.put(process.stdout.readline()), daemon=True).start()

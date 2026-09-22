@@ -44,10 +44,12 @@ class QuietLogger:
 
 
 def resolve(request):
+    # Both libraries wrap urllib3's URL-normalization regex. yt-dlp's wrapper
+    # cannot forward attributes through Streamlink's wrapper, so load it first.
+    from yt_dlp import YoutubeDL
     from streamlink import Streamlink
     from streamlink.stream.hls import HLSStream
     from streamlink.stream.http import HTTPStream
-    from yt_dlp import YoutubeDL
 
     url = request.get("url", "")
     mode = request.get("mode", 0)

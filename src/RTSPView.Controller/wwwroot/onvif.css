@@ -1,0 +1,9 @@
+.source-type-row{position:relative}
+.source-type-help{position:absolute;top:12px;left:0;width:100%;border:0!important;padding:0!important;margin:0!important;pointer-events:none;z-index:5}
+.source-type-help>summary{position:absolute;top:0;left:80px;display:block!important;list-style:none;padding:0 4px!important;margin:0!important;line-height:18px;cursor:pointer;pointer-events:auto;color:var(--muted)}
+.source-type-help>summary::-webkit-details-marker{display:none}
+.source-type-help>summary:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.source-type-help-content{margin-top:25px;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);font-size:12px;line-height:1.5;box-shadow:0 6px 18px #0008;pointer-events:auto}
+.source-type-help-content p{margin:8px 0 0}
+.source-type-help-content a{color:var(--text);text-decoration:underline}
+.onvif-dialog{width:min(620px,calc(100vw - 32px));max-height:90dvh;overflow:auto}.onvif-dialog form{display:grid;gap:12px}.onvif-dialog h2{margin-right:auto}.onvif-dialog p{margin:0;color:var(--muted)}.onvif-dialog [data-status]{color:var(--text)}.onvif-open{justify-self:start;margin:8px 0}

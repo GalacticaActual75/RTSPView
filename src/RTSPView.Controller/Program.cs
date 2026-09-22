@@ -630,6 +630,8 @@ app.MapDelete("/api/cameras/{slot:int}", async (int slot, AutomationService auto
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
+app.MapOnvif();
+
 app.MapPost("/api/streams/test", async (CameraSettings camera, CancellationToken cancellationToken) =>
 {
     try
