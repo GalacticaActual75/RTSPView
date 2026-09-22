@@ -11,15 +11,16 @@ public sealed class ViewerCommandServer : IDisposable
     private readonly CancellationTokenSource _cancellation = new();
     private readonly Task _worker;
 
-    public ViewerCommandServer(Func<ViewerCommand, Task<ViewerCommandResult>> handler) => _worker = Task.Run(() => RunAsync(handler));
+    public ViewerCommandServer(Func<ViewerCommand, Task<ViewerCommandResult>> handler) =>
+        _worker = Task.WhenAll(Task.Run(() => RunAsync(handler, false)), Task.Run(() => RunAsync(handler, true)));
 
-    private async Task RunAsync(Func<ViewerCommand, Task<ViewerCommandResult>> commandHandler)
+    private async Task RunAsync(Func<ViewerCommand, Task<ViewerCommandResult>> commandHandler, bool snapshots)
     {
         while (!_cancellation.IsCancellationRequested)
         {
             try
             {
-                await using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await using var pipe = new NamedPipeServerStream(snapshots ? PipeName + ".Snapshots" : PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(_cancellation.Token);
                 using var reader = new StreamReader(pipe);
                 await using var writer = new StreamWriter(pipe) { AutoFlush = true };
@@ -32,7 +33,9 @@ public sealed class ViewerCommandServer : IDisposable
                     {
                         var command = JsonSerializer.Deserialize<ViewerCommand>(line, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                             ?? throw new InvalidDataException("Empty command.");
-                        result = await commandHandler(command);
+                        result = (command.Type == ViewerCommandType.CaptureCameraSnapshot) == snapshots
+                            ? await commandHandler(command)
+                            : new(command.Id, false, "Command sent to the wrong Viewer channel.");
                     }
                     catch (Exception) { result = new ViewerCommandResult(Guid.Empty, false, "Viewer command failed."); }
                     await writer.WriteLineAsync(JsonSerializer.Serialize(result));

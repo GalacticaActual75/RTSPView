@@ -22,6 +22,9 @@ public sealed record CameraSettings
     public bool CompositeStream { get; init; }
     public bool UsesStreamGridCompositePolicy() => CompositeStream;
 
+    public double ReconnectDelaySeconds(int consecutiveFailures) =>
+        Math.Min(Math.Clamp(MaximumReconnectBackoffSeconds, 5, 300), Math.Pow(2, Math.Clamp(consecutiveFailures - 1, 0, 9)));
+
     public RtspTransport EffectiveTransport => UsesStreamGridCompositePolicy() ? RtspTransport.Tcp : Transport;
     public int EffectiveNetworkCacheMilliseconds => UsesStreamGridCompositePolicy() ? 3000 : Math.Clamp(NetworkCacheMilliseconds, 100, 10_000);
     public bool EffectiveLowLatency => !UsesStreamGridCompositePolicy() && LowLatency;

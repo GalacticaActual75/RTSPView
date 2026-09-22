@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using RTSPView.Core;
 
 namespace RTSPView.Infrastructure;
@@ -11,15 +12,23 @@ public sealed class JsonSettingsStore
 
     public JsonSettingsStore(string path) => _path = path;
 
-    public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
+    public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default) => LoadCoreAsync(cancellationToken, false);
+
+    private async Task<AppSettings> LoadCoreAsync(CancellationToken cancellationToken, bool writeLockHeld)
     {
-        if (!File.Exists(_path)) return new AppSettings();
+        if (!File.Exists(_path)) return new AppSettings { StorageRevision = "" };
         try
         {
             return await ReadAndValidateAsync(_path, cancellationToken);
         }
         catch (Exception exception) when (exception is JsonException or IOException or InvalidDataException)
         {
+            await using var lease = writeLockHeld ? null : await AcquireWriteAsync(cancellationToken);
+            if (!writeLockHeld && File.Exists(_path))
+            {
+                try { return await ReadAndValidateAsync(_path, cancellationToken); }
+                catch (Exception error) when (error is JsonException or IOException or InvalidDataException) { }
+            }
             if (!File.Exists(BackupPath)) throw new InvalidDataException("The configuration and its backup are unavailable or invalid.", exception);
             var recovered = await ReadAndValidateAsync(BackupPath, cancellationToken);
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
@@ -30,8 +39,75 @@ public sealed class JsonSettingsStore
 
     public async Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
+        await using var lease = await AcquireWriteAsync(cancellationToken);
+        await SaveCoreAsync(settings, cancellationToken);
+    }
+
+    public async Task<WriteSession> BeginWriteAsync(CancellationToken token = default) => new(this, await AcquireWriteAsync(token));
+    public sealed class WriteSession : IAsyncDisposable
+    {
+        private readonly JsonSettingsStore _store;
+        private readonly FileStream _lease;
+        private bool _disposed;
+        internal WriteSession(JsonSettingsStore store, FileStream lease) => (_store, _lease) = (store, lease);
+        public Task<AppSettings> LoadAsync(CancellationToken token = default)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _store.LoadCoreAsync(token, true);
+        }
+        public Task SaveAsync(AppSettings settings, CancellationToken token = default)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _store.SaveCoreAsync(settings, token);
+        }
+        public ValueTask DisposeAsync() { _disposed = true; return _lease.DisposeAsync(); }
+    }
+
+    private async Task<FileStream> AcquireWriteAsync(CancellationToken token)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
+        for (var attempt = 0; ; attempt++)
+        {
+            token.ThrowIfCancellationRequested();
+            try { return new FileStream(_path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException e) when (IsSharingViolation(e) && attempt < 100) { await Task.Delay(50, token); }
+        }
+    }
+
+    private static string Revision(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
+
+    public async Task<AppSettings> SaveCameraEditsAsync(AppSettings original, AppSettings draft, bool replacing = false, CancellationToken token = default)
+    {
+        await using var lease = await AcquireWriteAsync(token);
+        var latest = await LoadCoreAsync(token, true);
+        if (replacing)
+        {
+            if (latest.StorageRevision != original.StorageRevision) throw new InvalidDataException("Configuration changed in another editor. Close and reopen Streams before importing again. Your import has not been applied.");
+            draft.StorageRevision = latest.StorageRevision;
+        }
+        else
+        {
+            var cameras = latest.Cameras.ToArray();
+            foreach (var edited in draft.Cameras.Where(c => c != original.Cameras.FirstOrDefault(o => o.Slot == c.Slot)))
+            {
+                var index = Array.FindIndex(cameras, c => c.Slot == edited.Slot);
+                if (index < 0 || latest.DeletedCameraSlots.Contains(edited.Slot) || cameras[index] != original.Cameras.First(c => c.Slot == edited.Slot))
+                    throw new InvalidDataException($"Stream {edited.Slot} changed in another editor. Close and reopen Streams to review it; your changes have not been applied.");
+                cameras[index] = edited;
+            }
+            draft = latest with { Cameras = cameras };
+        }
+        await SaveCoreAsync(draft, token);
+        return await LoadCoreAsync(token, true);
+    }
+
+    private async Task SaveCoreAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
         var normalized = Validate(settings);
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        var currentRevision = File.Exists(_path) ? Revision(await File.ReadAllBytesAsync(_path, cancellationToken)) : "";
+        if (settings.StorageRevision is { } expected && currentRevision != expected)
+            throw new InvalidDataException("Configuration changed in another editor. Reload this page before saving; your changes have not been applied.");
         // Keep the original file beyond the rolling .bak so schema-14 releases can be restored.
         var migrationBackup = _path + ".before-layouts.json";
         if (File.Exists(_path) && !File.Exists(migrationBackup))
@@ -58,6 +134,7 @@ public sealed class JsonSettingsStore
             {
                 if (File.Exists(_path)) File.Replace(temporary, _path, BackupPath, true);
                 else File.Move(temporary, _path);
+                settings.StorageRevision = Revision(await File.ReadAllBytesAsync(_path, CancellationToken.None));
                 break;
             }
             catch (IOException error) when (IsSharingViolation(error) && attempt < 20)
@@ -138,9 +215,12 @@ public sealed class JsonSettingsStore
         // consistent snapshot of the old file.
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
             FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
-        var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken)
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+        var bytes = buffer.ToArray();
+        var settings = JsonSerializer.Deserialize<AppSettings>(bytes, JsonOptions)
             ?? throw new InvalidDataException("Configuration is empty.");
-        return Validate(settings);
+        return Validate(settings) with { StorageRevision = Revision(bytes) };
     }
 
     private static AppSettings Validate(AppSettings settings)

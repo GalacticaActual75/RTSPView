@@ -43,13 +43,13 @@ const tapoUi = (() => {
       <button type="button" class="secondary tapo-discover">Test connection & discover sensors</button></div>
       <div class="tapo-found-hubs"></div><p>Network discovery runs from the RTSPView computer. Hubs on other subnets or VLANs may require manual entry.</p>
       <p>Discovery tests the draft connection without saving or activating rules. Passwords are encrypted on this Windows account and omitted from configuration exports.</p>
-      </details><div class="control-buttons"><button type="submit">Save Tapo automations</button><button type="button" class="secondary tapo-discard">Discard changes</button></div>
+      </details><div class="control-buttons"><p>Save &amp; apply saves Tapo connection settings and all sensor rules in this panel, and activates enabled rules on this host.</p><button type="submit">Save &amp; apply</button><button type="button" class="secondary tapo-discard">Discard changes</button></div>
       <p class="tapo-message" role="status"></p>`;
     const connection = q('.tapo-connection');
     const inventoryDetails = document.createElement('details'); inventoryDetails.innerHTML = '<summary>Sensor readings & connection details</summary>'; inventoryDetails.append(q('.tapo-inventory')); connection.append(inventoryDetails);
     const rulesHelp = q('h3').nextElementSibling, help = document.createElement('details'); help.className = 'automation-help'; help.innerHTML = '<summary>How sensor rules behave</summary>'; q('.tapo-add-rule').after(help); help.append(rulesHelp);
     const poll = form.elements.pollSeconds.closest('label'), advanced = document.createElement('details'); advanced.innerHTML = '<summary>Advanced connection settings</summary>'; poll.before(advanced); advanced.append(poll);
-    q('button[type=submit]').parentElement.classList.add('automation-savebar'); q('button[type=submit]').textContent = 'Save changes';
+    q('button[type=submit]').parentElement.classList.add('automation-savebar'); q('button[type=submit]').textContent = 'Save & apply';
     automationPresentation.toggles(form);
     document.querySelector('#page-automation').append(form);
     form.addEventListener('input', mark); form.addEventListener('change', mark);
@@ -228,7 +228,7 @@ const tapoUi = (() => {
       const {presentation} = await api('/api/automation/presentation');
       automationPresentation.activity(form, status);
       const failure = status.configurationError || (savedEnabled && status.delivery?.success === false ? automationPresentation.delivery(status.delivery) + ' Check Live View in Quick actions.' : '');
-      automationPresentation.status(q('.tapo-status'), 'Tapo: ' + status.connection + ' · ' + (failure || status.message) + (status.lastChecked ? ' · Checked ' + new Date(status.lastChecked).toLocaleTimeString() : ''), failure || status.connection === 'Unavailable' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
+      automationPresentation.status(q('.tapo-status'), 'Tapo: ' + status.connection + ' · ' + (failure || (status.connection==='Disabled'?'Integration disabled · enable Tapo and Save & apply to activate rules':status.message)) + (status.lastChecked ? ' · Checked ' + new Date(status.lastChecked).toLocaleTimeString() : ''), failure || status.connection === 'Unavailable' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
       // Keep draft discovery available while editing; status must not remove its choices.
       if (!draftDiscovery) inventory(status);
       else {

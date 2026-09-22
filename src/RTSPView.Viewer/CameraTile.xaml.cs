@@ -117,6 +117,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             Width = videoTrack?.Data.Video.Width,
             Height = videoTrack?.Data.Video.Height,
             Decoder = _decoder,
+            ConfiguredPlayer = DiagnosticsAvailable,
+            Visible = IsVisible,
+            CompositedUploads = _compositedPresenter?.UploadCount ?? 0,
             SnapshotCapturedAt = Interlocked.Read(ref _snapshotCapturedTicks) is var ticks && ticks > 0 ? new DateTimeOffset(ticks, TimeSpan.Zero) : null,
             FrameWarning = FrameWarning(DateTimeOffset.UtcNow),
             ReconnectCount = _status.ReconnectCount,
@@ -850,7 +853,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         }
         if (_disposed || _status.NextReconnectAt is not null) return;
         var failures = _status.ConsecutiveFailures + 1;
-        var backoffSeconds = Math.Min(Math.Clamp(_settings.MaximumReconnectBackoffSeconds, 5, 300), Math.Pow(2, Math.Min(failures - 1, 5)));
+        var backoffSeconds = _settings.ReconnectDelaySeconds(failures);
         var jitterMilliseconds = Random.Shared.Next(0, 750);
         var now = DateTimeOffset.UtcNow;
         _status = _status with
@@ -859,7 +862,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             ConsecutiveFailures = failures,
             ReconnectCount = _status.ReconnectCount + 1,
             LastReconnectAt = now,
-            NextReconnectAt = now.AddSeconds(backoffSeconds).AddMilliseconds(jitterMilliseconds),
+            NextReconnectAt = now.AddSeconds(Math.Min(Math.Clamp(_settings.MaximumReconnectBackoffSeconds, 5, 300), backoffSeconds + jitterMilliseconds / 1000d)),
             LastError = RollingFileLogger.RedactCredentials(error)
         };
         SetOverlay("Camera Offline", true);

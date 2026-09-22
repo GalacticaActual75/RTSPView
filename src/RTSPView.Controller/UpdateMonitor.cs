@@ -39,7 +39,7 @@ public sealed class UpdateMonitor : BackgroundService
                 if(entry.Value.LatestVersion is not null)UpdateRelease.Parse(entry.Value.LatestVersion);
             }
         }
-        catch (Exception error) when (error is IOException or JsonException)
+        catch (Exception error) when (error is IOException or JsonException or InvalidDataException or ArgumentException or UnauthorizedAccessException)
         { _state=new(); _log("Update cache could not be read; it will be rebuilt."); }
         Publish(Current());
     }

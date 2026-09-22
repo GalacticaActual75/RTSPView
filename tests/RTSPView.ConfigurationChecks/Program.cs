@@ -6,6 +6,7 @@ var root = Path.Combine(Path.GetTempPath(), "RTSPView-ConfigurationChecks", Guid
 Directory.CreateDirectory(root);
 try
 {
+    await AuditRegressionChecks.Run(root);
     await OverlaySourceChecks.Run(root);
     var borderStore = new JsonSettingsStore(Path.Combine(root, "borders.json"));
     await borderStore.SaveAsync(new AppSettings { ShowTileBorders = false, DoorbellOverlay = new() { ShowBorder = false } });

@@ -67,7 +67,7 @@ const dashboardUX = (() => {
       if(form.dataset.appliedEnabled===undefined){form.dataset.appliedEnabled=String(form.elements.enabled.type==='checkbox'?form.elements.enabled.checked:form.elements.enabled.value==='true');form.dataset.appliedHost=form.elements.hostCameraSlot?.value||'';}
       if(camera) {
         const tile=active?.tiles.find(t=>t.cameraSlot===slot),duplicate=cameraInventory.filter(c=>c.name.trim().toLowerCase()===camera.name.trim().toLowerCase()).length>1;
-        form.querySelector('.camera-position').textContent=(tile?`${active.name} · Row ${tile.row+1}, Column ${tile.column+1}`:'Unassigned · Assign to layout')+` · #${slot}`+(duplicate?' · Duplicate name':'');
+        form.querySelector('.camera-position').textContent=(tile?`${active.name} · Row ${tile.row+1}, Column ${tile.column+1}`:camera.rtspUrl?'Configured but unassigned · Assign in Layouts':'No source configured · Edit stream')+` · #${slot}`+(duplicate?' · Duplicate name':'');
       }
     }
     for(const select of document.querySelectorAll('select[name="hostCameraSlot"]'))for(const option of select.options){const camera=cameraInventory.find(c=>c.slot===Number(option.value));if(camera)option.textContent=camera.name+' · #'+camera.slot;}
@@ -75,6 +75,9 @@ const dashboardUX = (() => {
   }
   function saved(camera) {if(camera.slot<10||camera.slot>25)automationUi.updateCamera(camera);const form=document.querySelector(`.camera-card[data-slot="${camera.slot}"]`);if(form){form.dataset.appliedEnabled=String(camera.enabled);form.dataset.appliedHost=form.elements.hostCameraSlot?.value||'';}const index=cameraInventory.findIndex(c=>c.slot===camera.slot);if(index>=0)cameraInventory[index]=camera;if(typeof overlaySourceUi!=='undefined')overlaySourceUi.refresh(cameraInventory);wallDesigner.updateCameras(cameraInventory);sync();}
   function health(t) {
+    let cost=document.querySelector('#decoderCost');if(!cost){cost=document.createElement('p');cost.id='decoderCost';document.querySelector('#stats').after(cost);}
+    const players=(t.viewer?.cameras||[]).filter(c=>c.configuredPlayer),hidden=players.filter(c=>!c.visible);
+    cost.textContent=t.viewerConnected?players.length+' configured video players · '+hidden.length+' hidden but kept ready · '+players.filter(c=>c.slot>=33).length+' original overlay-source players. Hidden composited video skips frame uploads; decoding and network traffic continue.':'Video player counts unavailable while Viewer is disconnected.';
     for(const image of document.querySelectorAll('img[data-blob-url]'))caption(image);
   }
   function preview(form) {

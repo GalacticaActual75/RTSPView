@@ -10,7 +10,7 @@ using Image = System.Windows.Controls.Image;
 namespace RTSPView.Viewer;
 
 // Copies VLC's decoded frames into a WPF visual so the window compositor can
-// blend video and controls as one layer. Used only by the two beta overlays.
+// blend video and controls as one layer. Used by composited tiles and picture-in-picture overlays.
 internal sealed class CompositedVideoPresenter : IDisposable
 {
     private readonly Image _image;
@@ -21,6 +21,7 @@ internal sealed class CompositedVideoPresenter : IDisposable
     private IntPtr _buffer;
     private int _width, _height, _pitch, _bytes;
     private long _frame, _presented;
+    public long UploadCount { get; private set; }
     private bool _active = true;
     private WriteableBitmap? _bitmap;
 
@@ -70,7 +71,9 @@ internal sealed class CompositedVideoPresenter : IDisposable
 
     private void Present()
     {
-        if (!_active || _presented == Interlocked.Read(ref _frame) || !_pixels.Wait(0)) return;
+        // Keep the decoder warm for automation, but do not upload invisible frames.
+        // Leave _presented unchanged so revealing the image presents the newest frame.
+        if (!_active || !_image.IsVisible || _presented == Interlocked.Read(ref _frame) || !_pixels.Wait(0)) return;
         var resized = false;
         try
         {
@@ -84,6 +87,7 @@ internal sealed class CompositedVideoPresenter : IDisposable
                 resized = true;
             }
             _bitmap.WritePixels(new Int32Rect(0, 0, _width, _height), _buffer, _bytes, _pitch);
+            UploadCount++;
             _presented = Interlocked.Read(ref _frame);
         }
         finally { _pixels.Release(); }

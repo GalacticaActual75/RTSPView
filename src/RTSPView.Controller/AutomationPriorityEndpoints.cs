@@ -42,6 +42,7 @@ public static class AutomationPriorityEndpoints
                 var priorities = request.Rules.Select((r, i) => (r.Source, r.Id, Priority: i + 1)).ToDictionary(r => (r.Source, r.Id), r => r.Priority);
                 var updatedMqtt = beforeMqtt with { Rules = beforeMqtt.Rules.Select(r => r with { Priority = priorities[("MQTT", r.Id)] }).ToArray() };
                 var updatedTapo = beforeTapo with { Rules = beforeTapo.Rules.Select(r => r with { Priority = priorities[("Tapo", r.Id)] }).ToArray() };
+                await using var settingsWrite = await new RTSPView.Infrastructure.JsonSettingsStore(Path.Combine(mqtt.DirectoryPath, "settings.json")).BeginWriteAsync(token);
                 AutomationPersistence.Prepare(mqtt.DirectoryPath);
                 try
                 {

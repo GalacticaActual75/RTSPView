@@ -7,6 +7,7 @@ Directory.CreateDirectory(directory);
 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 try
 {
+    await CommandIsolationChecks.Run();
     var state = new ViewerRuntimeState(directory);
     var otherProcess = new ViewerRuntimeState(directory);
     state.Pause();

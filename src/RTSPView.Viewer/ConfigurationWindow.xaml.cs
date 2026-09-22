@@ -13,6 +13,9 @@ public partial class ConfigurationWindow : Window
 {
     private readonly JsonSettingsStore _store;
     private AppSettings _settings;
+    private readonly AppSettings _original;
+    private bool _replacing;
+    private int[] _indices = [];
     private int _currentSlot;
     private bool _loading;
 
@@ -21,9 +24,10 @@ public partial class ConfigurationWindow : Window
     public ConfigurationWindow(AppSettings settings, JsonSettingsStore store)
     {
         InitializeComponent();
-        _settings = settings.Normalize();
+        _original = settings.Normalize();
+        _settings = _original;
         _store = store;
-        SlotBox.ItemsSource = _settings.Cameras.Take(_settings.CameraCount).Select((camera, i) => $"{i + 1}  {camera.Name}").ToArray();
+        PopulateSlots();
         SlotBox.SelectedIndex = 0;
         LoadSlot(0);
     }
@@ -32,14 +36,15 @@ public partial class ConfigurationWindow : Window
     {
         if (!IsLoaded || _loading) return;
         CommitSlot(_currentSlot);
-        LoadSlot(Math.Max(0, SlotBox.SelectedIndex));
+        if (SlotBox.SelectedIndex >= 0) LoadSlot(SlotBox.SelectedIndex);
     }
 
     private void LoadSlot(int index)
     {
+        if (_indices.Length == 0) { _loading = false; return; }
         _loading = true;
         _currentSlot = index;
-        var camera = _settings.Cameras[index];
+        var camera = _settings.Cameras[_indices[index]];
         EnabledBox.IsChecked = camera.Enabled;
         NameBox.Text = camera.Name;
         UrlBox.Text = camera.RtspUrl;
@@ -56,6 +61,8 @@ public partial class ConfigurationWindow : Window
 
     private void CommitSlot(int index)
     {
+        if (_indices.Length == 0) return;
+        index = _indices[index];
         var cameras = _settings.Cameras.ToArray();
         var current = cameras[index];
         cameras[index] = current with
@@ -82,7 +89,7 @@ public partial class ConfigurationWindow : Window
         try
         {
             CommitSlot(_currentSlot);
-            await _store.SaveAsync(_settings);
+            _settings = await _store.SaveCameraEditsAsync(_original, _settings, _replacing);
             DialogResult = true;
         }
         catch (Exception exception) { MessageBox.Show(this, exception.Message, "Configuration not saved", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -92,7 +99,7 @@ public partial class ConfigurationWindow : Window
     {
         var dialog = new OpenFileDialog { Filter = "RTSPView configuration (*.json)|*.json|All files (*.*)|*.*" };
         if (dialog.ShowDialog(this) != true) return;
-        try { _loading = true; _settings = await _store.ImportAsync(dialog.FileName); SlotBox.ItemsSource = _settings.Cameras.Take(_settings.CameraCount).Select((camera, i) => $"{i + 1}  {camera.Name}").ToArray(); SlotBox.SelectedIndex = 0; LoadSlot(0); }
+        try { _loading = true; _settings = await _store.ImportAsync(dialog.FileName); _replacing = true; PopulateSlots(); SlotBox.SelectedIndex = 0; LoadSlot(0); }
         catch (Exception exception) { _loading = false; MessageBox.Show(this, exception.Message, "Import failed", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
@@ -106,4 +113,11 @@ public partial class ConfigurationWindow : Window
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    private void PopulateSlots()
+    {
+        _indices = Enumerable.Range(0, _settings.CameraCount).Where(i => !_settings.DeletedCameraSlots.Contains(_settings.Cameras[i].Slot)).ToArray();
+        SlotBox.ItemsSource = _indices.Select(i => $"{i + 1}  {_settings.Cameras[i].Name}").ToArray();
+        EnabledBox.IsEnabled = NameBox.IsEnabled = UrlBox.IsEnabled = _indices.Length > 0;
+    }
 }

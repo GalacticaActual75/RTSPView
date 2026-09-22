@@ -202,10 +202,12 @@ public sealed class UpdateService : IDisposable
             _logger.Write("AUDIT", $"RTSPView {manifest.Version} update staged and elevation requested from web admin");
             return new(true, $"RTSPView {manifest.Version} is staged. Follow the update progress window on the Windows host. The page will disconnect during installation.");
         }
-        catch (Exception)
+        catch (Exception error)
         {
+            var reference = Guid.NewGuid().ToString("N")[..8];
+            _logger.Write("ERROR", $"Reference {reference}: Update did not start ({error.GetType().Name}).");
             if (progressPath is not null)
-                try { WriteProgress(progressPath, "failed", "Update did not start. Check server logs."); } catch { /* Preserve the original error. */ }
+                try { WriteProgress(progressPath, "failed", $"Update did not start. Reference {reference}. Open Settings → Updates."); } catch { /* Preserve the original error. */ }
             throw;
         }
         finally { _gate.Release(); }

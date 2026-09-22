@@ -11,6 +11,9 @@ public sealed record CameraTelemetry
     public uint? Width { get; init; }
     public uint? Height { get; init; }
     public string Decoder { get; init; } = "Unknown";
+    public bool ConfiguredPlayer { get; init; }
+    public bool Visible { get; init; }
+    public long CompositedUploads { get; init; }
     public DateTimeOffset? SnapshotCapturedAt { get; init; }
     public string? FrameWarning { get; init; }
     public int ReconnectCount { get; init; }

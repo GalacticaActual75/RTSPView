@@ -38,7 +38,7 @@ const automationUi = (() => {
       <label>Filter camera or topic<input class="mqtt-filter" type="search" placeholder="Camera name or topic"></label>
       <div class="mqtt-messages"></div></details></details>
       <div class="control-buttons automation-savebar"><button type="button" class="secondary automation-test">Test connection</button>
-      <button type="button" class="secondary automation-cancel">Discard changes</button><button type="submit">Save changes</button></div>
+      <p>Save &amp; apply saves MQTT connection settings and all rules in this panel, and activates enabled rules on this host.</p><button type="button" class="secondary automation-cancel">Discard changes</button><button type="submit">Save &amp; apply</button></div>
       <p class="automation-message" role="status"></p>`;
     rules = form.querySelector('.automation-rules'); message = form.querySelector('.automation-message'); connection = form.querySelector('.automation-connection');
     const broker = form.querySelector('.automation-fields');
@@ -170,7 +170,7 @@ const automationUi = (() => {
     // Test controls do not edit the saved rule or mark the form dirty.
     testSource.addEventListener('input', e => e.stopPropagation()); testSource.addEventListener('change', e => e.stopPropagation());
     testButton.onclick = async () => {
-      if (dirty || !savedRules.some(r => r.id === rule.id)) { testMessage.textContent = 'Save changes before testing this rule.'; return; }
+      if (dirty || !savedRules.some(r => r.id === rule.id)) { testMessage.textContent = 'Save & apply before testing this rule.'; return; }
       if (!form.elements.enabled.checked || !rule.enabled) { testMessage.textContent = 'Enable automation and this rule, then save changes before testing.'; return; }
       testButton.disabled = true; testMessage.textContent = 'Simulating a person detection…';
       try {
@@ -197,7 +197,7 @@ const automationUi = (() => {
     if (action !== 0) { select.add(new Option('Camera that detected the person', '0'), 1); select.value = String(selected); }
     label.textContent = action === 0 ? 'Show overlay' : 'Camera to focus'; label.append(select);
     select.onchange = () => { card.dataset[action === 0 ? 'overlayTarget' : 'cameraTarget'] = select.value; };
-    card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Automatic layout: this camera occupies a 2×2 tile at the upper left, with all other enabled, configured main streams in smaller tiles. Uses the active layout’s orientation and restores that layout after the clear delay. Tile sizes and positions cannot currently be customized. Save changes, then use Test to preview it.';
+    card.querySelector('.target-help').textContent = action === 0 ? 'Any selected source can show this overlay until all sources have been clear for the delay.' : action === 1 ? 'Fill the viewer with this camera, then restore the previous layout. Each triggering camera has its own clear timer when following detections.' : 'Automatic layout: this camera occupies a 2×2 tile at the upper left, with all other enabled, configured main streams in smaller tiles. Uses the active layout’s orientation and restores that layout after the clear delay. Tile sizes and positions cannot currently be customized. Save & apply, then use Test to preview it.';
     card.querySelector('.rule-layout-choice')?.remove();
     if(action===2){
       const block=document.createElement('div');block.className='rule-layout-choice automation-grid';const layoutLabel=document.createElement('label');layoutLabel.className='rule-layout-label';layoutLabel.textContent='Automation layout';const picker=document.createElement('select');picker.className='rule-layout';picker.add(new Option('Automatic — all enabled streams',''));for(const item of viewLayouts)picker.add(new Option(item.name,item.id));if(card.dataset.layoutTarget&&!viewLayouts.some(l=>l.id===card.dataset.layoutTarget))picker.add(new Option('Unavailable layout',card.dataset.layoutTarget));picker.value=card.dataset.layoutTarget;picker.onchange=()=>{card.dataset.layoutTarget=picker.value;renderActionTarget(card);};layoutLabel.append(picker);actionGrid.append(layoutLabel);block.append(label);
@@ -268,7 +268,7 @@ const automationUi = (() => {
       const {presentation} = await api('/api/automation/presentation');
       automationPresentation.activity(form, status);
       const problem = status.configurationError || (status.delivery?.success === false && savedEnabled ? automationPresentation.delivery(status.delivery) + ' Check Live View in Quick actions.' : '');
-      automationPresentation.status(connection, 'MQTT: ' + status.connection + (problem ? ' · ' + problem : ' · ' + (status.lastResult || 'Waiting for person events')), problem || status.connection === 'Error' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
+      automationPresentation.status(connection, 'MQTT: ' + status.connection + (problem ? ' · ' + problem : ' · ' + (status.connection==='Disabled'?'Integration disabled · enable MQTT and Save & apply to activate rules':status.lastResult || 'Waiting for person events')), problem || status.connection === 'Error' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
       connection.title = status.lastResult || '';
       for (const card of rules.children) {
         const state = status.rules.find(r => r.id === card.dataset.id), remaining = state?.expiresAt ? Math.max(0, Math.ceil((new Date(state.expiresAt) - Date.now()) / 1000)) : 0;
@@ -387,7 +387,7 @@ const automationUi = (() => {
   function refreshOverlayLinks() {
     for (const info of document.querySelectorAll('.overlay-automation-info')) {
       const overlayForm = info.closest('form'), slot = Number(overlayForm.dataset.slot);
-      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Save changes in Picture in picture to use this mode.' : 'Always visible: stays on screen even when automation is idle.';
+      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Save & apply in Picture in picture to use this mode.' : 'Always visible: stays on screen even when automation is idle.';
       const linked = savedRules.filter(r => (r.action || 0) === 0 && r.overlaySlot === slot);
       info.querySelector('.overlay-rule-links').textContent = linked.length ? 'Linked rules: ' + linked.map(r => r.name + (r.enabled ? '' : ' (disabled)')).join(', ') : 'No automation rules assigned';
     }

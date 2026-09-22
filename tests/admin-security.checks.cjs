@@ -176,6 +176,13 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/snapshots/settings','PUT',{enabled:true,intervalHours:0.5})).status,200);
   assert.equal((await request(a,'/api/config')).json.snapshots.intervalHours,0.5,'snapshot settings persisted');
   a.csrf='';assert.equal((await request(a,'/api/snapshots/settings','PUT',{enabled:false,intervalHours:1})).status,400,'snapshot CSRF required');await session(a);
+  const revisionConfig=(await request(a,'/api/config')).json;
+  const draft={layouts:revisionConfig.layouts.map(l=>({...l,name:l.name+' revised'})),activeLayoutId:revisionConfig.activeLayoutId,revision:revisionConfig.layoutRevision};
+  const applied=await request(a,'/api/layouts','PUT',draft);assert.equal(applied.status,200);assert.notEqual(applied.json.revision,draft.revision);
+  assert.equal((await request(a,'/api/layouts','PUT',draft)).status,409,'stale layout rejected');
+  const autoDraft={layouts:revisionConfig.automationViewLayouts.map(l=>({...l,name:l.name+' revised'})),revision:revisionConfig.automationLayoutRevision};
+  assert.equal((await request(a,'/api/automation/layouts','PUT',autoDraft)).status,200);
+  assert.equal((await request(a,'/api/automation/layouts','PUT',autoDraft)).status,409,'stale automation layout rejected');
   const state=fs.readFileSync(path.join(data,'web-security.json'),'utf8');assert(!state.includes(password));assert(!state.includes('admin'));assert.equal(JSON.parse(state).PasswordChangeRequired,false);assert(!fs.existsSync(path.join(data,'initial-admin-password.txt')));
   const url='rtsp://test-user:test-pass@camera.example/live?token=test-query';const camera={...config.cameras[0],rtspUrl:url};assert.equal((await request(a,'/api/cameras/1','PUT',camera)).status,200);
   const exported=await request(a,'/api/config/export');assert(!exported.text.includes('test-pass'));assert(!exported.text.includes('test-query'));

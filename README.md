@@ -12,8 +12,8 @@ RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast R
 
 | Channel | Release | Use |
 | --- | --- | --- |
-| Stable | [1.0.45](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45) | Recommended release; includes the current beta features. |
-| Beta | [1.0.45-beta.4](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45-beta.4) | Previous prerelease, now promoted to Stable 1.0.45. |
+| Stable | [1.0.45](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45) | Recommended stable release. |
+| Beta | [1.0.46-beta.1](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.46-beta.1) | Audit fixes and usability refinements based on Stable 1.0.45; see [beta release notes](docs/releases/1.0.46-beta.1.md). |
 
 Choose the channel under **Settings → Updates**. Changing channels does not install anything automatically. To install this release, select Stable, check for updates and confirm installation. Hosts on Beta remain on that channel until switched. See [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for installers, checksums and version-specific notes.
 
@@ -28,11 +28,15 @@ Choose the channel under **Settings → Updates**. Changing channels does not in
 
 See the [1.0.45 release notes](docs/releases/1.0.45.md) and [Tapo setup guide](docs/tapo-automation.md) for details. Physical Tapo H100/H200/T110 validation remains pending; firmware compatibility can vary. The separate [Scrypted connector](plugins/scrypted-rtspview/README.md) remains a beta component.
 
+### New in 1.0.46-beta.1
+
+This beta addresses F1–F8 from the 1.0.45 review: resilient update-cache loading, concurrent-edit protection, weather/automation isolation, safer password recovery, full reconnect backoff, fail-fast release and pull-request checks, hidden-frame upload suppression, and separate snapshot commands. It also clarifies save scope, adds numeric weather placement, keeps validation focus, links blocking configuration references, and improves empty states. Settings remain schema 16.
+
 ### Weather
 
-In **Layouts**, choose **Add weather** for a dedicated tile, or select a camera and choose **Weather Widget**. Pick a city or enter coordinates, customize the display, then use **Apply widget** (or apply the layout for a tile). Widgets use Open-Meteo, share cached readings, and do not create another video player. Weather is off until configured.
+In **Layouts**, choose **Add weather** for a dedicated tile, or select a camera and choose **Weather Widget**. Pick a city or enter coordinates, customize the display, then use **Save & apply** for a camera widget. This updates that camera across standard and automation layouts, including future placements; the editor lists its saved layout usage. For a weather tile, **Use in layout draft** changes only the current draft, followed by **Apply to wall** or **Save layout** to persist it. Widgets use Open-Meteo, share cached readings, and do not create another video player. Weather is off until configured.
 
-Weather tiles are supported in standard layouts; one Weather Widget can be attached to each main camera. Up to 32 distinct locations can be saved. Official severe-weather alerts and backdrop blur are not included. Small cards omit details that cannot fit.
+Weather tiles are supported in standard layouts; one Weather Widget can be attached to each main camera. Up to 32 distinct locations can be saved. Official severe-weather alerts and backdrop blur are not included. Small cards omit details that cannot fit and show **Details hidden**. Enlarge the tile/widget or select fewer fields. Current icons respect day/night; future daily forecasts start after today in the weather location’s time zone. No fetched reading is distinct from expired weather. Position and appearance sliders also accept numeric values and keyboard input.
 
 Weather uses settings schema 16. On the first settings save after upgrading from 1.0.44, the original settings are kept as `settings.json.before-weather.json`. To downgrade, stop RTSPView and restore that file as `settings.json` before using the older release. Normal configuration exports include weather settings. [Weather data and attribution](https://open-meteo.com/).
 
@@ -353,6 +357,22 @@ The dashboard calls source entries **Streams**; some controls still use camera t
 | Maintenance | Schedule Viewer or host restarts; use the optional helper for compatible updates after one-time administrator approval. |
 | Source management | Delete/reuse stream slots without renumbering others; use original overlay feeds in standard or automation layouts. |
 
+## Save and apply scope
+
+| Action | What it changes |
+| --- | --- |
+| Save & apply (Streams) | Saves this stream and updates every layout using it. |
+| Save & apply (Picture in picture) | Saves this overlay and applies it wherever its host is displayed. |
+| Save & apply (Weather Widget) | Saves this camera’s widget across standard and automation layouts. |
+| Save & apply (Automation) | Saves the selected integration’s connection settings and all rules; enabled rules become active on this host. |
+| Apply changes (Settings → Display) | Saves this host’s display preferences across layouts and restarts. |
+| Apply to wall (Layouts) | Saves all layout drafts and displays the selected standard layout. |
+| Save layout | Saves drafts without switching the active standard layout; edits to the active layout require Apply to wall. |
+| Save automation layouts | Saves automation templates used by rules; does not select a standard wall. |
+| Use in layout draft | Updates only the weather tile draft; does not save or switch the wall. |
+
+Native stream edits merge with current settings. If the same stream changed elsewhere, saving stops and asks you to reopen Streams. Browser layout saves reject an outdated draft. Neither conflict applies a partial draft. Keep one editor per item; imports intentionally replace the configuration and reject stale native imports.
+
 ## Set up streams and layouts
 
 1. Open **Streams** after completing the initial password change. Enter a descriptive stream name and its RTSP URL, enable the slot, and choose **Save & apply**. Use the URL supplied by your camera, encoder or RTSP server; no network discovery or preconfigured camera addresses are provided.
@@ -485,7 +505,9 @@ The custom shape editor lets you draw a mask. SVG imports must be 256 KB or smal
 
 Under **Settings → Maintenance**, **Scheduled restarts** can restart the Viewer and Windows host independently, on selected weekdays at a host-local time or every X hours. The Controller must remain running. Host restarts have a 60-second countdown with cancellation in the admin panel; updates defer restarts and missed runs are skipped after startup or sleep. These host-specific schedules are excluded from configuration exports.
 
-Start with the default streaming settings. For an unreliable connection, try TCP and increase **Cache (ms)** to trade latency for smoother playback. **Startup timeout**, **Stall timeout** and **Maximum backoff** control connection/recovery timing; **Low latency** changes playback tuning. **Composite stream compatibility** forces TCP with a 3000 ms buffer and disables low-latency tuning for rebroadcast/composite streams. More streams and larger resolutions increase network, decoder and graphics load.
+Start with the default streaming settings. Rare transport, decoding and recovery controls are under **Advanced streaming and recovery** (separate Advanced streaming / Advanced recovery sections in the native editor); image transforms use **Advanced image transform**. For an unreliable connection, try TCP and increase **Cache (ms)** to trade latency for smoother playback. **Startup timeout**, **Stall timeout** and **Maximum backoff** control connection/recovery timing; **Low latency** changes playback tuning. **Composite stream compatibility** forces TCP with a 3000 ms buffer and disables low-latency tuning for rebroadcast/composite streams. Maximum backoff grows exponentially to the selected 5–300 second limit, including jitter. More streams and larger resolutions increase network, decoder and graphics load.
+
+**Capacity is not the visible tile count.** Sixteen main streams plus sixteen picture-in-picture overlays and their sixteen original-source players can mean 48 independent players, even when only a few tiles are shown. Linked sources can create multiple connections to one camera. Hidden players remain warm for automation and still decode/use bandwidth; this beta stops invisible composited frame uploads. Settings → Diagnostics reports configured, hidden and original-source player counts. Weather itself adds no video player. Shared decoding is not included. Test your cameras, codecs, bitrates and host before relying on a maximum-size wall.
 
 Use **Restart stream** on a camera for a single-feed problem, **Restart all streams** for all feeds, or **Restart Live View** for the display process. **Restart Application** restarts the live view and Controller, including its watchdog, MQTT/Tapo readers, and dashboard. It resumes automatic viewer recovery, briefly disconnects the dashboard, and reconnects without discarding browser edits. This requires an installed application and waits for updates/maintenance to finish. The optional privileged temperature/installer service stays running. **Reboot host** restarts the entire host. The dashboard also shows health information and recent logs. Browser thumbnails and layout/overlay previews are snapshots, not full-motion browser video.
 
@@ -537,9 +559,14 @@ Updates now come from the public [RTSPView GitHub Releases](https://github.com/G
 
 The final SMB bridge releases are 1.0.32 (Stable) and 1.0.32-beta.1 (Beta). Install either from the old channel once; all later update checks use GitHub. Existing AppId, executable names, IPC and scheduled-task identifiers remain compatible with the old updater, so upgrades happen in place. New installations use RTSPView branding and its default data directory; existing settings and update-channel selection remain in the legacy directory. The old data-directory environment variable remains a compatibility alias. Complete any required administrator password change on the camera-wall host; administration now defaults to localhost.
 
-For forgotten administrator passwords, stop both processes and, as the owning Windows user, move `web-security.json` and the `data-protection` directory into a private backup outside the active data directory. Restart locally and complete setup with `admin`. Camera settings remain intact. Do not perform recovery while the dashboard is reachable by untrusted users. Normal login throttling clears after five minutes; five attempts are allowed across the administrator account per window.
+For forgotten administrator passwords, stop both processes and, as the owning Windows user, move only `web-security.json` into a private backup outside the active data directory. Preserve the `data-protection` directory: its keys also protect saved MQTT and Tapo credentials. Restart locally and complete setup with `admin`, then pair the Scrypted connector again. Camera settings and integration credentials remain intact. If encryption keys were compromised, rotate them as a separate security recovery and re-enter all integration credentials. Do not perform recovery while the dashboard is reachable by untrusted users. Normal login throttling clears after five minutes; five attempts are allowed across the administrator account per window.
 
 ## Build and tests
+
+Run `./tools/checks.ps1` from the repository root for the Windows regression suite. It stops immediately when any native command fails. Pull requests run verification without packaging or publishing. Release jobs also fail immediately on restore/build/test/publish failures.
+
+The optional presentation benchmark is `dotnet run --project tests/RTSPView.LayoutVisibilityChecks -c Release -- --capacity`. It runs 1/9/16 main sources with 0/2/16 overlays in visible/hidden states and writes `artifacts/capacity/software-640x360.csv`. This uses local 640×360 software-decoded fixtures, including main tiles, and measures player count, uploads, CPU time and working set. It opens no RTSP connections and does not qualify camera session limits, hardware decoders or production capacity.
+
 
 Prerequisites: Windows x64, .NET 8 SDK with current servicing patches, Node.js, and Inno Setup 6 for installers. Releases are self-contained, so runtime security updates require rebuilding and installing a new release.
 
@@ -566,6 +593,9 @@ After committing and reviewing a release, use `tools/publish-release.ps1 -Versio
 Docker is not supported: WPF requires an interactive Windows desktop and graphics stack. There are no Dockerfiles or container mounts to configure.
 
 ## Troubleshooting and security
+
+Unexpected request failures include a short **Reference** and a button for the relevant Settings panel. Use that reference when matching the displayed failure to Diagnostics logs. Configuration dependency errors name and link the specific blocking rules, layouts or overlays. A paused Viewer must be started again from Settings → Maintenance; configured but unassigned streams belong in Layouts, while missing sources need an RTSP address in Streams. Disabled integrations must be enabled and saved before rules can act.
+
 
 - Dashboard unavailable: open it on the same host, verify Controller is running, and check bindings and port conflicts. Enable LAN access from **Settings → Network & security** for a trusted private LAN; see the LAN guide above.
 - Blank cameras: fresh installations intentionally have empty URLs. Check credentials, RTSP reachability, transport, codecs, and layout assignments.

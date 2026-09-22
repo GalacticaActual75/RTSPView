@@ -24,8 +24,8 @@ const workspace = (() => {
       apply.disabled = true;
       try {
         const latest = await api('/api/config');
-        const result = await api('/api/layouts', {method:'PUT',body:JSON.stringify({layouts:latest.layouts,activeLayoutId:layouts.value})});
-        config = {...latest,...result}; wallDesigner.load({...config,cameras:cameraInventory}); sync();
+        const result = await api('/api/layouts', {method:'PUT',body:JSON.stringify({layouts:latest.layouts,activeLayoutId:layouts.value,revision:latest.layoutRevision})});
+        config = {...latest,...result,layoutRevision:result.revision}; wallDesigner.load({...config,cameras:cameraInventory}); sync();
       } catch (error) { $('#monitorNotice').textContent = error.message; }
       finally { apply.disabled = false; }
     });
@@ -71,6 +71,7 @@ const workspace = (() => {
     if(!camera.enabled)return ['Disabled','neutral'];
     if(!camera.rtspUrl)return ['Not configured','neutral'];
     if(!telemetry)return ['Checking…','neutral'];
+    if(telemetry.viewerPaused)return ['Viewer paused','neutral'];
     if(!telemetry.viewerConnected)return ['Viewer offline','neutral'];
     const stream=telemetry.viewer?.cameras.find(c=>c.slot===camera.slot);
     if(stream?.frameWarning)return ['Stale video','warning'];
@@ -83,7 +84,7 @@ const workspace = (() => {
       const [text,tone]=state(camera);item.textContent=text;item.dataset.tone=tone;
     }
     const enabled=cameraInventory.filter(c=>c.enabled&&c.rtspUrl),live=enabled.filter(c=>state(c)[1]==='healthy').length;
-    $('#monitorHealth').textContent=!telemetry?'Checking viewer…':!telemetry.viewerConnected?'Viewer offline · showing last available snapshots':`${live} of ${enabled.length} streams connected`;
+    $('#monitorHealth').textContent=!telemetry?'Checking viewer…':telemetry.viewerPaused?'Viewer paused · use Start Viewer in Settings → Maintenance to resume':!telemetry.viewerConnected?'Viewer offline · showing last available snapshots':`${live} of ${enabled.length} streams connected`;
     $('#monitorHealth').dataset.tone=telemetry&&!telemetry.viewerConnected?'warning':'neutral';
   }
   function sync() {
@@ -130,7 +131,7 @@ const workspace = (() => {
         const name=node('span',camera.name,'monitor-name'),health=node('span',undefined,'status-label');health.dataset.streamStatus=camera.slot;
         card.append(image,name,health);board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
       }
-      if(!tiles.length)board.append(node('p',config?'No streams in this view. Add streams, then assign them in Layouts.':'Loading snapshot previews…','empty-state'));
+      if(!tiles.length)board.append(node('p',config?cameraInventory.some(c=>c.rtspUrl)?'Streams configured but unassigned. Open Layouts to place them, then Apply to wall.':'No source configured. Open Streams and add an RTSP address, then assign the stream in Layouts.':'Loading snapshot previews…','empty-state'));
     }
     status();fitMonitor();
   }

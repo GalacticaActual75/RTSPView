@@ -58,6 +58,12 @@ internal static class Program
             detailed.Width=size.Width;detailed.Height=size.Height;detailed.Measure(size);detailed.Arrange(new Rect(size));detailed.UpdateLayout();
             Check(detailed.DesiredSize.Width<=size.Width+24,"native resize remains bounded "+size);
         }
+        compact.Update(new() {Location="Not fetched"},null);
+        Check(FindText(compact).Any(t=>t.Text=="No weather fetched yet"),"native no-fetch state is explicit");
+        Check(WeatherFormatting.Icon(0,false)=="☾" && WeatherFormatting.Icon(0,true)=="☀","native day/night icons");
+        detailed.Update(new() {Fields=WeatherOptions.AllowedFields},data);
+        detailed.Width=180;detailed.Height=100;detailed.Measure(new Size(180,100));detailed.Arrange(new Rect(0,0,180,100));detailed.UpdateLayout();
+        Check(FindText(detailed).Any(t=>t.Text.Contains("Details hidden")),"native omitted details are identified");
         app.Shutdown();
     }
     private static IEnumerable<TextBlock> FindText(DependencyObject node)

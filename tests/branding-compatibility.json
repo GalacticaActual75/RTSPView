@@ -102,16 +102,22 @@
       "SpotMonitor.Viewer"
     ],
     "deployment/Apply-ServiceUpdate.ps1": [
-      "SpotMonitor Camera Wall", "SpotMonitor.Controller", "SpotMonitor.Viewer"
+      "SpotMonitor Camera Wall",
+      "SpotMonitor.Controller",
+      "SpotMonitor.Viewer"
     ],
     "src/RTSPView.Maintenance/ServiceUpdateCoordinator.cs": [
       "SpotMonitor.Controller.exe"
     ],
     "tests/ServiceUpdate.Checks.ps1": [
-      "SpotMonitor.Controller.exe", "SpotMonitor.Viewer.exe"
+      "SpotMonitor.Controller.exe",
+      "SpotMonitor.Viewer.exe"
     ],
     "src/RTSPView.Controller/ViewerLauncher.cs": [
       "SpotMonitor.Viewer"
+    ],
+    "tests/RTSPView.ConnectorChecks/PasswordRecoveryChecks.cs": [
+      "SpotMonitor.Controller"
     ]
   }
 }

@@ -188,7 +188,8 @@ public sealed class RestartScheduler : BackgroundService
             try { var result = await _execute(action, token); Save(State(action) with { Result = result, LastResult = result }); }
             catch (Exception error) when (error is not OperationCanceledException)
             {
-                var result = $"Scheduled {action} restart failed ({error.GetType().Name}). Check host permissions and logs.";
+                var reference = Guid.NewGuid().ToString("N")[..8];
+                var result = $"Scheduled {action} restart failed ({error.GetType().Name}). Reference {reference}. Open Settings → Maintenance.";
                 Save(State(action) with { Result = result, LastResult = result });
             }
             _log(State(action).Result);

@@ -29,6 +29,8 @@ jobs:
 
       - name: Build bundled Tapo sensor reader and source distribution
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m pip install -r integrations/tapo-reader/requirements.txt
           if ($LASTEXITCODE -ne 0) { throw "Tapo dependency installation failed." }
           python integrations/tapo-reader/test_reader.py
@@ -46,91 +48,27 @@ jobs:
           RELEASE_EVENT: ${{ github.event_name }}
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $version = if ($env:RELEASE_EVENT -eq 'workflow_dispatch') { $env:RELEASE_INPUT } else { $env:RELEASE_REF.TrimStart('v') }
           if ($version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$') { throw "Invalid release version: $version" }
           "value=$version" >> $env:GITHUB_OUTPUT
           "numeric=$($version.Split('-')[0])" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
-      - name: Restore and test
-        run: |
-          dotnet restore RTSPView.sln -r win-x64
-          dotnet run --project tests/RTSPView.ConfigurationChecks/RTSPView.ConfigurationChecks.csproj -c Release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
-      - name: Build and check administrator security
-        run: |
-          dotnet build RTSPView.sln -c Release --no-restore
-          $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
-          node tests/admin-security.checks.cjs
-          dotnet run --project tests/RTSPView.ConnectorChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Connector pairing and import checks failed." }
-          node tests/connector-http.checks.cjs
-          if ($LASTEXITCODE -ne 0) { throw "Connector HTTP integration checks failed." }
-          dotnet run --project tests/RTSPView.ViewerLifecycleChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Viewer lifecycle checks failed." }
-          dotnet run --project tests/RTSPView.AutomationChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "MQTT automation checks failed." }
-          dotnet run --project tests/RTSPView.TapoChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Sensor automation or priority checks failed." }
-          node tests/tapo-http.checks.cjs
-          if ($LASTEXITCODE -ne 0) { throw "Tapo HTTP checks failed." }
-          dotnet run --project tests/RTSPView.LanAccessChecks -c Release
-          dotnet run --project tests/RTSPView.RestartScheduleChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Restart scheduling checks failed." }
-          dotnet run --project tests/RTSPView.MaintenanceChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Maintenance checks failed." }
-          node tests/lan-firewall.checks.cjs
-          node tests/branding.checks.cjs
-          if ($LASTEXITCODE -ne 0) { throw "Branding checks failed." }
-          node tests/preview-refresh.checks.cjs
-          if ($LASTEXITCODE -ne 0) { throw "Preview refresh checks failed." }
-
-      - name: Check native tile backgrounds and layout visibility
-        run: |
-          dotnet run --project tests/RTSPView.LayoutVisibilityChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Native tile background or layout regression." }
-
-      - name: Check weather isolation, persistence, provider data and rendering
-        run: |
-          dotnet run --project tests/RTSPView.WeatherChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Weather checks failed." }
-
-      - name: Check stream editor drafts and theme
-        run: |
-          dotnet run --project tests/RTSPView.UiChecks -c Release
-          if ($LASTEXITCODE -ne 0) { throw "Native stream editor regression." }
-
-      - name: Check update helper failure reporting
-        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateHelper.Checks.ps1
-
-      - name: Check service update worker with fake host actions
-        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/ServiceUpdate.Checks.ps1
-
-      - name: Check update progress window completion
-        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/UpdateProgress.Checks.ps1
-
-      - name: Check drawn viewport masks
-        run: node tests/shape-editor.checks.cjs
-
-      - name: Check dashboard snapshot freshness
-        run: node tests/dashboard-ux.checks.cjs
-
-      - name: Check viewer control states
-        run: |
-          node tests/viewer-controls.checks.cjs
-          node tests/application-restart.checks.cjs
-          node tests/related-choices.checks.cjs
-
-      - name: Check landscape and portrait presets
-        run: |
-          node tests/layout-lan-http.checks.cjs
-          if ($LASTEXITCODE -ne 0) { throw "LAN HTTP layout actions failed." }
-          node tests/wall-layout-presets.checks.cjs
-          node tests/wall-proportions.checks.cjs
+      - name: Run regression checks
+        shell: pwsh
+        run: ./tools/checks.ps1
 
       - name: Publish self-contained applications
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           dotnet publish src/RTSPView.Viewer/RTSPView.Viewer.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Viewer /p:Version=${{ steps.version.outputs.value }}
           dotnet publish src/RTSPView.Controller/RTSPView.Controller.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Controller /p:Version=${{ steps.version.outputs.value }}
           dotnet publish src/RTSPView.Maintenance/RTSPView.Maintenance.csproj -c Release -r win-x64 --self-contained true --no-restore -o stage/Maintenance /p:Version=${{ steps.version.outputs.value }}
@@ -141,6 +79,8 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $env:RTSPVIEW_VERSION='${{ steps.version.outputs.value }}'
           $env:RTSPVIEW_NUMERIC_VERSION='${{ steps.version.outputs.numeric }}'
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer/RTSPView.iss
@@ -161,6 +101,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $tag='${{ steps.version.outputs.tag }}'
           [string[]]$releaseFlags = if ('${{ steps.version.outputs.value }}' -match '-beta\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {

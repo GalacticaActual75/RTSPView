@@ -96,7 +96,8 @@ reader.Snapshot = new([new(hub.Id, hub.Name, "H100", true, "Connected")], [Readi
 await Until(() => service.Status.RuleErrors.ContainsKey(layoutRule.Id) && service.Status.ActiveRules.Contains(rule.Id), "Invalid Tapo rule disabled a valid rule");
 await service.SaveAsync(new(service.CurrentSettings with { Enabled = false }), default);
 await Until(() => service.Status.ActiveRules.Length == 0, "Invalid target prevented disabling Tapo");
-await new JsonSettingsStore(Path.Combine(directory, "settings.json")).SaveAsync(app);
+var currentApp = await new JsonSettingsStore(Path.Combine(directory, "settings.json")).LoadAsync();
+await new JsonSettingsStore(Path.Combine(directory, "settings.json")).SaveAsync(app with { StorageRevision = currentApp.StorageRevision });
 await service.SaveAsync(new(settings with { Enabled = false }), default);
 await Until(() => commands.Last().Sensors!.Effects.Length == 0, "Disable did not clear active test and effects");
 Check(service.Status.TestingRules.Length == 0, "Configuration changes retained tests");

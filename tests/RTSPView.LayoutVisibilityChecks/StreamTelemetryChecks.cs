@@ -123,15 +123,19 @@ internal static class StreamTelemetryChecks
                     {
                         var before = tile.GetTelemetry().LastFrameAt;
                         window.Hide(); tile.SetWallVisibility(false);
+                        var uploads = tile.GetTelemetry().CompositedUploads;
                         tile.Apply(warmSettings with { Enabled = false });
                         await Task.Delay(400); tile.Tick();
                         if (tile.IsVisible || window.IsVisible || ((UIElement)tile.FindName("OverlayRoot")).IsVisible)
                             throw new Exception("Hidden warm overlay exposed a window or connection stats");
                         if (tile.GetTelemetry().LastFrameAt <= before || !player.IsPlaying)
                             throw new Exception("Hidden overlay stopped decoding frames");
+                        if(tile.GetTelemetry().CompositedUploads != uploads) throw new Exception("Hidden overlay uploaded a frame");
                         tile.Apply(warmSettings); tile.SetWallVisibility(true); window.Show();
                         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                         tile.Tick();
+                        await Task.Delay(100);
+                        if(tile.GetTelemetry().CompositedUploads <= uploads) throw new Exception("Reveal did not resume frame uploads");
                         if (((UIElement)tile.FindName("OverlayPanel")).Visibility != Visibility.Collapsed)
                             throw new Exception("Healthy warm overlay forced connection statistics on reveal");
                         if (!ReferenceEquals(player, typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)) ||
