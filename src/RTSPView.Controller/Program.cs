@@ -270,6 +270,7 @@ app.MapGet("/api/status", () => Results.Ok(new
 {
     version = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)?.InformationalVersion.Split('+')[0] ?? "Development",
     hostname = Environment.MachineName,
+    logHealth = new { droppedEntries = auditLog.DroppedEntries, error = auditLog.LastError },
     lanAddresses = GetLanAddresses(),
     controllerUptimeSeconds = (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds,
     windowsUptimeSeconds = (long)TimeSpan.FromMilliseconds(Environment.TickCount64).TotalSeconds,
@@ -577,6 +578,8 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
         {
             StartFullScreen = display.StartFullScreen,
             PreferredMonitor = Math.Max(0, display.PreferredMonitor),
+            PreferredMonitorDevice = display.PreferredMonitorDevice,
+            RequestHardwareDecoding = display.RequestHardwareDecoding ?? settings.RequestHardwareDecoding,
             HideMouseCursor = display.HideMouseCursor,
             MouseCursorHideSeconds = Math.Clamp(display.MouseCursorHideSeconds, 1, 30),
             ShowCameraNames = display.ShowCameraNames,
@@ -588,7 +591,7 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
         }).Normalize();
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", "Display settings changed from web admin");
-        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, ShowTileBorders = updated.ShowTileBorders, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop, ShowHoverExitButton = updated.ShowHoverExitButton });
+        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, PreferredMonitorDevice = updated.PreferredMonitorDevice, RequestHardwareDecoding = updated.RequestHardwareDecoding, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, ShowTileBorders = updated.ShowTileBorders, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop, ShowHoverExitButton = updated.ShowHoverExitButton });
     }
     finally { configGate.Release(); }
 }).RequireAuthorization();
@@ -713,6 +716,7 @@ app.MapPost("/api/control/viewer/{action}", async (string action, ViewerRuntimeS
     {
         "restart-cameras" => (ViewerCommandType?)ViewerCommandType.RestartAllCameras,
         "restart" => ViewerCommandType.RestartViewer,
+        "identify-displays" => ViewerCommandType.IdentifyDisplays,
         "enter-fullscreen" => ViewerCommandType.EnterFullScreen,
         "exit-fullscreen" => ViewerCommandType.ExitFullScreen,
         _ => null
@@ -792,11 +796,12 @@ app.MapPost("/api/control/system/{action}", (string action, ConfirmedAction requ
 app.MapGet("/api/logs", (int? lines) =>
 {
     var requested = Math.Clamp(lines ?? 400, 50, 2000);
-    return Results.Ok(new { lines = ReadRecentLogLines(Path.Combine(dataDirectory, "logs"), requested).Select(RollingFileLogger.RedactCredentials) });
+    return Results.Ok(new { logHealth = new { droppedEntries = auditLog.DroppedEntries, error = auditLog.LastError }, lines = ReadRecentLogLines(Path.Combine(dataDirectory, "logs"), requested).Select(RollingFileLogger.RedactCredentials) });
 }).RequireAuthorization();
 app.MapGet("/api/logs/download", () =>
 {
-    var path = Directory.EnumerateFiles(Path.Combine(dataDirectory, "logs"), "rtspview-*.log").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
+    var directory = Path.Combine(dataDirectory, "logs");
+    var path = Directory.Exists(directory) ? Directory.EnumerateFiles(directory, "rtspview-*.log").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault() : null;
     return path is null ? Results.NotFound(new { error = "No log file is available." }) : Results.File(
         System.Text.Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, File.ReadLines(path).Select(RollingFileLogger.RedactCredentials))),
         "text/plain", "RTSPView.log");

@@ -22,6 +22,13 @@ const automationPresentation = (() => {
     if (!value) return 'No viewer acknowledgement yet';
     return value.success ? 'Viewer acknowledged · ' + new Date(value.attemptedAt).toLocaleTimeString() : 'Viewer acknowledgement failed · ' + value.message;
   }
+  function mqttConnection(value, enabled, now = Date.now()) {
+    const health = value.viewerConnection;
+    const recovered = health?.success === true && new Date(health.attemptedAt) >= new Date(value.delivery?.attemptedAt || 0) && now - new Date(health.attemptedAt) < 10000;
+    const problem = value.configurationError || (enabled && value.delivery?.success === false && !recovered ? delivery(value.delivery) + ' Check Live View in Quick actions.' : '');
+    const detail = problem || (value.connection === 'Disabled' ? 'Integration disabled · enable MQTT and Save & apply to activate rules' : recovered && value.delivery?.success === false ? 'Viewer connected · previous automation delivery failed; see rule status and Recent activity' : value.lastResult || 'Waiting for person events');
+    return {text: 'MQTT: ' + value.connection + ' · ' + detail, tone: problem || value.connection === 'Error' ? 'error' : value.connection === 'Connected' ? 'healthy' : 'neutral'};
+  }
   function pending(form, dirty, enabled) {
     let label = form.querySelector('.automation-draft-state');
     if (!label) { label = document.createElement('p'); label.className = 'automation-draft-state'; label.setAttribute('role', 'status'); form.querySelector('h2').after(label); }
@@ -49,5 +56,5 @@ const automationPresentation = (() => {
       const row = document.createElement('li'); row.textContent = `${new Date(entry.at).toLocaleString()} · ${entry.name} · ${entry.kind}: ${entry.decision}`; return row;
     }));
   }
-  return {status, toggles, summary, delivery, pending, visibility, activity};
+  return {status, mqttConnection, toggles, summary, delivery, pending, visibility, activity};
 })();

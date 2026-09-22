@@ -22,20 +22,21 @@ internal static class CapacityChecks
             var pixels=Enumerable.Repeat((byte)128,640*360*3/2).ToArray();
             for(var i=0;i<450;i++){output.Write(Encoding.ASCII.GetBytes("FRAME\n"));output.Write(pixels);}
         }
-        using var engine=new LibVLC("--no-video-title-show","--no-osd","--no-audio");
+        using var engine=new LibVLC("--no-video-title-show","--no-osd","--no-audio","--no-snapshot-preview");
         var flags=BindingFlags.Instance|BindingFlags.NonPublic;
-        var rows=new List<string>{"main,overlays,overlay_visible,players,decoding,hidden,uploads,hidden_uploads,cpu_ms,working_set_mb"};
+        var rows=new List<string>{"main,overlays,overlay_visible,views,players,advancing_views,hidden,uploads,hidden_uploads,cpu_ms,working_set_mb"};
         foreach(var main in new[]{1,9,16})foreach(var overlays in new[]{0,2,16})foreach(var visible in new[]{false,true}) {
             var grid=new Grid();var tiles=new List<CameraTile>();
             var window=new Window{Content=grid,Width=640,Height=360,Left=-20000,Top=-20000,ShowInTaskbar=false,ShowActivated=false};
             try {
                 for(var i=0;i<main+overlays*2;i++) {
                     var tile=new CameraTile();tiles.Add(tile);grid.Children.Add(tile);
-                    tile.Initialize(engine,new RollingFileLogger(Path.Combine(root,"logs")),new CameraSettings{Slot=i+1,Enabled=true},false,compositedVideo:true,preserveWholeFrame:i>=main+overlays);
+                    tile.Initialize(engine,new RollingFileLogger(Path.Combine(root,"logs")),new CameraSettings{Slot=i+1,Enabled=true},false,compositedVideo:true,preserveWholeFrame:i>=main+overlays,sharedSource:i>=main+overlays?tiles[i-overlays]:null);
                 }
                 window.Show();await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                 for(var i=0;i<tiles.Count;i++) {
                     var tile=tiles[i];tile.SetWallVisibility(i<main||i<main+overlays&&visible);
+                    if (!tile.OwnsDecoder) continue;
                     var player=(MediaPlayer)typeof(CameraTile).GetField("_player",flags)!.GetValue(tile)!;
                     var vlc=(LibVLC)typeof(CameraTile).GetField("_libVlc",flags)!.GetValue(tile)!;
                     var media=new Media(vlc,new Uri(file));media.AddOption(":avcodec-hw=none");media.AddOption(":no-audio");
@@ -49,10 +50,10 @@ internal static class CapacityChecks
                 var hiddenUploads=final.Zip(initial).Where(p=>!p.First.Visible).Sum(p=>p.First.CompositedUploads-p.Second.CompositedUploads);
                 var uploads=final.Zip(initial).Sum(p=>p.First.CompositedUploads-p.Second.CompositedUploads);
                 if(decoding!=tiles.Count||hiddenUploads!=0||uploads==0)throw new Exception($"Capacity regression: {main}/{overlays}/{visible}, decoding {decoding}/{tiles.Count}, hidden uploads {hiddenUploads}");
-                rows.Add($"{main},{overlays},{visible},{tiles.Count},{decoding},{final.Count(t=>!t.Visible)},{uploads},{hiddenUploads},{(process.TotalProcessorTime-cpu).TotalMilliseconds:F0},{process.WorkingSet64/1048576d:F1}");
+                rows.Add($"{main},{overlays},{visible},{tiles.Count},{tiles.Count(t=>t.OwnsDecoder)},{decoding},{final.Count(t=>!t.Visible)},{uploads},{hiddenUploads},{(process.TotalProcessorTime-cpu).TotalMilliseconds:F0},{process.WorkingSet64/1048576d:F1}");
                 Console.WriteLine("PASS presentation capacity "+rows[^1]);
-            } finally {foreach(var tile in tiles)tile.Dispose();window.Close();}
+            } finally {foreach(var tile in tiles.OrderBy(t=>t.OwnsDecoder))tile.Dispose();window.Close();}
         }
-        var target=Path.GetFullPath("artifacts/capacity");Directory.CreateDirectory(target);File.WriteAllLines(Path.Combine(target,"software-640x360.csv"),rows);
+        var target=Path.GetFullPath("artifacts/capacity");Directory.CreateDirectory(target);File.WriteAllLines(Path.Combine(target,"shared-software-640x360.csv"),rows);
     }
 }

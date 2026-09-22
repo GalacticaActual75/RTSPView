@@ -18,6 +18,7 @@ public sealed record AutomationStatus(string Connection, string LastResult, Date
     DateTimeOffset? LastPerson, object[] Rules)
 {
     public AutomationDeliveryStatus? Delivery { get; init; }
+    public AutomationDeliveryStatus? ViewerConnection { get; init; }
     public string? ConfigurationError { get; init; }
     public long DroppedEvents { get; init; }
     public AutomationActivityEntry[] Activity { get; init; } = [];
@@ -194,6 +195,7 @@ public sealed class AutomationService : BackgroundService
         AutomationSettings? applied = null;
         var appliedCredentials = -1;
         long reportedDrops = 0;
+        var nextViewerProbe = DateTimeOffset.MinValue;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -203,6 +205,14 @@ public sealed class AutomationService : BackgroundService
                 if (drops != reportedDrops) { reportedDrops = drops; Activity.Add("", "MQTT", "Queue", $"Dropped events since Controller start: {drops}"); }
                 try
                 {
+                    // Probe connectivity without replaying a timed-out automation command.
+                    // Preserve Delivery and per-rule history as the outcome of that action.
+                    if (_stored.Settings.Enabled && _status.Delivery?.Success == false && now >= nextViewerProbe)
+                    {
+                        var probe = await _viewer.SendAsync(ViewerCommandType.Ping, null, stoppingToken);
+                        _status = _status with { ViewerConnection = new(DateTimeOffset.UtcNow, probe.Success, probe.Message) };
+                        nextViewerProbe = DateTimeOffset.UtcNow.AddSeconds(5);
+                    }
                     var cameras = await _cameras.LoadAsync(stoppingToken);
                     var currentHash = AutomationConfiguration.Hash(cameras);
                     if (revision != _revision || hash != currentHash)
@@ -355,7 +365,10 @@ public sealed class AutomationService : BackgroundService
         }
         _requestedRules = requested;
         var result = await _viewer.SendAsync(new ViewerCommand(Guid.NewGuid(), ViewerCommandType.AutomationOverlays, Automation: new(hash, engine.Leases.Values.ToArray())), token);
-        _status = _status with { Delivery = new(DateTimeOffset.UtcNow, result.Success, result.Message) };
+        var delivery = new AutomationDeliveryStatus(DateTimeOffset.UtcNow, result.Success, result.Message);
+        _status = _status with { Delivery = delivery, ViewerConnection = delivery };
+        if (engine.Leases.Count == 0)
+            Activity.Add("", "Viewer", "Delivery", result.Success ? "Viewer acknowledged" : result.Message, true);
         foreach (var id in engine.Leases.Values.Select(l => l.RuleId).Distinct())
         {
             _ruleDelivery[id] = _status.Delivery;

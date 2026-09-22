@@ -15,6 +15,9 @@ internal sealed class CompositedVideoPresenter : IDisposable
 {
     private readonly Image _image;
     private readonly Action _sizeChanged;
+    private readonly Dictionary<Image, Action> _mirrors = new();
+    public void AddMirror(Image image, Action resized) { _mirrors[image] = resized; if (_bitmap is not null) { image.Source = _bitmap; resized(); } }
+    public void RemoveMirror(Image image) => _mirrors.Remove(image);
     private readonly SemaphoreSlim _pixels = new(1, 1);
     private readonly DispatcherTimer _timer;
     private IntPtr _allocation;
@@ -73,7 +76,7 @@ internal sealed class CompositedVideoPresenter : IDisposable
     {
         // Keep the decoder warm for automation, but do not upload invisible frames.
         // Leave _presented unchanged so revealing the image presents the newest frame.
-        if (!_active || !_image.IsVisible || _presented == Interlocked.Read(ref _frame) || !_pixels.Wait(0)) return;
+        if (!_active || (!_image.IsVisible && !_mirrors.Keys.Any(image => image.IsVisible)) || _presented == Interlocked.Read(ref _frame) || !_pixels.Wait(0)) return;
         var resized = false;
         try
         {
@@ -91,7 +94,24 @@ internal sealed class CompositedVideoPresenter : IDisposable
             _presented = Interlocked.Read(ref _frame);
         }
         finally { _pixels.Release(); }
-        if (resized) _sizeChanged();
+        if (resized) { _sizeChanged(); foreach (var mirror in _mirrors.ToArray()) { mirror.Key.Source = _bitmap; mirror.Value(); } }
+    }
+
+    public async Task<BitmapSource?> CaptureFrameAsync()
+    {
+        return await _image.Dispatcher.InvokeAsync(() =>
+        {
+            if (!_active || !_pixels.Wait(0)) return null;
+            try
+            {
+                if (_buffer == IntPtr.Zero || Interlocked.Read(ref _frame) == 0) return null;
+                var frame = BitmapSource.Create(_width, _height, 96, 96, PixelFormats.Bgr32, null, _buffer, _bytes, _pitch);
+                BitmapSource preview = new TransformedBitmap(frame, new ScaleTransform(320d / _width, 320d / _width));
+                preview.Freeze();
+                return preview;
+            }
+            finally { _pixels.Release(); }
+        });
     }
 
     // Call on the UI thread before replacing a player. Retired callbacks must

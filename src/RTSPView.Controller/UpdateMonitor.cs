@@ -1,3 +1,4 @@
+using RTSPView.Infrastructure;
 using System.Text.Json;
 using RTSPView.Core;
 
@@ -40,7 +41,7 @@ public sealed class UpdateMonitor : BackgroundService
             }
         }
         catch (Exception error) when (error is IOException or JsonException or InvalidDataException or ArgumentException or UnauthorizedAccessException)
-        { _state=new(); _log("Update cache could not be read; it will be rebuilt."); }
+        { DurableJson.PreserveInvalid(_path); _state=new(); _log("Update cache could not be read; it will be rebuilt."); }
         Publish(Current());
     }
 
@@ -124,13 +125,18 @@ public sealed class UpdateMonitor : BackgroundService
         Write(_path, _state);
         Publish(status);
     }
-    private void Publish(UpdateStatus status) { Write(_noticePath, Notice(status)); _published=status; }
+    private void Publish(UpdateStatus status)
+    {
+        try { Write(_noticePath, Notice(status)); _published = status; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { _log("Update notice could not be written; administration remains available. Check disk space and folder permissions."); }
+    }
     private static void Write<T>(string path, T value)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var json = JsonSerializer.Serialize(value);
         if (File.Exists(path) && File.ReadAllText(path) == json) return;
-        File.WriteAllText(path + ".tmp", json); File.Move(path + ".tmp", path, true);
+        DurableJson.Write(path, value, backup: false);
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

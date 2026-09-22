@@ -63,8 +63,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private readonly string _snapshotDirectory = Path.Combine(AppPaths.DataDirectory, "snapshots");
 
     public int Slot => _settings.Slot;
-    public bool IsPlaying => _player?.IsPlaying == true;
-    public CameraRuntimeStatus Status => _status;
+    public bool OwnsDecoder => _sharedSource is null;
+    public bool IsPlaying => _sharedSource?.IsPlaying ?? (_player?.IsPlaying == true);
+    public CameraRuntimeStatus Status => _sharedSource?.Status ?? _status;
     public event EventHandler? PointerActivity;
     public event EventHandler? FocusRequested;
     public event EventHandler? DiagnosticsRequested;
@@ -76,6 +77,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         get
         {
             if (!DiagnosticsAvailable) return null;
+            if (_sharedSource is not null) return _sharedSource.DiagnosticWarning;
             var frame = FrameWarning(DateTimeOffset.UtcNow);
             if (_status.State is CameraConnectionState.Live or CameraConnectionState.Disabled or CameraConnectionState.NotConfigured) return frame;
             return StateLabel(_status.State) +
@@ -104,7 +106,10 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public CameraTelemetry GetTelemetry()
     {
-        var stats = _player?.Media?.Statistics;
+        if (_sharedSource is not null) return _sharedSource.GetTelemetry() with {
+            Slot = Slot, Name = _settings.Name, Visible = IsVisible, ConfiguredPlayer = false, SharedDecoderSlot = _sharedSource.Slot, CompositedUploads = 0,
+            SnapshotCapturedAt = Interlocked.Read(ref _snapshotCapturedTicks) is var captured && captured > 0 ? new DateTimeOffset(captured, TimeSpan.Zero) : null };
+        var stats = _media?.Statistics;
         var videoTrack = _media?.Tracks.FirstOrDefault(track => track.TrackType == TrackType.Video);
         return new CameraTelemetry
         {
@@ -185,8 +190,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private bool _preserveWholeFrame;
 
-    public void Initialize(LibVLC libVlc, RollingFileLogger logger, CameraSettings settings, bool requestHardwareDecoding, bool compositedVideo = false, bool preserveWholeFrame = false)
+    public void Initialize(LibVLC libVlc, RollingFileLogger logger, CameraSettings settings, bool requestHardwareDecoding, bool compositedVideo = false, bool preserveWholeFrame = false, CameraTile? sharedSource = null)
     {
+        _sharedSource = sharedSource;
         _preserveWholeFrame = preserveWholeFrame;
         _useCompositedOutput = compositedVideo;
         settings = PlaybackSettings(settings);
@@ -212,14 +218,30 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         NameText.Text = settings.Name;
         SlotText.Text = $"Slot {settings.Slot}";
         UpdateRestartButton();
+        if (_sharedSource is not null)
+        {
+            if (!_sharedSource._useCompositedOutput) throw new InvalidOperationException("Shared frames require a composited source.");
+            _sharedSource._frameMirrors.Add(this);
+            _sharedSource._compositedPresenter?.AddMirror(CompositedImage, () => ApplyVideoSizing(null));
+            return;
+        }
         CreatePlayer();
         if (settings.Enabled && !string.IsNullOrWhiteSpace(settings.RtspUrl)) Start(manual: true);
         else SetState(settings.Enabled ? CameraConnectionState.NotConfigured : CameraConnectionState.Disabled);
     }
 
+    public void SetHardwareDecoding(bool requested)
+    {
+        if (_requestHardwareDecoding == requested) return;
+        _requestHardwareDecoding = requested;
+        if (!_useCompositedOutput && _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl))
+            StartPlayer(recreatePlayer: true);
+    }
+
     public void Apply(CameraSettings settings)
     {
         settings = PlaybackSettings(settings);
+        if (_sharedSource is not null) { _settings = settings; NameText.Text = settings.Name; return; }
         // Overlay display-mode changes only affect MainWindow's visibility gate.
         // Keep the existing player, decoded frame and recovery state intact.
         if (_useCompositedOutput && _settings == settings) return;
@@ -267,6 +289,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public (uint Width, uint Height)? GetVideoDimensions()
     {
+        if (_disposed) return null;
+        if (_sharedSource is not null) return _sharedSource.GetVideoDimensions();
         var videoTrack = _media?.Tracks.FirstOrDefault(track => track.TrackType == TrackType.Video);
         if (videoTrack is null || videoTrack.Value.Data.Video.Width == 0 || videoTrack.Value.Data.Video.Height == 0)
             return null;
@@ -369,6 +393,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void Start(bool manual = true)
     {
+        if (_sharedSource is not null) { _sharedSource.Start(manual); return; }
         if (_disposed || _libVlc is null || !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl)) return;
         if (manual)
             _status = _status with { ConsecutiveFailures = 0, NextReconnectAt = null, LastError = null };
@@ -443,7 +468,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private void UpdateRestartButton() => RestartStreamButton.IsEnabled =
         _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);
 
-    private string? FrameWarning(DateTimeOffset now) => !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl) || _pendingNativeStart
+    private string? FrameWarning(DateTimeOffset now) => _sharedSource is not null ? _sharedSource.FrameWarning(now) : !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl) || _pendingNativeStart
         ? null : _activity.Warning(now, _attemptStartedAt);
 
     private void OnDecoderLog(object? sender, LogEventArgs e)
@@ -463,6 +488,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public void Tick()
     {
+        if (_sharedSource is not null) { _status = _sharedSource.Status; ApplyVideoSizing(null); UpdateOverlayPresentation(DateTimeOffset.UtcNow); return; }
         if (_pendingNativeStart) { ResumeNativeStart(); return; }
         if (_disposed || !_settings.Enabled) return;
         if (_videoDisplayWidth > 0 && _videoDisplayHeight > 0)
@@ -558,7 +584,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void ObserveFrameProgress(DateTimeOffset now)
     {
-        var stats = _player?.Media?.Statistics;
+        var stats = _media?.Statistics;
         if (stats is null) return;
         _activity.Observe(stats.Value.DecodedVideo, now);
         _status = _status.WithFrameProgress(_activity.LastFrameAt);
@@ -585,22 +611,25 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         var player = new MediaPlayer(_libVlc) { EnableHardwareDecoding = _requestHardwareDecoding && !_useCompositedOutput };
         _player = player;
         if (_useCompositedOutput)
+        {
             _compositedPresenter = new CompositedVideoPresenter(player, CompositedImage, () => ApplyVideoSizing(player));
+            foreach (var mirror in _frameMirrors) _compositedPresenter.AddMirror(mirror.CompositedImage, () => mirror.ApplyVideoSizing(null));
+        }
         else VideoView.MediaPlayer = player;
         _lastSizingSourceWidth = 0;
         _lastSizingSourceHeight = 0;
         _nativeVideoLayoutConfirmed = false;
         ApplyVideoSizing(player);
-        player.Opening += (_, _) => { if (ReferenceEquals(_player, player)) SetState(CameraConnectionState.Connecting); };
+        player.Opening += (_, _) => { if (!_disposed && ReferenceEquals(_player, player)) SetState(CameraConnectionState.Connecting); };
         player.Buffering += (_, e) =>
         {
-            if (!ReferenceEquals(_player, player)) return;
+            if (_disposed || !ReferenceEquals(_player, player)) return;
             if (e.Cache >= 99.5f && player.IsPlaying) SetState(CameraConnectionState.Live);
             else SetState(CameraConnectionState.Buffering, $"Buffering {e.Cache:0}%");
         };
         player.Playing += (_, _) =>
         {
-            if (!ReferenceEquals(_player, player)) return;
+            if (_disposed || !ReferenceEquals(_player, player)) return;
             var now = DateTimeOffset.UtcNow;
             _healthySince = now;
             _status = _status with { State = CameraConnectionState.Live, ConnectedAt = now, NextReconnectAt = null };
@@ -611,8 +640,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             var effectiveOptions = string.Join(' ', _settings.ToMediaOptions().Where(option => option.StartsWith(":rtsp-", StringComparison.Ordinal) || option.StartsWith(":network-caching=", StringComparison.Ordinal)));
             _logger?.Write("INFO", $"Camera {_settings.Slot} connected: {RtspUrlSanitizer.Redact(_settings.RtspUrl)}; transport={_settings.EffectiveTransport}; cache={_settings.EffectiveNetworkCacheMilliseconds} ms; lowLatency={_settings.EffectiveLowLatency}; videoOutput={(_useCompositedOutput ? "WPF frames / software decode" : "default")}; mediaOptions=[{effectiveOptions}]");
         };
-        player.EndReached += (_, _) => { if (ReferenceEquals(_player, player)) ScheduleRecovery("Stream ended"); };
-        player.EncounteredError += (_, _) => { if (ReferenceEquals(_player, player)) ScheduleRecovery("LibVLC reported a decoder or stream error"); };
+        player.EndReached += (_, _) => { if (!_disposed && ReferenceEquals(_player, player)) ScheduleRecovery("Stream ended"); };
+        player.EncounteredError += (_, _) => { if (!_disposed && ReferenceEquals(_player, player)) ScheduleRecovery("LibVLC reported a decoder or stream error"); };
     }
 
     private string? _wallSizing;
@@ -630,16 +659,17 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private void ApplyVideoSizing(MediaPlayer? player)
     {
-        if (player is null) return;
-        player.Scale = 0;
+        if (_disposed || (player is not null && !ReferenceEquals(player, _player))) return;
+        if (player is null && _sharedSource is null) return;
+        if (player is not null && !_useCompositedOutput) player.Scale = 0;
         if (_wallSizing is not null)
         {
             _videoDisplayWidth = Math.Max(1, (int)VideoView.ActualWidth);
             _videoDisplayHeight = Math.Max(1, (int)VideoView.ActualHeight);
         }
         var desiredAspect = _wallSizing == "stretch" ? $"{_videoDisplayWidth}:{_videoDisplayHeight}" : null;
-        if ((player.AspectRatio ?? "") != (desiredAspect ?? "")) player.AspectRatio = desiredAspect;
-        if (!string.IsNullOrEmpty(player.CropGeometry)) player.CropGeometry = string.Empty;
+        if (player is not null && !_useCompositedOutput && (player.AspectRatio ?? "") != (desiredAspect ?? "")) player.AspectRatio = desiredAspect;
+        if (player is not null && !_useCompositedOutput && !string.IsNullOrEmpty(player.CropGeometry)) player.CropGeometry = string.Empty;
         var dimensions = GetVideoDimensions();
         if (dimensions is not { } source)
             return;
@@ -752,9 +782,9 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
                 // A native player that has reported an error may block indefinitely
                 // in Stop(). Replaying it does not require waiting for Stop; after
                 // escalation, release the poisoned instance independently.
-                if (!recoveringFromFailure) oldPlayer?.Stop();
+                if (!recoveringFromFailure && oldPlayer is not null) lock (oldPlayer) oldPlayer.Stop();
                 oldMedia?.Dispose();
-                if (recreatePlayer) _ = Task.Run(() => { oldPlayer?.Dispose(); oldPresenter?.Dispose(); });
+                if (recreatePlayer) _ = Task.Run(() => { if (oldPlayer is not null) lock (oldPlayer) oldPlayer.Dispose(); oldPresenter?.Dispose(); });
                 if (newPlayer is not null && !_useCompositedOutput)
                 {
                     newPlayer.Hwnd = playbackHandle;
@@ -774,6 +804,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     public Task<bool> RefreshSnapshotAsync()
     {
+        if (_sharedSource is not null) return RefreshSharedSnapshotAsync();
         var player = _player;
         return player is null
             ? Task.FromResult(false)
@@ -793,16 +824,39 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
                     ? TimeSpan.FromSeconds(attempt == 1 ? 2 : 3)
                     : TimeSpan.FromMilliseconds(attempt == 1 ? 0 : 350);
                 if (delay > TimeSpan.Zero) await Task.Delay(delay);
-                if (_disposed || generation != _playGeneration || !ReferenceEquals(_player, player) || !player.IsPlaying) return false;
-                if (player.Media?.Statistics is { } statistics && statistics.DecodedVideo == 0) continue;
                 var attemptPath = Path.Combine(_snapshotDirectory, $"camera-{_settings.Slot}-{Guid.NewGuid():N}.jpg");
                 temporaryPath = attemptPath;
-                // Keep one dimension at zero so LibVLC preserves the source aspect ratio.
-                if (!player.TakeSnapshot(0, attemptPath, 320, 0))
+                // Snapshot requests can resume on worker threads. Serialize native calls
+                // with release so a successful lifetime check cannot race player disposal.
+                if (_useCompositedOutput)
                 {
-                    DeleteTemporarySnapshot(attemptPath);
-                    temporaryPath = null;
-                    continue;
+                    if (_disposed || generation != _playGeneration || !ReferenceEquals(_player, player)) return false;
+                    var frame = _compositedPresenter is { } presenter ? await presenter.CaptureFrameAsync() : null;
+                    if (frame is null) continue;
+                    await Task.Run(() =>
+                    {
+                        var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+                        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(frame));
+                        using var output = File.Create(attemptPath);
+                        encoder.Save(output);
+                    });
+                }
+                else
+                {
+                    if (!Monitor.TryEnter(player)) continue;
+                    try
+                    {
+                        if (_disposed || generation != _playGeneration || !ReferenceEquals(_player, player) || !player.IsPlaying) return false;
+                        using var snapshotMedia = player.Media;
+                        if (snapshotMedia?.Statistics is { } statistics && statistics.DecodedVideo == 0) continue;
+                        if (!player.TakeSnapshot(0, attemptPath, 320, 0))
+                        {
+                            DeleteTemporarySnapshot(attemptPath);
+                            temporaryPath = null;
+                            continue;
+                        }
+                    }
+                    finally { Monitor.Exit(player); }
                 }
                 for (var check = 0; check < 20; check++)
                 {
@@ -875,7 +929,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         var player = _player;
         var media = _media;
         _media = null;
-        QueuePlayerOperation(() => { player?.Stop(); media?.Dispose(); });
+        QueuePlayerOperation(() => { if (player is not null) lock (player) player.Stop(); media?.Dispose(); });
         _status = _status with { State = state, NextReconnectAt = null };
         SetState(state);
     }
@@ -895,13 +949,19 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _ => state.ToString() + (state is CameraConnectionState.Connecting or CameraConnectionState.Reconnecting ? "…" : string.Empty)
     };
 
-    private void SetOverlay(string text, bool showCenter) => Dispatcher.Invoke(() =>
+    private void SetOverlay(string text, bool showCenter)
     {
-        DetailsText.Text = text;
-        StateText.Text = text;
-        StateText.Visibility = showCenter && !SharedDiagnostics ? Visibility.Visible : Visibility.Collapsed;
-        SlotText.Visibility = showCenter && !SharedDiagnostics ? Visibility.Visible : Visibility.Collapsed;
-    });
+        void Update()
+        {
+            if (_disposed) return;
+            DetailsText.Text = text;
+            StateText.Text = text;
+            StateText.Visibility = showCenter && !SharedDiagnostics ? Visibility.Visible : Visibility.Collapsed;
+            SlotText.Visibility = showCenter && !SharedDiagnostics ? Visibility.Visible : Visibility.Collapsed;
+        }
+        if (Dispatcher.CheckAccess()) Update();
+        else Dispatcher.BeginInvoke(Update);
+    }
 
     private void QueuePlayerOperation(Action operation)
     {
@@ -913,6 +973,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     {
         if (_disposed) return;
         _disposed = true;
+        foreach (var mirror in _frameMirrors.ToArray()) mirror.CompositedImage.Source = null;
+        if (_sharedSource is not null) { _sharedSource._frameMirrors.Remove(this); _sharedSource._compositedPresenter?.RemoveMirror(CompositedImage); CompositedImage.Source = null; return; }
         _backgroundSource?.RemoveHook(ColorNativeVideoBackground);
         _backgroundSource = null;
         var presenter = _compositedPresenter;
@@ -920,7 +982,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         var player = _player;
         var media = _media;
         var engine = _libVlc;
-        QueuePlayerOperation(() => { player?.Stop(); media?.Dispose(); player?.Dispose(); presenter?.Dispose(); if (_ownsEngine) engine?.Dispose(); });
+        _player = null; _media = null;
+        QueuePlayerOperation(() => { if (player is not null) lock (player) { player.Stop(); player.Dispose(); } media?.Dispose(); presenter?.Dispose(); if (_ownsEngine) engine?.Dispose(); });
         try { _playerOperation.Wait(TimeSpan.FromSeconds(5)); } catch (AggregateException) { }
     }
 }

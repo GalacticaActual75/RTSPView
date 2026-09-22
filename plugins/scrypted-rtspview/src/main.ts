@@ -6,7 +6,7 @@ import { Broker, brokerFromSettings, controllerAddress, detectionTopic, freshDet
 class Connector extends ScryptedDeviceBase implements Settings {
   private client?: MqttClient;
   private listeners: EventListenerRegister[] = [];
-  private status = 'Not paired. Create a code in RTSPView → System → Network & security.';
+  private status = 'Not paired. Create a code in RTSPView → Settings → Network & security.';
   private queue: Promise<unknown> = Promise.resolve();
   constructor() {
     super();

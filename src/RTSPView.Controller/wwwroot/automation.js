@@ -267,9 +267,9 @@ const automationUi = (() => {
       const status = await api('/api/automation/status');
       const {presentation} = await api('/api/automation/presentation');
       automationPresentation.activity(form, status);
-      const problem = status.configurationError || (status.delivery?.success === false && savedEnabled ? automationPresentation.delivery(status.delivery) + ' Check Live View in Quick actions.' : '');
-      automationPresentation.status(connection, 'MQTT: ' + status.connection + (problem ? ' · ' + problem : ' · ' + (status.connection==='Disabled'?'Integration disabled · enable MQTT and Save & apply to activate rules':status.lastResult || 'Waiting for person events')), problem || status.connection === 'Error' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
-      connection.title = status.lastResult || '';
+      const summary = automationPresentation.mqttConnection(status, savedEnabled);
+      automationPresentation.status(connection, summary.text, summary.tone);
+      connection.title = summary.text;
       for (const card of rules.children) {
         const state = status.rules.find(r => r.id === card.dataset.id), remaining = state?.expiresAt ? Math.max(0, Math.ceil((new Date(state.expiresAt) - Date.now()) / 1000)) : 0;
         const condition = state?.error ? 'Invalid rule · ' + state.error : !savedEnabled ? 'Automation disabled' : !state ? 'Not saved / status pending' : !state.enabled ? 'Rule disabled' : remaining ? 'Detection active · expires in ' + remaining + 's' : 'Waiting for detection';

@@ -39,6 +39,7 @@ internal static class Program
                 await StreamTelemetryChecks.Run(nativeBackground: true);
                 await StreamTelemetryChecks.Run();
                 await StreamTelemetryChecks.Run(preserveWholeFrame: true);
+                await SharedFrameChecks.Run();
                 WallDiagnosticsChecks.Run();
                 await UpdateBadgeChecks.Run(window);
                 result = 0;

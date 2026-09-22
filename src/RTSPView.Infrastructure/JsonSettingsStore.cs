@@ -16,7 +16,7 @@ public sealed class JsonSettingsStore
 
     private async Task<AppSettings> LoadCoreAsync(CancellationToken cancellationToken, bool writeLockHeld)
     {
-        if (!File.Exists(_path)) return new AppSettings { StorageRevision = "" };
+        if (!File.Exists(_path) && !File.Exists(BackupPath)) return new AppSettings { StorageRevision = "" };
         try
         {
             return await ReadAndValidateAsync(_path, cancellationToken);
@@ -32,7 +32,10 @@ public sealed class JsonSettingsStore
             if (!File.Exists(BackupPath)) throw new InvalidDataException("The configuration and its backup are unavailable or invalid.", exception);
             var recovered = await ReadAndValidateAsync(BackupPath, cancellationToken);
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.Copy(BackupPath, _path, true);
+            DurableJson.PreserveInvalid(_path);
+            var recovery = _path + ".recovery-" + Guid.NewGuid().ToString("N");
+            try { File.Copy(BackupPath, recovery); File.Move(recovery, _path, true); }
+            finally { if (File.Exists(recovery)) File.Delete(recovery); }
             return recovered;
         }
     }
@@ -220,7 +223,9 @@ public sealed class JsonSettingsStore
         var bytes = buffer.ToArray();
         var settings = JsonSerializer.Deserialize<AppSettings>(bytes, JsonOptions)
             ?? throw new InvalidDataException("Configuration is empty.");
-        return Validate(settings) with { StorageRevision = Revision(bytes) };
+        try { return Validate(settings) with { StorageRevision = Revision(bytes) }; }
+        catch (Exception error) when (error is NullReferenceException or ArgumentException)
+        { throw new InvalidDataException("Configuration contains invalid nested values.", error); }
     }
 
     private static AppSettings Validate(AppSettings settings)

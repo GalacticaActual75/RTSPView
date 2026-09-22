@@ -77,7 +77,7 @@ const dashboardUX = (() => {
   function health(t) {
     let cost=document.querySelector('#decoderCost');if(!cost){cost=document.createElement('p');cost.id='decoderCost';document.querySelector('#stats').after(cost);}
     const players=(t.viewer?.cameras||[]).filter(c=>c.configuredPlayer),hidden=players.filter(c=>!c.visible);
-    cost.textContent=t.viewerConnected?players.length+' configured video players · '+hidden.length+' hidden but kept ready · '+players.filter(c=>c.slot>=33).length+' original overlay-source players. Hidden composited video skips frame uploads; decoding and network traffic continue.':'Video player counts unavailable while Viewer is disconnected.';
+    cost.textContent=t.viewerConnected?players.length+' configured video players · '+hidden.length+' hidden but kept ready · '+(t.viewer?.cameras||[]).filter(c=>c.sharedDecoderSlot!=null).length+' original-source views sharing an overlay decoder. Hidden composited video skips uploads when all its views are hidden; decoding and network traffic continue.':'Video player counts unavailable while Viewer is disconnected.';
     for(const image of document.querySelectorAll('img[data-blob-url]'))caption(image);
   }
   function preview(form) {

@@ -38,7 +38,7 @@ public sealed class ViewerCommandClient
         var gate = snapshot ? _snapshotGate : _gate;
         var entered = false;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(command.Type is ViewerCommandType.AutomationOverlays or ViewerCommandType.SensorAutomation ? 1 : 8));
+        timeout.CancelAfter(TimeSpan.FromSeconds(command.Type is ViewerCommandType.AutomationOverlays or ViewerCommandType.SensorAutomation or ViewerCommandType.Ping ? 1 : 8));
         try
         {
             await gate.WaitAsync(timeout.Token);

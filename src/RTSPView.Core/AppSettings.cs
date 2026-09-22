@@ -29,6 +29,7 @@ public sealed record AppSettings
     public bool RequestHardwareDecoding { get; init; } = true;
     public bool StartFullScreen { get; init; } = true;
     public int PreferredMonitor { get; init; }
+    public string PreferredMonitorDevice { get; init; } = "";
     public bool HideMouseCursor { get; init; } = true;
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;
@@ -117,6 +118,7 @@ public sealed record AppSettings
                 .Select((item, index) => NormalizeOverlay(item ?? new(), index + 12, $"Overlay {index + 3}", normalized)).ToArray(),
             StartFullScreen = SchemaVersion < 3 || StartFullScreen,
             PreferredMonitor = Math.Max(0, PreferredMonitor),
+            PreferredMonitorDevice = (PreferredMonitorDevice ?? "").Trim()[..Math.Min((PreferredMonitorDevice ?? "").Trim().Length, 128)],
             MouseCursorHideSeconds = Math.Clamp(MouseCursorHideSeconds, 1, 30)
         };
     }
@@ -264,8 +266,10 @@ public sealed record DoorbellOverlaySettings
 
 public sealed record DisplaySettings
 {
+    public bool? RequestHardwareDecoding { get; init; }
     public bool StartFullScreen { get; init; } = true;
     public int PreferredMonitor { get; init; }
+    public string PreferredMonitorDevice { get; init; } = "";
     public bool HideMouseCursor { get; init; } = true;
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using RTSPView.Core;
+using RTSPView.Infrastructure;
 
 namespace RTSPView.Controller;
 
@@ -71,6 +72,7 @@ public sealed class RestartScheduler : BackgroundService
             }
             catch (Exception error) when (error is IOException or JsonException or ArgumentException or InvalidDataException or UnauthorizedAccessException)
             {
+                DurableJson.PreserveInvalid(_path);
                 const string message = "Schedules could not be read; automatic restarts are disabled. Save settings to recover.";
                 _schedules = new() { Viewer = new() { Result = message }, Host = new() { Settings = new() { Action = "host" }, Result = message } };
                 _log(message);
@@ -209,10 +211,7 @@ public sealed class RestartScheduler : BackgroundService
     {
         var schedules = Replace(state);
         if (select) schedules = schedules with { SelectedAction = state.Settings.Action };
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        var temp = _path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(schedules));
-        File.Move(temp, _path, true);
+        DurableJson.Write(_path, schedules);
         _schedules = schedules;
     }
 

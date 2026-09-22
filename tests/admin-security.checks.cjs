@@ -57,6 +57,15 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore initial layouts');
   assert.equal((await request(a,'/api/display','PUT',{...config,diagnosticsAutoOpenExcludedSlots:[1,17]})).status,200);
   assert.deepEqual((await request(a,'/api/config')).json.diagnosticsAutoOpenExcludedSlots,[1,17],'diagnostics exclusions persist');
+  assert.equal((await request(a,'/api/display','PUT',{...config,preferredMonitor:1,preferredMonitorDevice:'\\\\.\\DISPLAY2',requestHardwareDecoding:false,showCameraStats:false})).status,200);
+  const displaySaved=(await request(a,'/api/config')).json;
+  assert.equal(displaySaved.preferredMonitorDevice,'\\\\.\\DISPLAY2','named display persists');
+  assert.equal(displaySaved.requestHardwareDecoding,false,'global hardware decoding preference persists');
+  assert.equal(displaySaved.showCameraStats,false,'Diagnostics statistics preference persists');
+  const {requestHardwareDecoding: ignoredHardware, ...legacyDisplay}=displaySaved;
+  assert.equal((await request(a,'/api/display','PUT',legacyDisplay)).status,200);
+  assert.equal((await request(a,'/api/config')).json.requestHardwareDecoding,false,'legacy save preserves hardware preference');
+  assert.equal((await request(a,'/api/display','PUT',config)).status,200);
   const addedStream=(await request(a,'/api/cameras','POST')).json;
   assert.equal((await request(a,'/api/cameras/'+addedStream.slot,'DELETE')).status,200,'stream deletes');
   const afterDeletion=(await request(a,'/api/config')).json;assert(afterDeletion.deletedCameraSlots.includes(addedStream.slot));

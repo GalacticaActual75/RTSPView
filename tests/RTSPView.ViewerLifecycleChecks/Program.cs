@@ -2,12 +2,27 @@ using RTSPView.Controller;
 using RTSPView.Core;
 using RTSPView.Infrastructure;
 
+// Child processes used only by the restart handoff regression.
+var restartMarker = Environment.GetEnvironmentVariable("RTSPVIEW_RESTART_TEST_MARKER");
+if (restartMarker is not null && (args.Contains("--restart-fixture-parent") || args.Contains("--respect-viewer-pause")))
+{
+    using var instance = new Mutex(false, "Local\\RTSPView.RestartFixture." + Path.GetFileName(restartMarker));
+    if (!instance.WaitOne(0)) return;
+    try
+    {
+        if (args.Contains("--restart-fixture-parent")) { File.WriteAllText(restartMarker + ".ready", "ready"); Thread.Sleep(4000); }
+        else File.AppendAllText(restartMarker, "started\n");
+    }
+    finally { instance.ReleaseMutex(); }
+    return;
+}
 var directory = Path.Combine(Path.GetTempPath(), "RTSPView-lifecycle-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(directory);
 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 try
 {
     await CommandIsolationChecks.Run();
+    await ViewerRestartChecks.Run();
     var state = new ViewerRuntimeState(directory);
     var otherProcess = new ViewerRuntimeState(directory);
     state.Pause();

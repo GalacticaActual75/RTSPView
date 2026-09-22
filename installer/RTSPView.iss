@@ -130,6 +130,8 @@ begin
     Result := 'Wait for PawnIO maintenance to finish, then retry installing RTSPView.';
     exit;
   end;
+  { Stop the supervisor before replacing either executable. }
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/End /TN "SpotMonitor Camera Wall"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM SpotMonitor.Controller.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM SpotMonitor.Viewer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(500);
