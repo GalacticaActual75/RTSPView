@@ -8,26 +8,33 @@ RTSPView is intended to be used alongside Scrypted, displaying its rebroadcast R
 
 ## Current release
 
-**[Download Stable 1.0.44](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44)** for Windows 10/11 x64. This release promotes all features and fixes from 1.0.44-beta.8, including automation reliability improvements and linked overlay sources.
+**[Download Stable 1.0.45](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45)** for Windows 10/11 x64. This release promotes all features and fixes from 1.0.45-beta.4, including native weather tiles, Weather Widgets and LAN HTTP layout fixes.
 
 | Channel | Release | Use |
 | --- | --- | --- |
-| Stable | [1.0.44](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44) | Recommended release; includes the current beta features. |
-| Beta | [1.0.44-beta.8](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.44-beta.8) | Previous prerelease, now promoted to Stable 1.0.44. |
+| Stable | [1.0.45](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45) | Recommended release; includes the current beta features. |
+| Beta | [1.0.45-beta.4](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.45-beta.4) | Previous prerelease, now promoted to Stable 1.0.45. |
 
 Choose the channel under **Settings → Updates**. Changing channels does not install anything automatically. To install this release, select Stable, check for updates and confirm installation. Hosts on Beta remain on that channel until switched. See [all releases](https://github.com/GalacticaActual75/RTSPView/releases) for installers, checksums and version-specific notes.
 
-### What's new in 1.0.44
+### What's new in 1.0.45
 
-- Direct Tapo H100/H200 hub discovery and T110 door-sensor automations, without Home Assistant or MQTT.
-- A shared priority list for MQTT and Tapo, compact rule editors, protected drafts and viewer-reported priority status.
-- Persistent automation activity, rolling backups and recovery for interrupted priority saves and configuration imports.
-- MQTT and Tapo rules included in normal web configuration export/import, with passwords excluded.
-- Custom overlays that follow host-camera framing, refreshed stream/layout choices and separate Restart Live View / Restart Application controls.
-- Floating feedback and Buy me a coffee buttons at the bottom left of every administration page.
-- Reuse an existing main stream as an overlay source, with automatic connection updates and independent overlay framing.
+- Native weather tiles and **Weather Widgets** over cameras, with no required API key.
+- Choose a location, units, information fields, display preset, colors, opacity, text size and position.
+- Weather editor toggles/sliders and labeled layout placeholders; Minimal widgets retain selected high/low values.
+- **Add weather** offers overlay or tile replacement choices when a grid is full. Creation works over ordinary LAN HTTP.
+- The stream overlay feature is now named **Picture in picture**. Weather Widgets remain in **Layouts**.
+- All stable 1.0.44 camera, automation, Tapo, restart and update features are retained.
 
-See the [1.0.44 release notes](docs/releases/1.0.44.md) and [Tapo setup guide](docs/tapo-automation.md) for details. Physical Tapo H100/H200/T110 validation remains pending; firmware compatibility can vary. The separate [Scrypted connector](plugins/scrypted-rtspview/README.md) remains a beta component.
+See the [1.0.45 release notes](docs/releases/1.0.45.md) and [Tapo setup guide](docs/tapo-automation.md) for details. Physical Tapo H100/H200/T110 validation remains pending; firmware compatibility can vary. The separate [Scrypted connector](plugins/scrypted-rtspview/README.md) remains a beta component.
+
+### Weather
+
+In **Layouts**, choose **Add weather** for a dedicated tile, or select a camera and choose **Weather Widget**. Pick a city or enter coordinates, customize the display, then use **Apply widget** (or apply the layout for a tile). Widgets use Open-Meteo, share cached readings, and do not create another video player. Weather is off until configured.
+
+Weather tiles are supported in standard layouts; one Weather Widget can be attached to each main camera. Up to 32 distinct locations can be saved. Official severe-weather alerts and backdrop blur are not included. Small cards omit details that cannot fit.
+
+Weather uses settings schema 16. On the first settings save after upgrading from 1.0.44, the original settings are kept as `settings.json.before-weather.json`. To downgrade, stop RTSPView and restore that file as `settings.json` before using the older release. Normal configuration exports include weather settings. [Weather data and attribution](https://open-meteo.com/).
 
 ### Find a setting
 
@@ -36,7 +43,8 @@ See the [1.0.44 release notes](docs/releases/1.0.44.md) and [Tapo setup guide](d
 | View snapshots and stream health | Monitor |
 | Add or edit RTSP sources | Streams |
 | Edit the normal wall or automation templates | Layouts → Standard View layouts / Automation layouts |
-| Configure picture-in-picture streams and appearance | Overlays |
+| Configure picture-in-picture streams and appearance | Picture in picture |
+| Add a weather tile or Weather Widget | Layouts → Add weather / select a camera → Weather Widget |
 | Configure person detections or door sensors | Automation → MQTT / Tapo |
 | Set the order of competing rules | Automation → Automation Priority |
 | Set fullscreen, monitor and display preferences | Settings → Display |
@@ -108,8 +116,8 @@ Viewer must be running to display overlays. Automation is disabled by default.
    settings. These are broker credentials, separate from the Scrypted web login.
    TLS validates the host certificate using Windows trust. Each Controller needs
    a unique **Client ID** under Advanced connection settings.
-3. For **Show overlay**, configure the target stream and appearance in **Overlays**. Choose
-   **Display mode → Automation only**, then **Save overlay**. This hides an already
+3. For **Show overlay**, configure the target stream and appearance in **Picture in picture**. Choose
+   **Display mode → Automation only**, then **Save picture in picture**. This hides an already
    visible overlay while waiting for a trigger. **Always visible** keeps it visible
    when automation clears. Linked rule names and an **Open Automation** button are
    shown beneath the display mode. Existing enabled overlays stay Always visible
@@ -397,7 +405,7 @@ These controls are included in Stable 1.0.43. Both **Standard View layouts** and
 
 ### Redesigned workspaces
 
-Version 1.0.43 replaces Overview with a dedicated **Monitor** snapshot board and saved-layout switcher. **Streams** has search and a focused editing drawer; closing the drawer keeps its draft until saved or discarded. **Overlays** has Position, Appearance, Shape, Image and Connection inspectors, with one shape editor for presets, drawing and SVG import. **Settings** groups Display, Network & security, Updates, Backups, Maintenance, Diagnostics and About. The Windows viewer has a simpler toolbar and a separate stream editor.
+Version 1.0.43 replaces Overview with a dedicated **Monitor** snapshot board and saved-layout switcher. **Streams** has search and a focused editing drawer; closing the drawer keeps its draft until saved or discarded. **Picture in picture** has Position, Appearance, Shape, Image and Connection inspectors, with one shape editor for presets, drawing and SVG import. **Settings** groups Display, Network & security, Updates, Backups, Maintenance, Diagnostics and About. The Windows viewer has a simpler toolbar and a separate stream editor.
 
 ### Canvas settings
 
@@ -455,7 +463,7 @@ Picture-in-picture overlays belong to the viewer and track their host tiles. The
 
 ## Picture-in-picture overlays
 
-Open **Overlays**, select Doorbell or Garage, or use **+** to add another overlay. Under **Connection → Video source**, choose an existing main stream or **Own RTSP URL**. An existing source follows its saved URL and connection settings automatically; you do not need to enter the connection twice. The same URL is also allowed in separate stream entries. Each overlay keeps its own name, display mode, shape, zoom, pan, position and opacity. Changing overlay framing never changes the source's main tile. Playback uses a separate player and may open another camera connection.
+Open **Picture in picture**, select Doorbell or Garage, or use **+** to add another overlay. Under **Connection → Video source**, choose an existing main stream or **Own RTSP URL**. An existing source follows its saved URL and connection settings automatically; you do not need to enter the connection twice. The same URL is also allowed in separate stream entries. Each overlay keeps its own name, display mode, shape, zoom, pan, position and opacity. Changing overlay framing never changes the source's main tile. Playback uses a separate player and may open another camera connection.
 
 Choose the host tile under **Position → Show over**, adjust the preview and save. **Always visible** displays the overlay whenever its host is on the wall; **Automation only** lets rules show it. The Doorbell label does not imply an automatic doorbell-press trigger. Linked sources are included in configuration exports. Before deleting a linked main stream, select another video source or switch its overlays to **Own RTSP URL** and save.
 
