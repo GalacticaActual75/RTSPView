@@ -62,19 +62,19 @@ const weatherUi = (() => {
   setInterval(()=>{if(polling&&document.visibilityState==='visible')refresh();},60000);
   function editor(initial,onSave,overlay=null,backgroundSlot=null){
     let o={...defaults(),...structuredClone(initial)},placement=overlay?structuredClone(overlay):null;
-    const dialog=el('dialog',undefined,'weather-editor'),form=el('form'),title=el('h2',overlay?'Weather overlay':'Weather tile');dialog.append(form);form.append(title);
+    const dialog=el('dialog',undefined,'weather-editor'),form=el('form'),title=el('h2',overlay?'Weather Widget':'Weather tile');dialog.append(form);form.append(title);
     const body=el('div',undefined,'weather-editor-body'),left=el('section'),controls=el('section');body.append(left,controls);form.append(body);
     const stage=el('div',undefined,'weather-editor-preview');if(placement)stage.style.aspectRatio='16/9';left.append(stage);
     if(backgroundSlot){const img=el('img');img.alt='Camera snapshot';dashboardUX.snapshot(img,backgroundSlot);stage.append(img);}
     const previewHost=el('div',undefined,'weather-preview-host');stage.append(previewHost);
     const previewNote=el('p','Preview uses sample weather until this location has been saved and fetched.','weather-note');left.append(previewNote);
-    left.append(el('p','Small displays omit details that do not fit. The camera keeps playing behind an overlay.','weather-note'));
+    left.append(el('p','Small displays omit details that do not fit. The camera keeps playing behind a widget.','weather-note'));
     const state=el('p','','weather-editor-state');state.setAttribute('role','status');
     function paint(){previewHost.replaceChildren(preview(o,true));if(placement){previewHost.style.visibility=placement.enabled?'visible':'hidden';previewHost.querySelector('.weather-sample')?.remove();const scale=stage.clientWidth/640,b=overlayBounds({...placement,weather:o},640,360);Object.assign(previewHost.style,{position:'absolute',width:b.width+'px',height:b.height+'px',left:b.left*scale+'px',top:b.top*scale+'px',transformOrigin:'top left',transform:'scale('+scale+')'});}previewNote.textContent=snapshots.some(s=>s.key===key(o))?'Cached weather preview · '+o.location:'Sample weather preview · save to fetch your location';}
     const field=(label,input,parent=controls)=>{input.setAttribute('aria-label',label);const wrap=el('label',label);if(input.type==='checkbox'){wrap.className='weather-toggle';const track=el('span',undefined,'switch');input.setAttribute('role','switch');track.append(input,el('span'));wrap.append(track);}else if(input.type==='range'){const output=el('output',input.value);const update=input.oninput;input.oninput=()=>{output.textContent=input.value;update?.();};wrap.append(output,input);}else wrap.append(input);parent.append(wrap);return input;};
     const btn=(label,action,parent=controls)=>{const b=el('button',label,'secondary');b.type='button';b.onclick=action;parent.append(b);return b;};
     const input=(label,name,type='text',parent=controls,min,max)=>{const n=el('input');n.type=type;n.value=o[name]??'';if(min!==undefined)n.min=min;if(max!==undefined)n.max=max;n.oninput=()=>{o[name]=['number','range'].includes(type)?(n.value===''?null:Number(n.value)):n.value;paint();};return field(label,n,parent);};
-    if(placement){const enabled=el('input');enabled.type='checkbox';enabled.checked=placement.enabled;enabled.onchange=()=>{placement.enabled=enabled.checked;paint();};field('Enable weather overlay',enabled);}
+    if(placement){const enabled=el('input');enabled.type='checkbox';enabled.checked=placement.enabled;enabled.onchange=()=>{placement.enabled=enabled.checked;paint();};field('Enable Weather Widget',enabled);}
     const search=el('input');search.type='search';search.placeholder='City or postal code';field('Find your location',search);const results=el('div',undefined,'weather-search-results');controls.append(results);
     let searchSequence=0;
     btn('Search',async()=>{const sequence=++searchSequence;state.textContent='Searching…';try{const data=await api('/api/weather/search?q='+encodeURIComponent(search.value));if(sequence!==searchSequence||!dialog.isConnected)return;results.replaceChildren();for(const hit of data.results||[])btn([hit.name,hit.admin1,hit.country].filter(Boolean).join(', '),()=>{Object.assign(o,{location:hit.name,latitude:hit.latitude,longitude:hit.longitude,timeZone:hit.timezone||'auto'});name.value=o.location;latitude.value=o.latitude;longitude.value=o.longitude;results.replaceChildren();paint();},results);state.textContent=(data.results||[]).length?'Choose a location.':'No matches. Try a nearby city or coordinates.';}catch(e){state.textContent=e.message;}});
@@ -83,7 +83,7 @@ const weatherUi = (() => {
     const latitude=input('Latitude','latitude','number',coords,-90,90),longitude=input('Longitude','longitude','number',coords,-180,180);latitude.step=longitude.step='any';
     const select=(label,name,choices,parent=controls)=>{const n=el('select');choices.forEach(([value,text])=>n.add(new Option(text,value)));n.value=o[name];n.onchange=()=>{o[name]=n.value;paint();};field(label,n,parent);return n;};
     select('Units','units',[['imperial','Fahrenheit · mph'],['metric','Celsius · km/h']]);
-    const preset=select('Style','preset',Object.keys(presets).map(k=>[k,k[0].toUpperCase()+k.slice(1)]));
+    const preset=select('Style','preset',Object.keys(presets).map(k=>[k,k==='overlay'?'Widget':k[0].toUpperCase()+k.slice(1)]));
     const fields=el('details');fields.append(el('summary','Choose weather information'));controls.append(fields);
     function fieldsUi(){for(const n of [...fields.children].slice(1))n.remove();for(const [id,label] of Object.entries(labels)){const check=el('input');check.type='checkbox';check.checked=o.fields.includes(id);check.onchange=()=>{o.fields=check.checked?[...o.fields,id]:o.fields.filter(f=>f!==id);paint();};field(label,check,fields);}}
     preset.onchange=()=>{o.preset=preset.value;o.fields=[...presets[o.preset]];fieldsUi();paint();};fieldsUi();
@@ -98,7 +98,7 @@ const weatherUi = (() => {
     }
     controls.append(el('p','Location coordinates are sent to Open-Meteo. No account or API key is required.','weather-note'));
     const actions=el('div',undefined,'weather-editor-actions');form.append(state,actions);btn('Cancel',()=>dialog.close(),actions);
-    const save=el('button',overlay?'Apply overlay':'Use in layout draft');save.type='submit';actions.append(save);
+    const save=el('button',overlay?'Apply widget':'Use in layout draft');save.type='submit';actions.append(save);
     form.onsubmit=async e=>{e.preventDefault();if(!o.location.trim()){name.reportValidity();return;}if(!Number.isFinite(o.latitude)||!Number.isFinite(o.longitude)){state.textContent='Choose a search result or enter both coordinates.';return;}save.disabled=true;try{await onSave(o,placement?{...placement,weather:o}:null);dialog.close();}catch(error){state.textContent=error.message;}finally{save.disabled=false;}};
     const resize=new ResizeObserver(paint);resize.observe(stage);dialog.onclose=()=>{resize.disconnect();dialog.remove();};document.body.append(dialog);dialog.showModal();paint();search.focus();refresh().then(()=>{if(dialog.isConnected)paint();});
   }

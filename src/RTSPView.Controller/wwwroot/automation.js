@@ -24,7 +24,7 @@ const automationUi = (() => {
       </fieldset><fieldset class="automation-fields automation-rule-list"><legend>Your rules</legend>
       <p class="rules-intro">Open a rule to edit it, or add a new one.</p>
       <div class="automation-rules"></div><button type="button" class="secondary automation-add">Add rule</button>
-      <details class="automation-help"><summary>How rules behave</summary><p>Choose <b>Automation only</b> as the target’s Display mode in Stream Overlays to hide it while waiting. Always visible overlays remain on screen after a rule clears.</p>
+      <details class="automation-help"><summary>How rules behave</summary><p>Choose <b>Automation only</b> as the target’s Display mode in Picture in picture to hide it while waiting. Always visible overlays remain on screen after a rule clears.</p>
       <p>Clear means no new person detections; it does not prove the scene is empty. During a broker outage, the existing clear timer still expires.</p>
       <p>Any detection-enabled stream uses your configured topic and zone mappings. Manual double-clicks override active automation; saved layouts are restored when focus clears.</p>
       </details></fieldset><details class="mqtt-tools automation-section" aria-label="MQTT discovery and details">
@@ -387,7 +387,7 @@ const automationUi = (() => {
   function refreshOverlayLinks() {
     for (const info of document.querySelectorAll('.overlay-automation-info')) {
       const overlayForm = info.closest('form'), slot = Number(overlayForm.dataset.slot);
-      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Save changes in Stream Overlays to use this mode.' : 'Always visible: stays on screen even when automation is idle.';
+      info.querySelector('.overlay-mode-help').textContent = overlayForm.elements.enabled.value === 'false' ? 'Automation only: the feed stays connected in the background, hidden until a rule detects a person. Save changes in Picture in picture to use this mode.' : 'Always visible: stays on screen even when automation is idle.';
       const linked = savedRules.filter(r => (r.action || 0) === 0 && r.overlaySlot === slot);
       info.querySelector('.overlay-rule-links').textContent = linked.length ? 'Linked rules: ' + linked.map(r => r.name + (r.enabled ? '' : ' (disabled)')).join(', ') : 'No automation rules assigned';
     }

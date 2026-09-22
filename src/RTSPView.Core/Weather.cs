@@ -45,7 +45,7 @@ public sealed record WeatherOverlay
     public void Validate()
     {
         if (!AppSettings.MainCameraSlots.Contains(HostCameraSlot) || WidthPercent is < 15 or > 95 || X is < 0 or > 100 || Y is < 0 or > 100 || Margin is < 0 or > 80 || Weather is null)
-            throw new InvalidDataException("Choose a camera and valid weather overlay position.");
+            throw new InvalidDataException("Choose a camera and valid weather widget position.");
         Weather.Validate();
     }
 }

@@ -27,9 +27,9 @@ public static class StreamCatalog
         if (!settings.Cameras.Take(settings.CameraCount).Any(c => c.Slot == slot) || settings.DeletedCameraSlots.Contains(slot))
             throw new InvalidDataException("That stream has already been removed or does not exist.");
         if (settings.AllOverlays().Any(o => !settings.DeletedOverlaySlots.Contains(o.Camera.Slot) && o.SourceCameraSlot == slot))
-            throw new InvalidDataException("An overlay uses this stream as its source. Choose another source or its own RTSP URL in Stream Overlays before deleting it.");
+            throw new InvalidDataException("An overlay uses this stream as its source. Choose another source or its own RTSP URL in Picture in picture before deleting it.");
         if (settings.AllOverlays().Any(o => o.HostCameraSlot == slot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl)))
-            throw new InvalidDataException("An overlay uses this stream as its host. Choose another host in Stream Overlays before deleting it.");
+            throw new InvalidDataException("An overlay uses this stream as its host. Choose another host in Picture in picture before deleting it.");
         return settings with {
             DeletedCameraSlots = [..settings.DeletedCameraSlots, slot],
             WeatherOverlays = settings.WeatherOverlays.Where(o => o.HostCameraSlot != slot).ToArray(),

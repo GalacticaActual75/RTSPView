@@ -62,7 +62,7 @@ public sealed record AppSettings
     public AppSettings Normalize()
     {
         if (WeatherOverlays is null || WeatherOverlays.Count > 16 || WeatherOverlays.Any(o => o is null) || WeatherOverlays.Select(o => o.HostCameraSlot).Distinct().Count() != WeatherOverlays.Count)
-            throw new InvalidDataException("Keep at most one weather overlay per camera.");
+            throw new InvalidDataException("Keep at most one weather widget per camera.");
         foreach (var weather in WeatherOverlays) weather.Validate();
         var normalized = CreateCameraSlots().ToArray();
         foreach (var camera in Cameras.Take(16))
