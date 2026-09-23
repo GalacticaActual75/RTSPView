@@ -87,10 +87,10 @@ const adminUi = (() => {
       camera?.codec, camera?.bitrateKbps, camera?.decoder, camera?.reconnectCount, camera?.lastError, viewerConnected]);
     if (streamPresentations.get(box) === signature) return;
     streamPresentations.set(box, signature);
-    const state = camera?.frameWarning ? 'Stale video' : camera?.state || (viewerConnected ? 'Telemetry unavailable' : 'Viewer offline');
+    const state = ['Resolving','Disabled','NotConfigured','Stopped'].includes(camera?.state) ? camera.state : camera?.lastError ? 'StreamError' : camera?.frameWarning ? 'Stale video' : camera?.state || (viewerConnected ? 'Telemetry unavailable' : 'Viewer offline');
     const tone = state === 'Live' ? 'healthy' : ['Disabled','NotConfigured'].includes(state) ? 'neutral' :
-      ['Connecting','Buffering','Reconnecting','Stale video'].includes(state) ? 'warning' : 'error';
-    box.dataset.tone = tone; box.querySelector('.state').textContent = ({Live:'Stream connected',StreamError:'Stream error',NotConfigured:'Not configured'})[state] || state;
+      ['Resolving','Connecting','Buffering','Reconnecting','Stale video'].includes(state) ? 'warning' : 'error';
+    box.dataset.tone = tone; box.querySelector('.state').textContent = ({Live:'Stream connected',Resolving:'Opening website stream',StreamError:'Stream error',NotConfigured:'Not configured'})[state] || state;
     const details = box.querySelector('.live-details'); details.replaceChildren();
     if (!camera) { details.textContent = 'No current stream telemetry'; return; }
     const values = [`${camera.fps.toFixed(1)} fps`, camera.width && camera.height ? `${camera.width}×${camera.height}` : 'Resolution unknown',
@@ -98,7 +98,7 @@ const adminUi = (() => {
     for (const value of values) { const item = document.createElement('span'); item.textContent = value; details.append(item); }
     if (camera.frameWarning || camera.lastError) {
       const error = document.createElement('span'); error.className = 'stream-error'; error.tabIndex = 0;
-      error.textContent = [camera.frameWarning, camera.lastError].filter(Boolean).join(' · '); details.append(error);
+      error.textContent = [camera.lastError, camera.state === 'Resolving' ? null : camera.frameWarning].filter(Boolean).join(' · '); details.append(error);
     }
   }
   return {init, page, host, stream, collapseSections};

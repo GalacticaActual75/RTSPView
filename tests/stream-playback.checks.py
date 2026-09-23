@@ -29,6 +29,8 @@ with tempfile.TemporaryDirectory(prefix="RTSPView-streaming-") as directory:
     camera = start_camera((path / "sample.h264").read_bytes())
     for name, media in (("watch", "sample.mp4"), ("watch-hls", "stream.m3u8")):
         (path / name).write_text(f'<html><head><title>Local synthetic video</title></head><body><video src="/{media}"></video></body></html>')
+    (path / "watch-denied").write_text('<html><head><title>Refused fixture</title></head><body><video src="/denied.m3u8"></video></body></html>')
+    (path / "denied.m3u8").write_text('#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\n/denied.ts\n#EXT-X-ENDLIST\n')
     class Handler(SimpleHTTPRequestHandler):
         def log_message(self, *args): pass
         def do_POST(self):
@@ -37,8 +39,9 @@ with tempfile.TemporaryDirectory(prefix="RTSPView-streaming-") as directory:
             body = soap_response(operation[1] if operation else '', f'http://127.0.0.1:{self.server.server_port}', camera.server_address[1])
             self.send_response(200); self.send_header('Content-Type', 'application/soap+xml'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
         def guess_type(self, file):
-            return "text/html" if Path(file).name in ("watch", "watch-hls") else super().guess_type(file)
+            return "text/html" if Path(file).name in ("watch", "watch-hls", "watch-denied") else super().guess_type(file)
         def do_GET(self):
+            if self.path == "/denied.ts": self.send_error(403); return
             if self.path == "/hang": time.sleep(10); return
             try: super().do_GET()
             except (ConnectionError, BrokenPipeError): pass
@@ -46,7 +49,8 @@ with tempfile.TemporaryDirectory(prefix="RTSPView-streaming-") as directory:
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        environment = {**os.environ, "RTSPVIEW_STREAM_FIXTURE": f"http://127.0.0.1:{server.server_port}"}
+        environment = {**os.environ, "RTSPVIEW_STREAM_FIXTURE": f"http://127.0.0.1:{server.server_port}",
+                       "RTSPVIEW_DATA_DIR": str(path / "app-data")}
         result = subprocess.run([dotnet, "run", "--project", "tests/RTSPView.StreamingChecks", "-c", "Release"], cwd=root, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=180, **hidden)
         print(result.stdout, flush=True)
         result.check_returncode()

@@ -74,6 +74,8 @@ const workspace = (() => {
     if(telemetry.viewerPaused)return ['Viewer paused','neutral'];
     if(!telemetry.viewerConnected)return ['Viewer offline','neutral'];
     const stream=telemetry.viewer?.cameras.find(c=>c.slot===camera.slot);
+    if(stream?.state==='Resolving')return ['Opening website stream','warning'];
+    if(stream?.lastError)return ['Stream error','error'];
     if(stream?.frameWarning)return ['Stale video','warning'];
     const name=stream?.state||'Unknown';
     return [({Live:'Connected',StreamError:'Stream error',NotConfigured:'Not configured'})[name]||name,name==='Live'?'healthy':['Connecting','Reconnecting','Buffering'].includes(name)?'warning':'error'];

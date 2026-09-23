@@ -10,7 +10,8 @@ public enum CameraConnectionState
     Reconnecting,
     Offline,
     StreamError,
-    Stopped
+    Stopped,
+    Resolving
 }
 
 public sealed record CameraRuntimeStatus

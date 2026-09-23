@@ -8,19 +8,22 @@ namespace RTSPView.Infrastructure;
 public sealed class ResolvedStream : IDisposable
 {
     private readonly Process? _process;
+    private readonly IDisposable? _packageLease;
     private int _disposed;
     public Uri Uri { get; }
     public string Provider { get; }
-    internal ResolvedStream(Uri uri, string provider, Process? process = null)
-        => (Uri, Provider, _process) = (uri, provider, process);
+    internal ResolvedStream(Uri uri, string provider, Process? process = null, IDisposable? packageLease = null)
+        => (Uri, Provider, _process, _packageLease) = (uri, provider, process, packageLease);
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0 || _process is null) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (_process is null) { _packageLease?.Dispose(); return; }
         try { if (!_process.HasExited) _process.Kill(entireProcessTree: true); }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }
         try { _process.StandardInput.Close(); } catch (IOException) { }
         _process.Dispose();
+        _packageLease?.Dispose();
     }
 }
 
@@ -34,14 +37,21 @@ public static class StreamResolver
     {
         StreamSource.Validate(settings);
         if (!StreamSource.NeedsResolver(settings)) return new(new Uri(settings.RtspUrl), "Direct");
-        var executable = helperPath ?? HelperPath;
-        if (!File.Exists(executable)) throw new InvalidOperationException("Streaming helper missing. Install the beta package with streaming support.");
-        await Slots.WaitAsync(cancellationToken);
+        IDisposable? packageLease = null;
         Process? process = null;
+        var acquired = false;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(60));
+            // Queued requests need the same deadline as active helpers.
+            // Otherwise three slow sources can leave a fourth waiting indefinitely.
+            await Slots.WaitAsync(timeout.Token);
+            acquired = true;
+            var selected = helperPath is null ? await StreamingUpdates.Default.SelectAsync(timeout.Token) : (helperPath, (IDisposable?)null);
+            var executable = selected.Item1;
+            packageLease = selected.Item2;
+            if (!File.Exists(executable)) throw new InvalidOperationException("Streaming helper missing. Reinstall RTSPView with streaming support.");
             process = new Process { StartInfo = new ProcessStartInfo(executable)
             {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
@@ -63,8 +73,9 @@ public static class StreamResolver
                 throw new InvalidOperationException(error.GetString() ?? "Stream resolution failed.");
             var uri = new Uri(response.RootElement.GetProperty("url").GetString()!);
             if (uri.Scheme != "http" || uri.Host != "127.0.0.1") throw new InvalidOperationException("Invalid streaming helper response.");
-            var result = new ResolvedStream(uri, response.RootElement.GetProperty("provider").GetString()!, process);
+            var result = new ResolvedStream(uri, response.RootElement.GetProperty("provider").GetString()!, process, packageLease);
             process = null;
+            packageLease = null;
             return result;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -72,7 +83,8 @@ public static class StreamResolver
         finally
         {
             if (process is not null) new ResolvedStream(new Uri("http://127.0.0.1"), "", process).Dispose();
-            Slots.Release();
+            packageLease?.Dispose();
+            if (acquired) Slots.Release();
         }
     }
 }

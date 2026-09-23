@@ -199,6 +199,36 @@ def make_server(stream):
 
 def main():
     logging.disable(logging.CRITICAL)
+    if "--self-test" in sys.argv:
+        # Exercise both imports in the required order and a real localhost relay.
+        from yt_dlp import YoutubeDL
+        from streamlink import Streamlink
+        from streamlink.stream.http import HTTPStream
+        from importlib.metadata import version
+        from pathlib import Path
+        import subprocess
+        import urllib.request
+        class Fixture(BaseHTTPRequestHandler):
+            def log_message(self, *args): pass
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"rtspview-streaming-health")
+        source = ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+        threading.Thread(target=source.serve_forever, daemon=True).start()
+        session = Streamlink()
+        stream = HTTPStream(session, f"http://localhost:{source.server_port}/media")
+        relay, address = make_server(prepare_stream(stream))
+        threading.Thread(target=relay.serve_forever, daemon=True).start()
+        with urllib.request.urlopen(address, timeout=3) as response:
+            assert response.read() == b"rtspview-streaming-health"
+        if getattr(sys, "frozen", False):
+            subprocess.run([str(Path(sys.executable).parent / "deno.exe"), "--version"],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        print(json.dumps({"protocol": 1, **{name: version(name) for name in ("streamlink", "yt-dlp")}}))
+        relay.shutdown()
+        source.shutdown()
+        return
     if "--version" in sys.argv:
         from importlib.metadata import version
         print(json.dumps({name: version(name) for name in ("streamlink", "yt-dlp")}))

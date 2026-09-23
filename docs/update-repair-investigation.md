@@ -26,3 +26,11 @@ The supplied public live stream was retested with the packaged beta 4 helper, St
 The helper now reads initial media bytes before announcing readiness, preserves those bytes for HLS playback, and returns a sanitized HTTP 401/403 error when an upstream media request is refused. This repairs misleading startup diagnostics; it does **not** claim to make the refused YouTube live stream playable.
 
 Validation uses real synthetic RTSP/HLS/MP4 playback, including ONVIF profile-to-RTSP decoding and website relays. Public-provider compatibility is separate from these deterministic tests.
+
+### Follow-up after beta 5 installation
+
+The subsequent host log contains repeated explicit HTTP 403 refusals and scheduled retries from the new helper. This confirms that the new error-handling code is active; it does not independently verify every installed file. Historical audit entries also confirm that both the beta update and stable rollback attempts requested elevation rather than using the service path. A native converter error immediately followed by a successful snapshot refresh further supports treating converter messages individually rather than as proof that playback failed.
+
+The official yt-dlp nightly `2026.09.16.232951` was tested separately with its published executable SHA-256 verified and a local test FFmpeg binary. Its native HLS download also receives HTTP 403 on the video segments. No dependency update is therefore claimed to repair the reported stream.
+
+Follow-up changes distinguish website resolution from stale playback, prioritize actual source errors in stream status, and include semaphore queue time in the resolver's deadline. A native viewer fixture with deliberately refused HLS segments verifies that resolving telemetry has no stale warning, that HTTP 403 reaches telemetry, and that retries occur. These follow-up changes are not in the published beta 5 installer.

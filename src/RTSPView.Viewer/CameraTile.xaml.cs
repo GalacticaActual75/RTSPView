@@ -480,7 +480,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
     private void UpdateRestartButton() => RestartStreamButton.IsEnabled =
         _settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl);
 
-    private string? FrameWarning(DateTimeOffset now) => _sharedSource is not null ? _sharedSource.FrameWarning(now) : !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl) || _pendingNativeStart
+    private string? FrameWarning(DateTimeOffset now) => _sharedSource is not null ? _sharedSource.FrameWarning(now) : !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl) || _pendingNativeStart || _resolving
         ? null : _activity.Warning(now, _attemptStartedAt);
 
     private void OnDecoderLog(object? sender, LogEventArgs e)
@@ -764,7 +764,8 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         _resolutionCancellation = resolution;
         _resolving = true;
         _status = _status with { NextReconnectAt = null };
-        SetState(CameraConnectionState.Connecting, StreamSource.NeedsResolver(_settings) ? "Resolving website stream…" : "Connecting…");
+        SetState(StreamSource.NeedsResolver(_settings) ? CameraConnectionState.Resolving : CameraConnectionState.Connecting,
+            StreamSource.NeedsResolver(_settings) ? "Opening website stream…" : "Connecting…");
         ResolvedStream resolved;
         try { resolved = await StreamResolver.ResolveAsync(_settings, resolution.Token); }
         catch (OperationCanceledException) { return; }
@@ -982,6 +983,7 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
 
     private static string StateLabel(CameraConnectionState state) => state switch
     {
+        CameraConnectionState.Resolving => "Opening website stream",
         CameraConnectionState.NotConfigured => "Not configured",
         CameraConnectionState.StreamError => "Stream Error",
         CameraConnectionState.Offline => "Camera Offline",

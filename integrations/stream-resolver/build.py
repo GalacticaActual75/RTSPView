@@ -1,6 +1,7 @@
 """Build the pinned Windows helper, runtime, source inputs and dependency notices."""
 import hashlib
 import importlib.metadata
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -41,4 +42,7 @@ with zipfile.ZipFile(archive) as bundle:
 subprocess.run([str(package / "deno.exe"), "--version"], check=True)
 urllib.request.urlretrieve(f"https://raw.githubusercontent.com/denoland/deno/{version}/LICENSE.md", notices / "Deno-LICENSE.txt")
 subprocess.run([str(package / "stream-resolver.exe"), "--version"], check=True)
+(package / "versions.json").write_text(json.dumps({name: importlib.metadata.version(name)
+    for name in ("streamlink", "yt-dlp", "yt-dlp-ejs")} | {"deno": version, "protocol": 1}), encoding="utf-8")
+subprocess.run([str(package / "stream-resolver.exe"), "--self-test"], check=True, timeout=20)
 print(f"Built {package}")

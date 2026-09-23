@@ -94,6 +94,7 @@ if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateMonitor>());
     builder.Services.AddHostedService<WallUpdateServer>();
+    builder.Services.AddHostedService<StreamingUpdateMonitor>();
 }
 builder.Services.AddSingleton(provider => new RestartScheduler(dataDirectory, async (action, token) =>
 {
@@ -316,6 +317,7 @@ app.MapPut("/api/network", async (HttpContext context, LanAccessRequest request)
 }).RequireAuthorization();
 
 app.MapGet("/api/update", async () => Results.Ok(await updateMonitor.StatusAsync())).RequireAuthorization();
+app.MapGet("/api/streaming-update", () => Results.Ok(StreamingUpdates.Default.DisplayStatus())).RequireAuthorization();
 app.MapPost("/api/update/check", async (CancellationToken cancellationToken) =>
     Results.Ok(await updateMonitor.CheckAsync(true, DateTimeOffset.UtcNow, cancellationToken))).RequireAuthorization();
 app.MapPut("/api/update/notifications", async (WallNotificationSettings request) =>
