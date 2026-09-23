@@ -18,7 +18,7 @@ foreach($project in @('Configuration','Reliability','Connector','ViewerLifecycle
     Run-Native $Dotnet $restore
     Run-Native $Dotnet @('run','--project',"tests/RTSPView.${project}Checks",'-c','Release','--no-restore')
 }
-foreach($check in @('admin-security','connector-http','tapo-http','onvif-http','layout-lan-http','wall-layout-presets','wall-proportions','shape-editor','dashboard-ux','viewer-controls','stream-status','application-restart','automation-health','related-choices','preview-refresh','lan-firewall','branding','privacy')) {
+foreach($check in @('admin-security','connector-http','tapo-http','onvif-http','layout-lan-http','wall-layout-presets','wall-proportions','shape-editor','dashboard-ux','viewer-controls','stream-status','application-restart','modern-admin','automation-health','related-choices','preview-refresh','lan-firewall','branding','privacy')) {
     Run-Native 'node' @("tests/$check.checks.cjs",$env:DOTNET_HOST_PATH)
 }
 foreach($check in @('UpdateHelper','ServiceUpdate','UpdateProgress','ControllerSupervision','InstallationShutdown')) {

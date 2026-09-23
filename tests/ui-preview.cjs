@@ -59,6 +59,7 @@ http.createServer(async(req,res)=>{
  if(route==='/api/config')return json(config);
  if(route==='/api/automation/diagnostics')return json(diagnostics());
  if(route==='/api/automation')return json(automation);
+ if(route==='/api/automation/presentation')return json({presentation:{at:new Date().toISOString(),rules:[]}});
  if(route==='/api/automation/status')return json({connection:automation.settings.enabled?'Connected':'Disabled',lastResult:'Fixture only',lastMessage:null,lastPerson:null,rules:automation.settings.rules});
  if(route==='/api/update')return json(update());
  if(route==='/api/network')return json(network);

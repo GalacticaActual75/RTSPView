@@ -63,7 +63,7 @@ const tapoUi = (() => {
   }
   function addHub(hub = {id: id(), name: '', host: ''}) {
     const row = document.createElement('div'); row.className = 'tapo-hub automation-grid'; row.dataset.id = hub.id;
-    row.append(input('Hub name', 'hub-name', hub.name), input('Hub address', 'hub-host', hub.host), button('Remove hub', () => { row.remove(); mark(); }));
+    row.append(input('Hub name', 'hub-name', hub.name), input('Hub address', 'hub-host', hub.host), button('Remove hub', async () => { if(!await uiDialogs.ask('Remove hub “'+row.querySelector('.hub-name').value+'”? Save Tapo changes to apply this removal.',{accept:'Remove hub'}))return;row.remove(); mark(); }));
     row.querySelector('.hub-name').addEventListener('input', updateSensorChoices);
     row.querySelector('.hub-name').maxLength = 100; row.querySelector('.hub-host').maxLength = 253;
     row.querySelectorAll('input').forEach(el => el.required = true);
@@ -108,7 +108,7 @@ const tapoUi = (() => {
     grid.append(overlay, layout, clearLayout, focus, second); card.append(grid);
     const buttons = document.createElement('div'); buttons.className = 'control-buttons';
     for (const [stateValue, label] of [[2, 'Test open'], [1, 'Test closed'], [0, 'Test unavailable']]) buttons.append(button(label, () => test(card, stateValue)));
-    buttons.append(button('Delete rule', () => { card.remove(); mark(); })); card.append(buttons);
+    buttons.append(button('Delete rule', async () => { if(!await uiDialogs.ask('Delete rule “'+card.querySelector('.sensor-name').value+'”? It will be removed when you save Tapo changes.',{accept:'Delete rule'}))return;card.remove(); mark(); })); card.append(buttons);
     const status = document.createElement('p'); status.className = 'sensor-rule-status'; status.setAttribute('role', 'status'); status.textContent = 'Save before testing. Tests affect the wall for 10 seconds.'; card.append(status);
     const targets = (preserveSelection = false) => {
       const action = Number(card.querySelector('.sensor-action').value), clear = Number(card.querySelector('.sensor-clear').value), unknown = Number(card.querySelector('.sensor-unavailable').value);
@@ -187,7 +187,7 @@ const tapoUi = (() => {
     finally { busy = false; form.querySelectorAll('button, input, select').forEach(b => b.disabled = false); }
   }
   async function removeAccount() {
-    if (busy || !confirm('Remove the saved Tapo account from RTSPView and disable Tapo automations? Hubs and rules are kept. Unsaved Tapo edits will be discarded.')) return;
+    if (busy || !await uiDialogs.ask('Remove the saved Tapo account from RTSPView and disable Tapo automations? Hubs and rules are kept. Unsaved Tapo edits will be discarded.')) return;
     busy = true; form.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
     try {
       const data = await api('/api/tapo/account', {method: 'DELETE'});

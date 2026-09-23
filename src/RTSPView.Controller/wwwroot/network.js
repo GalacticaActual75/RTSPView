@@ -31,7 +31,7 @@ function createNetworkPanel() {
  panel.oninput=()=>{panel.dataset.dirty=String(String(panel.elements.enabled.checked)!==panel.dataset.savedEnabled);panel.querySelector('#networkState').textContent=panel.dataset.dirty==='true'?'Unsaved changes — Apply changes updates LAN access':'Applied';};
  panel.onsubmit=async event=>{
   event.preventDefault();const enabled=panel.elements.enabled.checked,button=panel.querySelector('button');button.disabled=true;
-  if(!enabled && !['localhost','127.0.0.1','[::1]'].includes(location.hostname) && !confirm('Disable LAN access? This device will lose access. You can re-enable it locally on the RTSPView host.')){panel.elements.enabled.checked=true;button.disabled=false;return}
+  if(!enabled && !['localhost','127.0.0.1','[::1]'].includes(location.hostname) && !await uiDialogs.ask('Disable LAN access? This device will lose access. You can re-enable it locally on the RTSPView host.')){panel.elements.enabled.checked=true;button.disabled=false;return}
   const status=panel.querySelector('#networkState');status.textContent=enabled?'Approve the Windows prompt on the RTSPView host. Configuring LAN access…':'Disabling LAN access…';
   try {
    const result=await api('/api/network',{method:'PUT',body:JSON.stringify({enabled})});render(result);

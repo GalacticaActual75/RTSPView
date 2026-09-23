@@ -18,7 +18,7 @@ const dashboardUX = (() => {
     label.textContent=(image._agePrefix||'')+age(image);
     label.title=stamp.get(image)?'Snapshot captured '+new Date(stamp.get(image)).toLocaleString()+' · not live video':'Snapshot preview · not live video';
     const stale=!!stamp.get(image)&&Date.now()-stamp.get(image)>300000;
-    label.classList.toggle('stale',stale);if(stale)label.textContent+=' · Stale';
+    label.classList.toggle('snapshot-warning',stale||failed.has(image)||!stamp.get(image));label.classList.toggle('stale',stale);if(stale)label.textContent+=' · Stale';
   }
   const attempted=new Map();let capturing=false;
   function visible(image) {

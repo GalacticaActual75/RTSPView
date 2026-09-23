@@ -25,7 +25,7 @@ function createConnectorPanel() {
   };
   panel.querySelector('[data-status]').onclick = refresh;
   panel.querySelector('[data-revoke]').onclick = async () => {
-    if (!confirm('Revoke connector access? Imported streams and existing automation rules will remain.')) return;
+    if (!await uiDialogs.ask('Revoke connector access? Imported streams and existing automation rules will remain.')) return;
     try { await api('/api/connector', {method:'DELETE'}); clearCode(); await refresh(); }
     catch (e) { message.textContent = e.message; }
   };

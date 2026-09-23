@@ -6,7 +6,7 @@ const adminLayout = (() => {
     const main = document.querySelector('main');
     const banner = main.previousElementSibling;
     banner.remove();
-    document.querySelector('header .tag').textContent = '…';
+    document.querySelector('#app .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
     for (const [id, title] of Object.entries({overview:'Monitor', cameras:'Streams', layouts:'Layouts',overlays:'Picture in picture', automation:'Automation', system:'Settings'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
@@ -158,10 +158,9 @@ const adminLayout = (() => {
     form.markSaved = () => {saved = snapshot(); update(); form.querySelector('.slot').textContent = form.elements.name.value; form.querySelector('.switch input')?.setAttribute('aria-label','Enable '+form.elements.name.value); if(form.closest('.stream-drawer'))document.querySelector('#streamEditorTitle').textContent=form.elements.name.value;};
     update();
   }
-  window.addEventListener('beforeunload', event => {if(document.querySelector('[data-dirty="true"]')){event.preventDefault();event.returnValue='';}});
   function release(version) {
     const beta = version.includes('-beta.');
-    const badge = document.querySelector('header .tag');
+    const badge = document.querySelector('#app .tag');
     badge.textContent = beta ? 'BETA' : 'STABLE'; badge.title = 'Installed release: ' + version;
     badge.classList.toggle('stable', !beta);
     document.title = beta ? 'RTSPView Beta Admin' : 'RTSPView Admin';

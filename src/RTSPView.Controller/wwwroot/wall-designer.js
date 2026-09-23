@@ -166,7 +166,8 @@ function createWallDesigner(isAutomation = false) {
       const item=copy(layout);item.id='layout-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
       item.name=(item.name+' copy').slice(0,80);draft.layouts.push(item);selectedId=item.id;changed();
     },menu);
-    const deleteButton=button('Delete layout',()=>{
+    const deleteButton=button('Delete layout',async()=>{
+      if(!await uiDialogs.ask('Delete layout “'+layout.name+'”? Save or apply the layout collection to make this removal permanent.',{accept:'Delete layout'}))return;
       draft.layouts=draft.layouts.filter(item=>item.id!==selectedId);selectedId=isAutomation?draft.layouts[0].id:draft.activeLayoutId;selectedTile=-1;changed();
     },menu);deleteButton.disabled=isAutomation?draft.layouts.length===1:selectedId===saved.activeLayoutId;deleteButton.classList.add('designer-danger');
     const revert=button('Revert last save',()=>persist(false,true),menu);revert.disabled=!previous;
@@ -191,6 +192,17 @@ function createWallDesigner(isAutomation = false) {
     button('Discard changes',()=>{draft=copy(saved);selectedId=saved.activeLayoutId;selectedTile=-1;dirty=false;undoHistory.length=0;redoHistory.length=0;render();message('Draft discarded.');},menu).classList.add('designer-discard');root.querySelector('.designer-discard').disabled=!dirty;
     if(isAutomation)button('Save automation layouts',()=>persist(),actions,false);
     else {if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);button('Apply to wall',()=>persist(true),actions,false);}
+    for(const [caption,labels] of [
+      ['Add content',['Add weather','Add stream']],
+      ['Editing',['Presets','Sizing','Canvas settings','Help','Undo','Redo']],
+      ['Wall action',['Save layout','Apply to wall','Save automation layouts']]
+    ]) {
+      const group=el('div',undefined,'designer-action-group');
+      group.setAttribute('role','group');group.setAttribute('aria-label',caption);
+      group.append(el('span',caption,'designer-action-label'));
+      for(const control of [...actions.children])if(labels.includes(control.textContent))group.append(control);
+      if(group.children.length>1)actions.append(group);
+    }
     const workspace=el('div',undefined,'designer-workspace'+(drawer?' has-drawer':''));root.append(workspace);
     const preview=el('section',undefined,'designer-preview');workspace.append(preview);
     const previewHead=el('div',undefined,'designer-preview-head');preview.append(previewHead);
@@ -403,7 +415,6 @@ function createWallDesigner(isAutomation = false) {
       .filter(overlay=>overlay.camera.enabled&&!layout.tiles.some(tile=>tile.cameraSlot===overlay.hostCameraSlot));
     if(hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
   }
-  window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
   return {open(id){if(draft?.layouts.some(l=>l.id===id)){selectedId=id;selectedTile=-1;render();root.querySelector('select')?.focus();}},dimensions(cameras){streamDimensions=new Map((cameras||[]).filter(c=>c.width>0&&c.height>0).map(c=>[c.slot,c]));if(draft)sizeImages();},isDirty:()=>dirty,savedLayouts:()=>saved?.layouts||[],active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
     config=value;root=document.querySelector(isAutomation?'#automation-layout-editor':'#standard-layout-editor');
     if(!root)return;

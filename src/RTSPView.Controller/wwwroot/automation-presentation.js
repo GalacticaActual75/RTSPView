@@ -14,7 +14,7 @@ const automationPresentation = (() => {
     const fields = document.createElement('span'); fields.className = 'automation-rule-summary';
     for (const [label, text] of values) {
       const field = document.createElement('span'), caption = document.createElement('small'), value = document.createElement('span');
-      caption.textContent = label; value.textContent = text; field.append(caption, value); fields.append(field);
+      caption.textContent = ({Trigger:'When',Action:'Then',Duration:'For / until',Clear:'Afterward'})[label] || label; value.textContent = text; field.append(caption, value); fields.append(field);
     }
     element.replaceChildren(title, fields);
   }

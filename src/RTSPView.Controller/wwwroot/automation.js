@@ -141,7 +141,7 @@ const automationUi = (() => {
       for(const input of card.querySelectorAll('.rule-sources input,.rule-sources select'))input.disabled=any;
     };
     card.querySelector('.rule-source-mode').onchange=()=>{applySourceMode();mark();};applySourceMode();
-    card.querySelector('.rule-remove').onclick = () => { card.remove(); mark(); };
+    card.querySelector('.rule-remove').onclick = async () => { if(!await uiDialogs.ask('Delete rule “'+card.querySelector('.rule-name').value+'”? It will be removed when you save MQTT changes.',{accept:'Delete rule'}))return;card.remove(); mark(); };
     const updateSummary = () => {
       const action = card.querySelector('.rule-action'), target = card.querySelector('.rule-target');
       const cameras = [...card.querySelectorAll('.source-camera')].map(s => s.selectedOptions[0]?.textContent).filter(Boolean);
@@ -151,7 +151,8 @@ const automationUi = (() => {
         ['Trigger', 'Person · ' + (card.querySelector('.rule-source-mode').value === 'any' ? 'Any mapped stream' : cameras.join(', ') || 'Select source')],
         ['Action', action.selectedOptions[0].textContent + (layout ? ' · ' + layout : '')],
         ['Target', (target.selectedOptions[0]?.textContent || 'Select target') + (Number(second?.value) > 0 ? ' + ' + second.selectedOptions[0].textContent : '')],
-        ['Duration', card.querySelector('.rule-delay').value + ' min without detections → resume other rules / saved wall']
+        ['Duration', card.querySelector('.rule-delay').value + ' min without detections'],
+        ['Clear', 'Resume eligible rules / saved wall']
       ]);
 
     };
@@ -182,7 +183,7 @@ const automationUi = (() => {
     };
     testControls.append(testSource, testButton); card.append(testControls, testMessage);
     automationPresentation.toggles(card);
-    rules.append(card);
+    rules.append(card);form.querySelector('.rules-intro').textContent='Open a rule to edit it, or add a new one.';
     if (!collapsed) card.querySelector(".rule-name").focus();
   }
   function renderActionTarget(card) {
