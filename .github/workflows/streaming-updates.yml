@@ -1,0 +1,67 @@
+name: Automatic streaming components
+on:
+  schedule:
+    - cron: '23 10 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if upstream versions are unchanged
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: streaming-components
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/beta
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Select upstream versions
+        shell: pwsh
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          python -m venv artifacts/streaming-venv
+          $python = 'artifacts/streaming-venv/Scripts/python.exe'
+          & $python -m pip install -r integrations/stream-resolver/requirements.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $arguments = @('integrations/stream-resolver/update_dependencies.py')
+          if ($env:FORCE -eq 'true') { $arguments += '--force' }
+          & $python @arguments
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "NEEDED=$(Test-Path artifacts/streaming-update-needed)" >> $env:GITHUB_ENV
+      - name: Build and validate helper
+        if: env.NEEDED == 'True'
+        shell: pwsh
+        run: |
+          $python = 'artifacts/streaming-venv/Scripts/python.exe'
+          & $python -m unittest discover -s integrations/stream-resolver -p test_resolver.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python integrations/stream-resolver/build.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python integrations/stream-resolver/check_package.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python -m pip install -r integrations/stream-resolver/requirements-test.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $python tests/stream-playback.checks.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet run --project tests/RTSPView.StreamingUpdateChecks -c Release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Sign and publish tested package
+        if: env.NEEDED == 'True'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STREAMING_UPDATE_SIGNING_KEY: ${{ secrets.STREAMING_UPDATE_SIGNING_KEY }}
+        run: ./tools/Publish-StreamingUpdate.ps1 -Repository $env:GITHUB_REPOSITORY -Commit (git rev-parse HEAD)
