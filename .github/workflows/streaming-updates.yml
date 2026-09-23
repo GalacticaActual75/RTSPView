@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: streaming-components
   cancel-in-progress: false
@@ -17,10 +17,14 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 40
+    outputs:
+      needed: ${{ steps.select.outputs.needed }}
+      commit: ${{ steps.select.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: codex/beta
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -28,6 +32,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - name: Select upstream versions
+        id: select
         shell: pwsh
         env:
           FORCE: ${{ inputs.force }}
@@ -41,6 +46,8 @@ jobs:
           & $python @arguments
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "NEEDED=$(Test-Path artifacts/streaming-update-needed)" >> $env:GITHUB_ENV
+          "needed=$(Test-Path artifacts/streaming-update-needed)" >> $env:GITHUB_OUTPUT
+          "commit=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
       - name: Build and validate helper
         if: env.NEEDED == 'True'
         shell: pwsh
@@ -58,8 +65,31 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           dotnet run --project tests/RTSPView.StreamingUpdateChecks -c Release
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Sign and publish tested package
+      - name: Transfer validated helper
         if: env.NEEDED == 'True'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-streaming-helper
+          path: artifacts/stream-resolver/stream-resolver/
+          if-no-files-found: error
+          retention-days: 3
+  publish:
+    needs: build
+    if: needs.build.outputs.needed == 'True'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: tested-streaming-helper
+          path: artifacts/stream-resolver/stream-resolver/
+      - name: Sign and publish tested package
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
