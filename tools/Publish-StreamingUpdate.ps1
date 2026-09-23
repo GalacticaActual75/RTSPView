@@ -6,12 +6,17 @@ $sequence = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $tag = "streaming-$sequence"
 $archive = "artifacts/streaming-$sequence.zip"
 Compress-Archive -Path "$package/*" -DestinationPath $archive -CompressionLevel Optimal
+$entries = @(Get-ChildItem -LiteralPath $package -Recurse -File)
+if ((Get-Item $archive).Length -gt 350000000 -or $entries.Count -gt 20000 -or ($entries | Measure-Object Length -Sum).Sum -gt 1000000000) {
+  throw 'Streaming package exceeds client limits'
+}
 $manifest = [ordered]@{
   Sequence = $sequence; Protocol = 1; Platform = 'win-x64'
   Url = "https://github.com/$Repository/releases/download/$tag/streaming-$sequence.zip"
   Sha256 = (Get-FileHash $archive -Algorithm SHA256).Hash
   Size = (Get-Item $archive).Length
   YtDlp = $versions.'yt-dlp'; Streamlink = $versions.streamlink; Ejs = $versions.'yt-dlp-ejs'
+  SourceRevision = $versions.sourceRevision
 }
 $payload = [Text.Encoding]::UTF8.GetBytes(($manifest | ConvertTo-Json -Compress))
 $key = [Security.Cryptography.RSA]::Create()
