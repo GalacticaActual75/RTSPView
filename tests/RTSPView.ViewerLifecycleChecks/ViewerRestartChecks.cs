@@ -7,7 +7,9 @@ internal static class ViewerRestartChecks
     {
         var marker = Path.Combine(Path.GetTempPath(), "RTSPView-restart-" + Guid.NewGuid().ToString("N"));
         var executable = Environment.ProcessPath!;
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        // Hosted Windows runners can spend over 15 seconds starting cold PowerShell.
+        // Keep the wait bounded without changing the shutdown or launch assertions.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
         start.ArgumentList.Add("--restart-fixture-parent");
         start.Environment["RTSPVIEW_RESTART_TEST_MARKER"] = marker;

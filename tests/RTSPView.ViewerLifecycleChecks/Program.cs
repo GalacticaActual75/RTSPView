@@ -18,11 +18,11 @@ if (restartMarker is not null && (args.Contains("--restart-fixture-parent") || a
 }
 var directory = Path.Combine(Path.GetTempPath(), "RTSPView-lifecycle-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(directory);
-using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 try
 {
     await CommandIsolationChecks.Run();
     await ViewerRestartChecks.Run();
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
     var state = new ViewerRuntimeState(directory);
     var otherProcess = new ViewerRuntimeState(directory);
     state.Pause();
