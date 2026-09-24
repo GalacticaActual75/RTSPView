@@ -1,5 +1,29 @@
 # RTSPView
 
+I wanted a semi-unattended way to display my cameras and local live streams on a monitor at home. More specifically, I wanted the whole setup to be **“armless.”**
+
+> We have *headless* computers, so why not armless ones?
+
+The host running RTSPView has a screen, so it certainly isn’t headless. What I didn’t want it to have was any need for “arms”: no reaching for a keyboard or mouse, no closing random windows, no manually restarting streams, and ideally no touching the host computer at all.
+
+The goal was for RTSPView to stay on top, launch immediately after a reboot, recover when something goes wrong, and essentially provide an almost 100% uptime live view with very little user intervention. After the initial setup, everything should be manageable remotely through the LAN dashboard.
+
+**Meet RTSPView.**
+
+As these projects tend to do, the scope kept growing and growing.
+
+- First, it was simply: *“Build a camera wall.”*
+- Then it became: *“Automate it based on camera events from my Scrypted server.”*
+- Then I wanted local live streams.
+- Then weather overlays.
+- Then layouts that could automatically change based on sensors and other events.
+
+And it kept growing from there.
+
+RTSPView is designed with **Scrypted and Tapo integrations in mind**, while still being centered around that original idea: a reliable, always-on RTSP camera wall that can largely take care of itself.
+
+---
+
 RTSPView turns a Windows display into a configurable wall of live video. View camera feeds, rebroadcast streams, direct HTTP media and supported public website streams; arrange layouts, add picture-in-picture video or weather, and respond to person detections and contact sensors.
 
 The Windows **Viewer** plays the video. The **Controller** runs web administration and supervises the Viewer. Both run as the signed-in Windows user. Browser previews are snapshots, not live video. RTSPView is for viewing, not recording or NVR playback.
