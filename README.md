@@ -72,6 +72,10 @@ RTSP/media ports belong to the source server. MQTT uses the configured broker po
 
 ## Web administration
 
+![RTSPView Monitor with a nine-camera demo wall](assets/admin-preview/monitor.png)
+
+All screenshots in this guide use **synthetic camera images and demo data**. Names, addresses, locations and status readings are examples; no personal streams or settings are shown. [Browse all admin previews](assets/admin-preview/README.md).
+
 The current interface has a collapsible sidebar and six destinations:
 
 | Destination | Main tasks |
@@ -91,6 +95,17 @@ In-app navigation retains unsaved drafts. Closing or reloading the browser disca
 
 ### Source types and discovery
 
+![Streams inventory with demo camera names](assets/admin-preview/streams.png)
+
+<details>
+<summary>View the stream editor and ONVIF profile picker</summary>
+
+![Stream editor with a reserved example source URL](assets/admin-preview/stream-editor.png)
+
+![ONVIF setup with synthetic camera profiles](assets/admin-preview/onvif.png)
+
+</details>
+
 | Source type | Behavior |
 | --- | --- |
 | **Auto** | Plays RTSP and recognized direct-media extensions directly; tries Streamlink, then yt-dlp for other HTTP(S) URLs. |
@@ -105,6 +120,8 @@ For ONVIF, select **Find ONVIF stream → Find cameras on host network**, or ent
 
 ### Layout editing
 
+![Layout editor with a nine-tile demo layout](assets/admin-preview/layouts.png)
+
 Use presets or build a layout by moving, swapping and resizing tiles. **Canvas settings** controls output proportions, borderless mode, border/background colors and inheritance from the global border setting. Custom output dimensions range from 240 to 16384 pixels per axis; they define canvas proportions/framing, not the Windows display mode.
 
 Select a tile for **Original**, **Fit**, **Fill** or **Stretch**, zoom and pan. Fit preserves the whole frame; Fill can crop; Stretch can distort. **Sizing → Fit tiles to streams** uses available snapshot proportions, and row/column weights allow manual refinement. Apply the layout to display it. The active standard layout cannot be deleted; templates referenced by automation rules must be unlinked first.
@@ -114,6 +131,8 @@ Configured overlay sources can also occupy ordinary tiles using their original v
 Deleting a stream clears its connection and layout placements without renumbering other streams. Remove reported automation or overlay dependencies first. Added streams reuse deleted slots.
 
 ### Picture in picture
+
+![Picture-in-picture positioning and appearance with synthetic imagery](assets/admin-preview/picture-in-picture.png)
 
 Open **Picture in picture**, choose an overlay or add one, then select **Connection → Video source**: an existing main stream or **Own source URL**. Under **Position → Show over**, choose its host camera. Set **Always visible** or **Automation only**, adjust the preview, then **Save & apply**.
 
@@ -148,6 +167,8 @@ Browser previews refresh while visible, approximately every 15 seconds, with cap
 
 ### MQTT person detection
 
+![MQTT automation with an example broker and demo person-detection rules](assets/admin-preview/mqtt.png)
+
 In **Automation → MQTT**, configure a reachable broker, credentials and TCP/TLS transport, then add rules with exact source topics. MQTT is disabled until enabled and saved. Scrypted can supply ObjectDetector events; Home Assistant is not required.
 
 Rules can **Show overlay**, **Fullscreen camera** or use an **Automation layout**. Choose target streams, sources, optional case-sensitive detection zones and a clear delay. Saved custom automation layouts have one or two unassigned Focus tiles filled by the rule. The default Automatic arrangement includes enabled main streams; custom templates use their saved tiles.
@@ -158,11 +179,15 @@ See [MQTT setup and behavior](docs/mqtt-automation.md) for discovery, timings, f
 
 ### Tapo sensors and priority
 
+![Tapo automation with a demo contact-sensor rule](assets/admin-preview/tapo.png)
+
 **Automation → Tapo** reads T110 contact sensors through H100/H200 hubs using the bundled reader. Discover or manually add hubs, enter the Tapo account, test/discover sensors, then configure Open/Closed and Unavailable actions. It requires neither MQTT nor Scrypted. Polling defaults to five seconds; brief changes between polls can be missed. Physical hub/sensor validation remains pending and firmware compatibility varies.
 
 Rules can show/hide an overlay or temporarily activate standard/automation layouts. **Automation Priority** orders saved MQTT and Tapo rules together; priority 1 is highest. Wall-view conflicts and conflicts for the same overlay are resolved separately. Save integration drafts before saving priority order. See the [Tapo guide](docs/tapo-automation.md) for actions and unavailable-state handling.
 
 ### Weather
+
+![Weather Widget editor with a synthetic location and sample weather](assets/admin-preview/weather.png)
 
 In **Layouts**, use **Add weather** for a standard-layout tile, or select a main camera and choose **Weather Widget**. Choose a city or coordinates, units, fields, preset, colors, opacity and placement. Widgets save across that camera's standard and automation appearances; weather tiles remain part of the layout draft until saved/applied.
 

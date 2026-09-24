@@ -18,10 +18,12 @@ let diagnosticRunning=false;
 let tapo={settings:{enabled:false,username:'',pollSeconds:5,hubs:[],rules:[]},hasPassword:false};
 const tapoSnapshot=hubs=>({hubs:hubs.map((h,i)=>({id:h.id,name:h.name,model:i?'H200':'H100',connected:true,message:'Connected · fixture only'})),sensors:hubs.map((h,i)=>({hubId:h.id,deviceId:'fixture-door-'+i,name:i?'Back door':'Garage door',model:'T110',state:i?1:2}))});
 const diagnostics=()=>({connection:diagnosticRunning?'Listening':'Stopped',until:diagnosticRunning?new Date(Date.now()+300000).toISOString():null,topics:diagnosticRunning?[{topic:'scrypted/44/ObjectDetector',cameraName:config.cameras[0].name,lastSeen:new Date().toISOString(),personSeen:true},{topic:'scrypted/45/ObjectDetector',cameraName:config.cameras[1].name,lastSeen:new Date().toISOString(),personSeen:false}]:[],messages:diagnosticRunning?[{id:1,received:new Date().toISOString(),topic:'scrypted/44/ObjectDetector',payload:JSON.stringify({timestamp:Date.now(),detections:[{className:'person',score:0.92}]}),retained:false,qos:0,truncated:false},{id:2,received:new Date().toISOString(),topic:'scrypted/44/motionDetected',payload:'true',retained:true,qos:0,truncated:false}]:[]});
+const documentation = process.argv.includes('--documentation') ? require('./documentation-demo.cjs')({config,automation,tapo}) : null;
 const mutations=[];
 http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1'),route=url.pathname;
  const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value))};
+ if(documentation?.handle(req,res,route,json))return;
  if(route==='/api/weather')return json([]);
  if(route==='/api/weather/search')return json({results:[{name:'Seattle',admin1:'Washington',country:'United States',latitude:47.6062,longitude:-122.3321,timezone:'America/Los_Angeles'}]});
  if(route.startsWith('/api/weather/overlays/')){let body='';for await(const chunk of req)body+=chunk;const o=JSON.parse(body);config.weatherOverlays=[...(config.weatherOverlays||[]).filter(w=>w.hostCameraSlot!==o.hostCameraSlot),o];return json(o);}
