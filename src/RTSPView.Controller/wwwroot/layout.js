@@ -6,7 +6,7 @@ const adminLayout = (() => {
     const main = document.querySelector('main');
     const banner = main.previousElementSibling;
     banner.remove();
-    document.querySelector('header .tag').textContent = '…';
+    document.querySelector('#app .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
     for (const [id, title] of Object.entries({overview:'Monitor', cameras:'Streams', layouts:'Layouts',overlays:'Picture in picture', automation:'Automation', system:'Settings'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
@@ -103,10 +103,7 @@ const adminLayout = (() => {
     form.querySelector('.switch input')?.setAttribute('aria-label', 'Enable ' + form.elements.name.value);
     const settings = form.querySelector('.camera-settings');
     if (!overlayMode) {
-      const streaming=document.createElement('details');streaming.innerHTML='<summary>Streaming</summary>';
-      const transport=form.elements.transport.closest('.two'),recovery=settings.querySelector('details');
-      transport.before(streaming);streaming.append(transport,recovery.querySelector('.checks'));
-      recovery.querySelector('summary').textContent='Recovery';
+
       const open = document.createElement('button'); open.type = 'button'; open.className = 'overview-open';
       const label = () => open.setAttribute('aria-label', `Enlarge snapshot of ${form.elements.name.value}`);
       label(); form.addEventListener('change', label);
@@ -136,7 +133,7 @@ const adminLayout = (() => {
       makeGroup('Appearance',['viewportOpacityPercent','showBorder']);
       const shape = makeGroup('Shape / Mask',['viewportShape']);
       shape.append(placement.querySelector('.open-shape-editor'),placement.querySelector('.custom-viewport-upload'));
-      makeGroup('Framing',['zoomPercent','imageHorizontalPositionPercent','imageVerticalPositionPercent']);
+      const framing=makeGroup('Framing',['zoomPercent','imageHorizontalPositionPercent','imageVerticalPositionPercent']);const advancedImage=document.createElement('details');advancedImage.innerHTML='<summary>Advanced image transform</summary>';framing.before(advancedImage);advancedImage.append(framing);
       placement.append(placement.querySelector('.reset-doorbell-framing'));
       const help = placement.querySelector('.overlay-help'), details = document.createElement('details');
       details.innerHTML = '<summary>Framing help</summary>';
@@ -149,7 +146,7 @@ const adminLayout = (() => {
     let saved = snapshot();
     const actions = form.querySelector('.actions'), submit = actions.querySelector('[type=submit]'), state = actions.querySelector('.save-state');
     const discard = document.createElement('button'); discard.type = 'button'; discard.className = 'secondary'; discard.textContent = 'Discard'; actions.insertBefore(discard, submit);
-    submit.textContent=overlayMode?'Apply to wall':'Save & apply';submit.title='Save this stream and apply it to the wall';state.setAttribute('role','status');
+    submit.textContent='Save & apply';submit.title=overlayMode?'Save and apply this picture-in-picture overlay across layouts':'Save and apply this stream across layouts';state.setAttribute('role','status');
     const isDirty = () => saved.some(({el,value,checked}) => !el.disabled && (el.value !== value || el.checked !== checked));
     const update = () => {const dirty = isDirty(); submit.hidden = discard.hidden = !dirty; form.dataset.dirty = String(dirty); state.textContent = dirty ? 'Unsaved changes' : ''; };
     form.addEventListener('input', update); form.addEventListener('change', update);
@@ -161,10 +158,9 @@ const adminLayout = (() => {
     form.markSaved = () => {saved = snapshot(); update(); form.querySelector('.slot').textContent = form.elements.name.value; form.querySelector('.switch input')?.setAttribute('aria-label','Enable '+form.elements.name.value); if(form.closest('.stream-drawer'))document.querySelector('#streamEditorTitle').textContent=form.elements.name.value;};
     update();
   }
-  window.addEventListener('beforeunload', event => {if(document.querySelector('[data-dirty="true"]')){event.preventDefault();event.returnValue='';}});
   function release(version) {
     const beta = version.includes('-beta.');
-    const badge = document.querySelector('header .tag');
+    const badge = document.querySelector('#app .tag');
     badge.textContent = beta ? 'BETA' : 'STABLE'; badge.title = 'Installed release: ' + version;
     badge.classList.toggle('stable', !beta);
     document.title = beta ? 'RTSPView Beta Admin' : 'RTSPView Admin';

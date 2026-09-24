@@ -26,8 +26,10 @@ public partial class MainWindow
                 tile.PointerActivity += Tile_PointerActivity;
                 tile.FocusRequested += Tile_FocusRequested;
                 WallGrid.Children.Add(tile);
-                // A separate normal renderer: no overlay mask, zoom, crop or opacity.
-                tile.Initialize(_libVlc, _logger, camera, _settings.RequestHardwareDecoding, compositedVideo: true, preserveWholeFrame: true);
+                // Share the untransformed decoded bitmap; keep independent mask/framing controls.
+                var owner = new[] { DoorbellTile, GarageTile }.Concat(_additionalOverlays.Values.Select(e => e.Tile))
+                    .Single(t => StreamCatalog.SourceSlot(t.Slot) == source.Slot);
+                tile.Initialize(_libVlc, _logger, camera, _settings.RequestHardwareDecoding, compositedVideo: true, preserveWholeFrame: true, sharedSource: owner);
                 tile.ApplyOverlayPreferences(_settings.ShowCameraNames, _settings.ShowCameraStats);
                 entry = (tile, camera);
             }

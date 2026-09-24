@@ -43,13 +43,13 @@ const tapoUi = (() => {
       <button type="button" class="secondary tapo-discover">Test connection & discover sensors</button></div>
       <div class="tapo-found-hubs"></div><p>Network discovery runs from the RTSPView computer. Hubs on other subnets or VLANs may require manual entry.</p>
       <p>Discovery tests the draft connection without saving or activating rules. Passwords are encrypted on this Windows account and omitted from configuration exports.</p>
-      </details><div class="control-buttons"><button type="submit">Save Tapo automations</button><button type="button" class="secondary tapo-discard">Discard changes</button></div>
+      </details><div class="control-buttons"><p>Save &amp; apply saves Tapo connection settings and all sensor rules in this panel, and activates enabled rules on this host.</p><button type="submit">Save &amp; apply</button><button type="button" class="secondary tapo-discard">Discard changes</button></div>
       <p class="tapo-message" role="status"></p>`;
     const connection = q('.tapo-connection');
     const inventoryDetails = document.createElement('details'); inventoryDetails.innerHTML = '<summary>Sensor readings & connection details</summary>'; inventoryDetails.append(q('.tapo-inventory')); connection.append(inventoryDetails);
     const rulesHelp = q('h3').nextElementSibling, help = document.createElement('details'); help.className = 'automation-help'; help.innerHTML = '<summary>How sensor rules behave</summary>'; q('.tapo-add-rule').after(help); help.append(rulesHelp);
     const poll = form.elements.pollSeconds.closest('label'), advanced = document.createElement('details'); advanced.innerHTML = '<summary>Advanced connection settings</summary>'; poll.before(advanced); advanced.append(poll);
-    q('button[type=submit]').parentElement.classList.add('automation-savebar'); q('button[type=submit]').textContent = 'Save changes';
+    q('button[type=submit]').parentElement.classList.add('automation-savebar'); q('button[type=submit]').textContent = 'Save & apply';
     automationPresentation.toggles(form);
     document.querySelector('#page-automation').append(form);
     form.addEventListener('input', mark); form.addEventListener('change', mark);
@@ -63,7 +63,7 @@ const tapoUi = (() => {
   }
   function addHub(hub = {id: id(), name: '', host: ''}) {
     const row = document.createElement('div'); row.className = 'tapo-hub automation-grid'; row.dataset.id = hub.id;
-    row.append(input('Hub name', 'hub-name', hub.name), input('Hub address', 'hub-host', hub.host), button('Remove hub', () => { row.remove(); mark(); }));
+    row.append(input('Hub name', 'hub-name', hub.name), input('Hub address', 'hub-host', hub.host), button('Remove hub', async () => { if(!await uiDialogs.ask('Remove hub “'+row.querySelector('.hub-name').value+'”? Save Tapo changes to apply this removal.',{accept:'Remove hub'}))return;row.remove(); mark(); }));
     row.querySelector('.hub-name').addEventListener('input', updateSensorChoices);
     row.querySelector('.hub-name').maxLength = 100; row.querySelector('.hub-host').maxLength = 253;
     row.querySelectorAll('input').forEach(el => el.required = true);
@@ -108,7 +108,7 @@ const tapoUi = (() => {
     grid.append(overlay, layout, clearLayout, focus, second); card.append(grid);
     const buttons = document.createElement('div'); buttons.className = 'control-buttons';
     for (const [stateValue, label] of [[2, 'Test open'], [1, 'Test closed'], [0, 'Test unavailable']]) buttons.append(button(label, () => test(card, stateValue)));
-    buttons.append(button('Delete rule', () => { card.remove(); mark(); })); card.append(buttons);
+    buttons.append(button('Delete rule', async () => { if(!await uiDialogs.ask('Delete rule “'+card.querySelector('.sensor-name').value+'”? It will be removed when you save Tapo changes.',{accept:'Delete rule'}))return;card.remove(); mark(); })); card.append(buttons);
     const status = document.createElement('p'); status.className = 'sensor-rule-status'; status.setAttribute('role', 'status'); status.textContent = 'Save before testing. Tests affect the wall for 10 seconds.'; card.append(status);
     const targets = (preserveSelection = false) => {
       const action = Number(card.querySelector('.sensor-action').value), clear = Number(card.querySelector('.sensor-clear').value), unknown = Number(card.querySelector('.sensor-unavailable').value);
@@ -187,7 +187,7 @@ const tapoUi = (() => {
     finally { busy = false; form.querySelectorAll('button, input, select').forEach(b => b.disabled = false); }
   }
   async function removeAccount() {
-    if (busy || !confirm('Remove the saved Tapo account from RTSPView and disable Tapo automations? Hubs and rules are kept. Unsaved Tapo edits will be discarded.')) return;
+    if (busy || !await uiDialogs.ask('Remove the saved Tapo account from RTSPView and disable Tapo automations? Hubs and rules are kept. Unsaved Tapo edits will be discarded.')) return;
     busy = true; form.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
     try {
       const data = await api('/api/tapo/account', {method: 'DELETE'});
@@ -228,7 +228,7 @@ const tapoUi = (() => {
       const {presentation} = await api('/api/automation/presentation');
       automationPresentation.activity(form, status);
       const failure = status.configurationError || (savedEnabled && status.delivery?.success === false ? automationPresentation.delivery(status.delivery) + ' Check Live View in Quick actions.' : '');
-      automationPresentation.status(q('.tapo-status'), 'Tapo: ' + status.connection + ' · ' + (failure || status.message) + (status.lastChecked ? ' · Checked ' + new Date(status.lastChecked).toLocaleTimeString() : ''), failure || status.connection === 'Unavailable' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
+      automationPresentation.status(q('.tapo-status'), 'Tapo: ' + status.connection + ' · ' + (failure || (status.connection==='Disabled'?'Integration disabled · enable Tapo and Save & apply to activate rules':status.message)) + (status.lastChecked ? ' · Checked ' + new Date(status.lastChecked).toLocaleTimeString() : ''), failure || status.connection === 'Unavailable' ? 'error' : status.connection === 'Connected' ? 'healthy' : 'neutral');
       // Keep draft discovery available while editing; status must not remove its choices.
       if (!draftDiscovery) inventory(status);
       else {

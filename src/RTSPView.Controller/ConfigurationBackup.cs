@@ -23,7 +23,8 @@ public static class ConfigurationBackup
         var settings = JsonSettingsStore.ParseImport(json);
         using var document = JsonDocument.Parse(json);
         var sections = document.RootElement.EnumerateObject().Where(p => p.Name.Equals("Automations", StringComparison.OrdinalIgnoreCase)).ToArray();
-        var before = await store.LoadAsync(token);
+        await using var transaction = await store.BeginWriteAsync(token);
+        var before = await transaction.LoadAsync(token);
         var oldMqtt = mqtt.StoredState;
         var oldTapo = tapo.StoredState;
         AutomationSettings? importedMqtt = null;
@@ -56,7 +57,7 @@ public static class ConfigurationBackup
         AutomationPersistence.Prepare(directory);
         try
         {
-            await store.SaveAsync(settings, token);
+            await transaction.SaveAsync(settings, token);
             if (importedMqtt is not null) await mqtt.SaveAsync(new(importedMqtt, null, ClearPassword: !keepMqttPassword), token);
             if (importedTapo is not null) await tapo.SaveAsync(new(importedTapo, ClearPassword: !keepTapoPassword), token);
             AutomationPersistence.Commit(directory);
@@ -64,7 +65,7 @@ public static class ConfigurationBackup
         catch
         {
             // Restore encrypted service state too; a failed import must not consume saved credentials.
-            await store.SaveAsync(before, CancellationToken.None);
+            await transaction.SaveAsync(before with { StorageRevision = settings.StorageRevision }, CancellationToken.None);
             await mqtt.RestoreStateAsync(oldMqtt);
             await tapo.RestoreStateAsync(oldTapo);
             AutomationPersistence.Recover(directory);

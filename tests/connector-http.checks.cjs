@@ -73,7 +73,7 @@ const {randomUUID} = require('node:crypto');
     assert.equal(fs.readFileSync(path.join(directory,'settings.json'),'utf8'),before,'Invalid import partially saved');
     const failedWrite=path.join(directory,'automation.json.tmp');fs.mkdirSync(failedWrite);
     try {
-      assert.equal((await request('/connector/v1/sync',{...sync,cameras:[{...camera,name:'Should roll back'}]},{token})).status,500);
+      const failed=await request('/connector/v1/sync',{...sync,cameras:[{...camera,name:'Should roll back'}]},{token});assert.equal(failed.status,500);assert.match(failed.text||JSON.stringify(failed),/Reference [a-f0-9]{8}/);
       assert.equal(fs.readFileSync(path.join(directory,'settings.json'),'utf8'),before,'Broker save failure did not roll back cameras');
     } finally {fs.rmdirSync(failedWrite);}
     assert.equal((await request('/connector/v1/sync',{...sync,padding:'x'.repeat(66000)},{token})).status,400,'Unbounded request');

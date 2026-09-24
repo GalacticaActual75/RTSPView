@@ -8,6 +8,14 @@ $script:lastLogMessage = $null
 $taskWasEnabled = $false
 $wallStopped = $false
 $job = $null
+$shutdownPrepared = $false
+function Invoke-InstallationShutdown([switch]$Restore) {
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $PSScriptRoot 'Prepare-Installation.ps1') + '" -InstallRoot "' + $root + '" -StatePath "' + (Join-Path $PSScriptRoot 'shutdown-state.json') + '"'
+    if ($Restore) { $arguments += ' -Restore' }
+    $preflight = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $arguments -WindowStyle Hidden -PassThru
+    if (!$preflight.WaitForExit(90000)) { $preflight.Kill(); throw 'Timed out preparing the installation. No installer was launched by this preparation step.' }
+    if ($preflight.ExitCode -ne 0) { throw 'Could not release installed application files or restore the startup task. See shutdown-state.json.error in the update folder.' }
+}
 function Report([string]$State, [string]$Message) {
     try {
     if ($Message -ne $script:lastLogMessage) {
@@ -82,13 +90,17 @@ public static class RTSPViewUserLaunch {
     $service = Get-Service RTSPViewMaintenance
     $service.Stop(); $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
     $wallStopped = $true
+    $shutdownPrepared = $true
+    Invoke-InstallationShutdown
     Report 'working' ('Installer details will be saved to ' + $installerLogPath)
     $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /SERVICEUPDATE=1 /LOG="' + $installerLogPath + '" /DIR="' + $root + '"'
     $process = Start-Process -FilePath $installer -ArgumentList $arguments -WindowStyle Hidden -PassThru
     while (!$process.WaitForExit(1000)) { Report 'working' 'Installing RTSPView. Please keep this host on.' }
-    if ($process.ExitCode -ne 0) { throw "The RTSPView installer exited with code $($process.ExitCode)." }
+    if ($process.ExitCode -ne 0) { throw "The RTSPView installer exited with code $($process.ExitCode). Installation was not confirmed. Details: $installerLogPath" }
     $controller = Join-Path $root 'Controller\SpotMonitor.Controller.exe'
-    if ((Get-Item -LiteralPath $controller).VersionInfo.ProductVersion.Split('+')[0] -ne $job.Version) { throw 'Installed version does not match the confirmed release.' }
+    foreach ($component in @($controller, (Join-Path $root 'Viewer\SpotMonitor.Viewer.exe'), (Join-Path $root 'Maintenance\RTSPView.Maintenance.exe'))) {
+        if ((Get-Item -LiteralPath $component).VersionInfo.ProductVersion.Split('+')[0] -ne $job.Version) { throw 'Installed components do not all match the confirmed release.' }
+    }
     Start-Service RTSPViewMaintenance
     Report 'working' 'Installation completed. Starting the Controller and viewer in the signed-in user session.'
     Start-UserWall
@@ -112,5 +124,6 @@ catch {
     }
 }
 finally {
+    if ($shutdownPrepared) { try { Invoke-InstallationShutdown -Restore } catch { Report 'failed' $_.Exception.Message } }
     if ($taskWasEnabled) { Enable-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -TaskPath '\' -ErrorAction SilentlyContinue | Out-Null }
 }

@@ -38,7 +38,8 @@ if (network.Managed)
 }
 else builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5080");
 Directory.CreateDirectory(dataDirectory);
-AutomationPersistence.Recover(dataDirectory);
+await using (var recovery = await new JsonSettingsStore(Path.Combine(dataDirectory, "settings.json")).BeginWriteAsync())
+    AutomationPersistence.Recover(dataDirectory);
 var dataProtectionDirectory = Path.Combine(dataDirectory, "data-protection");
 Directory.CreateDirectory(dataProtectionDirectory);
 builder.Services.AddDataProtection()
@@ -93,6 +94,7 @@ if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateMonitor>());
     builder.Services.AddHostedService<WallUpdateServer>();
+    builder.Services.AddHostedService<StreamingUpdateMonitor>();
 }
 builder.Services.AddSingleton(provider => new RestartScheduler(dataDirectory, async (action, token) =>
 {
@@ -169,14 +171,15 @@ app.Use(async (context, next) =>
     catch (Exception exception)
     {
         var route = (context.GetEndpoint() as Microsoft.AspNetCore.Routing.RouteEndpoint)?.RoutePattern.RawText ?? "unknown route";
-        auditLog.Write("ERROR", $"Request failed: {exception.GetType().Name}; code=0x{exception.HResult:X8}; {context.Request.Method} {route}");
+        var reference = Guid.NewGuid().ToString("N")[..8];
+        auditLog.Write("ERROR", $"Reference {reference}: Request failed: {exception.GetType().Name}; code=0x{exception.HResult:X8}; {context.Request.Method} {route}");
         if (context.Response.HasStarted) throw;
         context.Response.Clear();
         var busySettings = exception is IOException io && JsonSettingsStore.IsSharingViolation(io);
         context.Response.StatusCode = busySettings ? 503 : 500;
         await context.Response.WriteAsJsonAsync(new { error = busySettings
             ? "Settings are busy in another process. Your changes have not been applied; try Apply again."
-            : "Request failed. Check the server logs." });
+            : $"Request failed. Reference {reference}. Open Settings → Diagnostics.", reference, panel = "diagnostics" });
     }
 });
 app.UseDefaultFiles();
@@ -268,6 +271,7 @@ app.MapGet("/api/status", () => Results.Ok(new
 {
     version = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)?.InformationalVersion.Split('+')[0] ?? "Development",
     hostname = Environment.MachineName,
+    logHealth = new { droppedEntries = auditLog.DroppedEntries, error = auditLog.LastError },
     lanAddresses = GetLanAddresses(),
     controllerUptimeSeconds = (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds,
     windowsUptimeSeconds = (long)TimeSpan.FromMilliseconds(Environment.TickCount64).TotalSeconds,
@@ -313,6 +317,7 @@ app.MapPut("/api/network", async (HttpContext context, LanAccessRequest request)
 }).RequireAuthorization();
 
 app.MapGet("/api/update", async () => Results.Ok(await updateMonitor.StatusAsync())).RequireAuthorization();
+app.MapGet("/api/streaming-update", () => Results.Ok(StreamingUpdates.Default.DisplayStatus())).RequireAuthorization();
 app.MapPost("/api/update/check", async (CancellationToken cancellationToken) =>
     Results.Ok(await updateMonitor.CheckAsync(true, DateTimeOffset.UtcNow, cancellationToken))).RequireAuthorization();
 app.MapPut("/api/update/notifications", async (WallNotificationSettings request) =>
@@ -340,11 +345,19 @@ app.MapPost("/api/update/install", async (UpdateInstallRequest request, Cancella
     catch (Exception exception)
     {
         auditLog.Write("ERROR", $"Unable to start RTSPView update: {exception.Message}");
-        return Results.Problem("Unable to start update. Check server logs.", statusCode: 500);
+        var reference = Guid.NewGuid().ToString("N")[..8];
+        auditLog.Write("ERROR", $"Reference {reference}: Update launch failed ({exception.GetType().Name}).");
+        return Results.Json(new { error = $"Unable to start update. Reference {reference}. Open Settings → Updates.", reference, panel = "updates" }, statusCode: 500);
     }
 }).RequireAuthorization();
 
-app.MapGet("/api/config", async () => Results.Ok(await settingsStore.LoadAsync())).RequireAuthorization();
+app.MapGet("/api/config", async () => {
+    var settings = await settingsStore.LoadAsync();
+    var json = System.Text.Json.JsonSerializer.SerializeToNode(settings, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+    json["layoutRevision"] = WallLayoutsRequest.RevisionFor(settings.Layouts, settings.ActiveLayoutId);
+    json["automationLayoutRevision"] = WallLayoutsRequest.RevisionFor(settings.AutomationViewLayouts, settings.AutomationViewLayouts[0].Id);
+    return Results.Json(json);
+}).RequireAuthorization();
 app.MapTapo(configGate);
 app.MapAutomationPriorities(configGate);
 app.MapGet("/api/automation", (AutomationService automation) => Results.Ok(automation.Configuration)).RequireAuthorization();
@@ -497,8 +510,9 @@ app.MapDelete("/api/overlays/{slot:int}", async (int slot, AutomationService aut
     await configGate.WaitAsync();
     try
     {
-        if (automation.UsesOverlay(slot) || tapo.UsesOverlay(slot) || tapo.UsesCamera(StreamCatalog.SourceSlot(slot))) return Results.BadRequest(new { error = "An automation rule uses this overlay or its original stream. Remove that reference before deleting it." });
         var settings = await settingsStore.LoadAsync();
+        var related = ConfigurationLinks.Stream(settings, automation, tapo, slot, true);
+        if (related.Length > 0) return Results.BadRequest(new { error = "This overlay is in use. Remove these references before deleting it.", related });
         await settingsStore.SaveAsync(StreamCatalog.DeleteOverlay(settings, slot));
         try { File.Delete(Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg")); } catch (IOException) { }
         auditLog.Write("AUDIT", $"Overlay {slot} deleted from web admin");
@@ -566,6 +580,8 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
         {
             StartFullScreen = display.StartFullScreen,
             PreferredMonitor = Math.Max(0, display.PreferredMonitor),
+            PreferredMonitorDevice = display.PreferredMonitorDevice,
+            RequestHardwareDecoding = display.RequestHardwareDecoding ?? settings.RequestHardwareDecoding,
             HideMouseCursor = display.HideMouseCursor,
             MouseCursorHideSeconds = Math.Clamp(display.MouseCursorHideSeconds, 1, 30),
             ShowCameraNames = display.ShowCameraNames,
@@ -577,7 +593,7 @@ app.MapPut("/api/display", async (DisplaySettings display) =>
         }).Normalize();
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", "Display settings changed from web admin");
-        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, ShowTileBorders = updated.ShowTileBorders, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop, ShowHoverExitButton = updated.ShowHoverExitButton });
+        return Results.Ok(new DisplaySettings { StartFullScreen = updated.StartFullScreen, PreferredMonitor = updated.PreferredMonitor, PreferredMonitorDevice = updated.PreferredMonitorDevice, RequestHardwareDecoding = updated.RequestHardwareDecoding, HideMouseCursor = updated.HideMouseCursor, MouseCursorHideSeconds = updated.MouseCursorHideSeconds, ShowCameraNames = updated.ShowCameraNames, ShowCameraStats = updated.ShowCameraStats, ShowTileBorders = updated.ShowTileBorders, DiagnosticsAutoOpenExcludedSlots = updated.DiagnosticsAutoOpenExcludedSlots, KeepViewerAlwaysOnTop = updated.KeepViewerAlwaysOnTop, ShowHoverExitButton = updated.ShowHoverExitButton });
     }
     finally { configGate.Release(); }
 }).RequireAuthorization();
@@ -603,8 +619,9 @@ app.MapDelete("/api/cameras/{slot:int}", async (int slot, AutomationService auto
     await configGate.WaitAsync();
     try
     {
-        if (automation.UsesCamera(slot) || tapo.UsesCamera(slot)) return Results.BadRequest(new { error = "An automation rule uses this stream. Remove it from the rule before deleting it." });
         var settings = await settingsStore.LoadAsync();
+        var related = ConfigurationLinks.Stream(settings, automation, tapo, slot, false);
+        if (related.Length > 0) return Results.BadRequest(new { error = "This stream is in use. Remove these references before deleting it.", related });
         var updated = StreamCatalog.DeleteCamera(settings, slot).Normalize();
         await settingsStore.SaveAsync(updated);
         try { File.Delete(Path.Combine(dataDirectory, "snapshots", $"camera-{slot}.jpg")); } catch (IOException) { }
@@ -613,6 +630,32 @@ app.MapDelete("/api/cameras/{slot:int}", async (int slot, AutomationService auto
     }
     catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
     finally { configGate.Release(); }
+}).RequireAuthorization();
+
+app.MapOnvif();
+
+app.MapPost("/api/streams/test", async (CameraSettings camera, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        StreamSource.Validate(camera);
+        if (string.IsNullOrWhiteSpace(camera.RtspUrl)) return Results.BadRequest(new { error = "Enter a source URL first." });
+        if (!StreamSource.NeedsResolver(camera))
+            return Results.Ok(new { message = "Direct stream URL accepted. Save & apply to verify playback in the wall." });
+        using var stream = await StreamResolver.ResolveAsync(camera, cancellationToken);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
+        using var response = await client.GetAsync(stream.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(25));
+        await using var body = await response.Content.ReadAsStreamAsync(timeout.Token);
+        if (await body.ReadAsync(new byte[1], timeout.Token) == 0) throw new IOException("Empty stream");
+        return Results.Ok(new { message = $"{stream.Provider} resolved the source and received media. Save & apply to verify video playback." });
+    }
+    catch (Exception error) when (error is InvalidDataException or InvalidOperationException)
+    { return Results.BadRequest(new { error = error.Message }); }
+    catch (Exception error) when (error is HttpRequestException or IOException or OperationCanceledException)
+    { return Results.BadRequest(new { error = "The source did not deliver media in time. Check availability, quality and source type." }); }
 }).RequireAuthorization();
 
 app.MapPut("/api/cameras/{slot:int}", async (int slot, CameraSettings camera) =>
@@ -641,15 +684,17 @@ app.MapPut("/api/automation/layouts", async (WallLayoutsRequest request, Automat
     await configGate.WaitAsync();
     try
     {
+        var settings = await settingsStore.LoadAsync();
+        if (request.Revision is not null && request.Revision != WallLayoutsRequest.RevisionFor(settings.AutomationViewLayouts, settings.AutomationViewLayouts[0].Id))
+            return Results.Conflict(new { error = "Automation layouts changed in another editor. Reload before saving; this draft has not been applied." });
         var automationLayouts = AutomationLayouts.Normalize(request.Layouts);
         if (automationLayouts.Any(l => l.FocusSlots.Length < 2 && (automation.RequiresSecondFocus(l.Id) || tapo.RequiresSecondFocus(l.Id))))
-            return Results.BadRequest(new { error = "A rule assigns a Focus 2 camera to this layout. Remove that assignment before removing its second focus tile." });
-        var settings = await settingsStore.LoadAsync();
+            return Results.BadRequest(new { error = "A rule assigns a Focus 2 camera to this layout. Remove that assignment before removing its second focus tile.", related = ConfigurationLinks.Layouts(automation, tapo, automationLayouts.Where(l => l.FocusSlots.Length < 2).Select(l => l.Id), true, true) });
         if (settings.AutomationViewLayouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && (automation.UsesLayout(l.Id) || tapo.UsesAutomationLayout(l.Id))))
-            return Results.BadRequest(new { error = "A rule uses this layout. Choose another layout in that rule before deleting it." });
+            return Results.BadRequest(new { error = "A rule uses this layout. Choose another layout in that rule before deleting it.", related = ConfigurationLinks.Layouts(automation, tapo, settings.AutomationViewLayouts.Where(l => !request.Layouts.Any(n => n.Id == l.Id)).Select(l => l.Id), true) });
         await settingsStore.SaveAsync(settings with { AutomationViewLayouts = automationLayouts });
         auditLog.Write("AUTOMATION", "Automation layouts saved");
-        return Results.Ok(new { layouts = automationLayouts, activeLayoutId = automationLayouts[0].Id });
+        return Results.Ok(new { layouts = automationLayouts, activeLayoutId = automationLayouts[0].Id, revision = WallLayoutsRequest.RevisionFor(automationLayouts, automationLayouts[0].Id) });
     }
     catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
     finally { configGate.Release(); }
@@ -661,12 +706,14 @@ app.MapPut("/api/layouts", async (WallLayoutsRequest request, TapoService tapo) 
     {
         WallLayout.Validate(request.Layouts, request.ActiveLayoutId);
         var settings = await settingsStore.LoadAsync();
+        if (request.Revision is not null && request.Revision != WallLayoutsRequest.RevisionFor(settings.Layouts, settings.ActiveLayoutId))
+            return Results.Conflict(new { error = "Layouts changed in another editor. Reload before saving; this draft has not been applied." });
         if (settings.Layouts.Any(l => !request.Layouts.Any(n => n.Id == l.Id) && tapo.UsesLayout(l.Id)))
-            return Results.BadRequest(new { error = "A Tapo sensor rule uses this layout. Remove its rule reference before deleting it." });
+            return Results.BadRequest(new { error = "A Tapo sensor rule uses this layout. Remove its rule reference before deleting it.", related = ConfigurationLinks.Layouts(null, tapo, settings.Layouts.Where(l => !request.Layouts.Any(n => n.Id == l.Id)).Select(l => l.Id), false) });
         var updated = settings with { Layouts = request.Layouts, ActiveLayoutId = request.ActiveLayoutId };
         await settingsStore.SaveAsync(updated);
         auditLog.Write("AUDIT", "Wall layouts saved from web admin");
-        return Results.Ok(new { updated.Layouts, updated.ActiveLayoutId });
+        return Results.Ok(new { updated.Layouts, updated.ActiveLayoutId, revision = WallLayoutsRequest.RevisionFor(updated.Layouts, updated.ActiveLayoutId) });
     }
     catch (InvalidDataException exception) { return Results.BadRequest(new { error = exception.Message }); }
     finally { configGate.Release(); }
@@ -697,6 +744,7 @@ app.MapPost("/api/control/viewer/{action}", async (string action, ViewerRuntimeS
     {
         "restart-cameras" => (ViewerCommandType?)ViewerCommandType.RestartAllCameras,
         "restart" => ViewerCommandType.RestartViewer,
+        "identify-displays" => ViewerCommandType.IdentifyDisplays,
         "enter-fullscreen" => ViewerCommandType.EnterFullScreen,
         "exit-fullscreen" => ViewerCommandType.ExitFullScreen,
         _ => null
@@ -776,11 +824,12 @@ app.MapPost("/api/control/system/{action}", (string action, ConfirmedAction requ
 app.MapGet("/api/logs", (int? lines) =>
 {
     var requested = Math.Clamp(lines ?? 400, 50, 2000);
-    return Results.Ok(new { lines = ReadRecentLogLines(Path.Combine(dataDirectory, "logs"), requested).Select(RollingFileLogger.RedactCredentials) });
+    return Results.Ok(new { logHealth = new { droppedEntries = auditLog.DroppedEntries, error = auditLog.LastError }, lines = ReadRecentLogLines(Path.Combine(dataDirectory, "logs"), requested).Select(RollingFileLogger.RedactCredentials) });
 }).RequireAuthorization();
 app.MapGet("/api/logs/download", () =>
 {
-    var path = Directory.EnumerateFiles(Path.Combine(dataDirectory, "logs"), "rtspview-*.log").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
+    var directory = Path.Combine(dataDirectory, "logs");
+    var path = Directory.Exists(directory) ? Directory.EnumerateFiles(directory, "rtspview-*.log").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault() : null;
     return path is null ? Results.NotFound(new { error = "No log file is available." }) : Results.File(
         System.Text.Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, File.ReadLines(path).Select(RollingFileLogger.RedactCredentials))),
         "text/plain", "RTSPView.log");

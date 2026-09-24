@@ -132,6 +132,7 @@ public sealed class UpdateService : IDisposable
             foreach (var argument in new[] { "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", progressScript, "-StatusPath", progressPath })
                 progressStart.ArgumentList.Add(argument);
             _ = Process.Start(progressStart) ?? throw new InvalidOperationException("Windows did not start the update progress window.");
+            var approvalReason = "The maintenance helper is not configured for this Controller.";
             if (_maintenance is not null)
             {
                 MaintenanceStatus? helper = null;
@@ -140,7 +141,17 @@ public sealed class UpdateService : IDisposable
                     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                     helper = await _maintenance.SendAsync(new("status"), timeout.Token);
                 }
-                catch (Exception error) when (error is IOException or OperationCanceledException or UnauthorizedAccessException or JsonException) { }
+                catch (Exception error) when (error is IOException or OperationCanceledException or UnauthorizedAccessException or JsonException)
+                {
+                    approvalReason = error is UnauthorizedAccessException
+                        ? "The maintenance helper could not authenticate this Windows account."
+                        : "The maintenance helper did not return a usable response. Check its status under Settings > System.";
+                    _logger.Write("WARNING", $"Maintenance update connection failed ({error.GetType().Name}); Windows approval will be required.");
+                }
+                if (helper is not null)
+                    approvalReason = !helper.Available ? "The maintenance helper is unavailable. Check its status under Settings > System."
+                        : !helper.SupportsAppUpdates ? "The running maintenance helper does not support application updates."
+                        : "This release requires the Windows approval installation path.";
                 var serviceCompatible = false;
                 if (helper is { Available: true, SupportsAppUpdates: true })
                 {
@@ -169,6 +180,7 @@ public sealed class UpdateService : IDisposable
                 }
             }
 
+            _logger.Write("WARNING", "Update is using Windows approval: " + approvalReason);
             var release = await _source.FindAsync(channel, refresh: true, cancellationToken: cancellationToken)
                 ?? throw new InvalidDataException("No GitHub release is available for this channel.");
             var manifest = release.Manifest;
@@ -181,7 +193,7 @@ public sealed class UpdateService : IDisposable
             }
 
             var staged = Path.Combine(updateDirectory, manifest.Installer);
-            WriteProgress(progressPath, "working", $"Downloading and verifying RTSPView {manifest.Version} from GitHub...");
+            WriteProgress(progressPath, "working", $"{approvalReason} Windows approval will be required. Downloading and verifying RTSPView {manifest.Version} from GitHub...");
             await _source.DownloadAsync(release, staged, cancellationToken);
 
             var updater = Path.Combine(AppContext.BaseDirectory, "Apply-Update.ps1");
@@ -193,7 +205,7 @@ public sealed class UpdateService : IDisposable
                 Verb = "runas",
                 WindowStyle = ProcessWindowStyle.Hidden
             };
-            WriteProgress(progressPath, "working", "Waiting for Windows approval. Approve the administrator prompt on this host if shown.");
+            WriteProgress(progressPath, "working", approvalReason + " Approve the administrator prompt on this host to continue.");
             foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updater, "-InstallerPath", staged, "-ExpectedSha256", manifest.Sha256, "-StatusPath", progressPath, "-ExpectedVersion", manifest.Version })
                 startInfo.ArgumentList.Add(argument);
             _ = Process.Start(startInfo) ?? throw new InvalidOperationException("Windows did not start the update helper.");
@@ -202,10 +214,12 @@ public sealed class UpdateService : IDisposable
             _logger.Write("AUDIT", $"RTSPView {manifest.Version} update staged and elevation requested from web admin");
             return new(true, $"RTSPView {manifest.Version} is staged. Follow the update progress window on the Windows host. The page will disconnect during installation.");
         }
-        catch (Exception)
+        catch (Exception error)
         {
+            var reference = Guid.NewGuid().ToString("N")[..8];
+            _logger.Write("ERROR", $"Reference {reference}: Update did not start ({error.GetType().Name}).");
             if (progressPath is not null)
-                try { WriteProgress(progressPath, "failed", "Update did not start. Check server logs."); } catch { /* Preserve the original error. */ }
+                try { WriteProgress(progressPath, "failed", $"Update did not start. Reference {reference}. Open Settings → Updates."); } catch { /* Preserve the original error. */ }
             throw;
         }
         finally { _gate.Release(); }

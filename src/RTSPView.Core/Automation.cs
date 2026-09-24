@@ -100,7 +100,18 @@ public sealed record AutomationPresentation(string ConfigurationHash, Automation
 
 public static class AutomationConfiguration
 {
-    public static string Hash(AppSettings settings) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(settings.Normalize()))));
+    public static string Hash(AppSettings settings)
+    {
+        settings = settings.Normalize();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(settings with
+        {
+            WeatherOverlays = [],
+            Layouts = settings.Layouts.Select(layout => layout with
+            {
+                Tiles = layout.Tiles.Select(tile => tile with { Weather = null }).ToArray()
+            }).ToArray()
+        }))));
+    }
     public static bool CanFocus(AppSettings settings, AutomationAction action, int slot) =>
         StreamCatalog.LayoutCameras(settings).Any(c => c.Slot == slot && c.Enabled && !string.IsNullOrWhiteSpace(c.RtspUrl)) ||
         (action == AutomationAction.FullScreen && settings.AllOverlays().Any(o => o.Camera.Slot == slot && !string.IsNullOrWhiteSpace(o.Camera.RtspUrl)));

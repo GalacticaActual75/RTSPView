@@ -2,6 +2,9 @@ namespace RTSPView.Core;
 
 public sealed record AppSettings
 {
+    // In-memory freshness token; never exported or included in automation hashes.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? StorageRevision { get; set; }
     public const int CurrentSchemaVersion = 16;
     // IDs 10–25 remain reserved for existing overlay streams.
     public static readonly int[] MainCameraSlots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
@@ -26,6 +29,7 @@ public sealed record AppSettings
     public bool RequestHardwareDecoding { get; init; } = true;
     public bool StartFullScreen { get; init; } = true;
     public int PreferredMonitor { get; init; }
+    public string PreferredMonitorDevice { get; init; } = "";
     public bool HideMouseCursor { get; init; } = true;
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;
@@ -114,6 +118,7 @@ public sealed record AppSettings
                 .Select((item, index) => NormalizeOverlay(item ?? new(), index + 12, $"Overlay {index + 3}", normalized)).ToArray(),
             StartFullScreen = SchemaVersion < 3 || StartFullScreen,
             PreferredMonitor = Math.Max(0, PreferredMonitor),
+            PreferredMonitorDevice = (PreferredMonitorDevice ?? "").Trim()[..Math.Min((PreferredMonitorDevice ?? "").Trim().Length, 128)],
             MouseCursorHideSeconds = Math.Clamp(MouseCursorHideSeconds, 1, 30)
         };
     }
@@ -129,7 +134,7 @@ public sealed record AppSettings
         {
             var source = sources.FirstOrDefault(c => c.Slot == overlay.SourceCameraSlot);
             if (source is null || (DeletedCameraSlots ?? []).Contains(overlay.SourceCameraSlot))
-                throw new InvalidDataException("An overlay references an unavailable source stream. Select an existing main stream or use its own RTSP URL.");
+                throw new InvalidDataException("An overlay references an unavailable source stream. Select an existing main stream or use its own source URL.");
             var identity = overlay.Camera ?? new CameraSettings { Name = defaultName, Enabled = false };
             // Copy connection settings only. Each overlay keeps its identity, visibility and its own renderer/transforms.
             overlay = overlay with { Camera = source with { Slot = cameraSlot, Name = identity.Name, Enabled = identity.Enabled,
@@ -261,8 +266,10 @@ public sealed record DoorbellOverlaySettings
 
 public sealed record DisplaySettings
 {
+    public bool? RequestHardwareDecoding { get; init; }
     public bool StartFullScreen { get; init; } = true;
     public int PreferredMonitor { get; init; }
+    public string PreferredMonitorDevice { get; init; } = "";
     public bool HideMouseCursor { get; init; } = true;
     public int MouseCursorHideSeconds { get; init; } = 3;
     public bool ShowCameraNames { get; init; } = true;

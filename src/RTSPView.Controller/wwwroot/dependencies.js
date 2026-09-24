@@ -8,7 +8,7 @@ const dependencyUi = (()=>{
     panel.querySelector('[data-install]').onclick=()=>start('install','Install the official PawnIO driver on the RTSPView host? The live viewer stays open; temperature readings pause during installation. Windows may require a restart.');
   }
   async function start(action,prompt){
-    if(busy||!confirm(prompt))return;busy=true;revision++;
+    if(busy||!await uiDialogs.ask(prompt))return;busy=true;revision++;
     for(const button of panel.querySelectorAll('button'))button.disabled=true;
     try{const result=await api('/api/dependencies/pawnio/'+action,{method:'POST',body:JSON.stringify({confirmed:true})});panel.querySelector('[data-dependency-status]').textContent=result.message;}
     catch(error){panel.querySelector('[data-dependency-status]').textContent=error.message;}

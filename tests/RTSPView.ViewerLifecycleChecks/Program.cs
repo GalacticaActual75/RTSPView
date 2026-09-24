@@ -2,11 +2,27 @@ using RTSPView.Controller;
 using RTSPView.Core;
 using RTSPView.Infrastructure;
 
+// Child processes used only by the restart handoff regression.
+var restartMarker = Environment.GetEnvironmentVariable("RTSPVIEW_RESTART_TEST_MARKER");
+if (restartMarker is not null && (args.Contains("--restart-fixture-parent") || args.Contains("--respect-viewer-pause")))
+{
+    using var instance = new Mutex(false, "Local\\RTSPView.RestartFixture." + Path.GetFileName(restartMarker));
+    if (!instance.WaitOne(0)) return;
+    try
+    {
+        if (args.Contains("--restart-fixture-parent")) { File.WriteAllText(restartMarker + ".ready", "ready"); Thread.Sleep(4000); }
+        else File.AppendAllText(restartMarker, "started\n");
+    }
+    finally { instance.ReleaseMutex(); }
+    return;
+}
 var directory = Path.Combine(Path.GetTempPath(), "RTSPView-lifecycle-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(directory);
-using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 try
 {
+    await CommandIsolationChecks.Run();
+    await ViewerRestartChecks.Run();
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
     var state = new ViewerRuntimeState(directory);
     var otherProcess = new ViewerRuntimeState(directory);
     state.Pause();
@@ -61,5 +77,14 @@ try
     Console.WriteLine("PASS viewer lifecycle: durable pause, automatic/manual launch distinction, queued recovery, concurrent start, running guard, failed start, hover preference, application restart ordering and failure recovery.");
 }
 finally { Directory.Delete(directory, true); }
+
+using (var metrics = new SystemMetricsCollector())
+{
+    await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
+    {
+        metrics.GetSnapshot(); await Task.Delay(5500); metrics.GetSnapshot();
+    })));
+    Console.WriteLine("PASS concurrent telemetry sampling across GPU counter rediscovery.");
+}
 
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }

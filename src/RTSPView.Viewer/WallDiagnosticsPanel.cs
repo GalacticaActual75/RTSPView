@@ -89,8 +89,9 @@ public sealed class WallDiagnosticsPanel : UserControl
         if (open && !_fullScreen) { _windowedOpen = true; ApplyVisibility(); }
     }
 
-    public void Refresh(CameraTile[] tiles, IEnumerable<int>? autoOpenExcluded = null)
+    public void Refresh(CameraTile[] tiles, IEnumerable<int>? autoOpenExcluded = null, bool showStatistics = true)
     {
+        _stats.Visibility = showStatistics ? Visibility.Visible : Visibility.Collapsed;
         _autoOpenExcluded = (autoOpenExcluded ?? []).ToHashSet();
         _tiles = tiles.Where(t => t.DiagnosticsAvailable).ToArray();
         var choices = _tiles.Select(t => new Choice(t.Slot, t.DiagnosticLabel)).ToArray();

@@ -9,12 +9,28 @@ $ErrorActionPreference = 'Stop'
 $logDirectory = if ($env:RTSPVIEW_DATA_DIR) { Join-Path $env:RTSPVIEW_DATA_DIR 'logs' } elseif ($env:SPOTMONITOR_DATA_DIR) { Join-Path $env:SPOTMONITOR_DATA_DIR 'logs' } elseif (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'SpotMonitor\settings.json')) { Join-Path $env:LOCALAPPDATA 'SpotMonitor\logs' } else { Join-Path $env:LOCALAPPDATA 'RTSPView\logs' }
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 $logPath = Join-Path $logDirectory 'update.log'
+$installerLogPath = Join-Path $logDirectory ('installer-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss') + '.log')
+$script:lastLogMessage = $null
 $wallStopped = $false
+$shutdownPrepared = $false
+$installRoot = Split-Path -Parent $PSScriptRoot
+$shutdownState = Join-Path $logDirectory ('shutdown-' + [Guid]::NewGuid().ToString('N') + '.json')
+function Invoke-InstallationShutdown([switch]$Restore) {
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $PSScriptRoot 'Prepare-Installation.ps1') + '" -InstallRoot "' + $installRoot + '" -StatePath "' + $shutdownState + '"'
+    if ($Restore) { $arguments += ' -Restore' }
+    $preflight = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden -PassThru
+    if (!$preflight.WaitForExit(90000)) { $preflight.Kill(); throw 'Timed out preparing the installation. No installer was launched by this preparation step.' }
+    if ($preflight.ExitCode -ne 0) { throw 'Could not release installed application files or restore the startup task. See the shutdown error file in the logs folder.' }
+}
 function Report-Update([string]$State, [string]$Message) {
-    if (!$StatusPath) { return }
     try {
+        if ($Message -ne $script:lastLogMessage) {
+            ('{0:o} [{1}] {2}' -f [DateTimeOffset]::UtcNow, $State, $Message) | Add-Content -LiteralPath $logPath -Encoding UTF8
+            $script:lastLogMessage = $Message
+        }
+        if (!$StatusPath) { return }
         $temporary = $StatusPath + '.tmp'
-        @{ state = $State; message = $Message; windowSession = 'install'; updatedAt = [DateTimeOffset]::UtcNow.ToString('o'); logPath = $logPath } |
+        @{ state = $State; message = $Message; windowSession = 'install'; updatedAt = [DateTimeOffset]::UtcNow.ToString('o'); logPath = $logPath; installerLogPath = $installerLogPath } |
             ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding UTF8
         Move-Item -LiteralPath $temporary -Destination $StatusPath -Force
     } catch { Write-Warning "Unable to publish update status." }
@@ -36,11 +52,11 @@ try {
 
     Report-Update 'working' 'Stopping the camera wall before installation...'
     Start-Sleep -Seconds 2
-    Stop-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -ErrorAction SilentlyContinue
     $wallStopped = $true
-    Get-Process -Name 'SpotMonitor.Controller','SpotMonitor.Viewer' -ErrorAction SilentlyContinue | Stop-Process -Force
-    Start-Sleep -Seconds 2
-    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS'
+    $shutdownPrepared = $true
+    Invoke-InstallationShutdown
+    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG="' + $installerLogPath + '"'
+    Report-Update 'working' ('Installer details will be saved to ' + $installerLogPath)
     Report-Update 'working' 'Installing RTSPView. The camera wall will restart when installation finishes.'
     $process = Start-Process -FilePath $resolvedInstaller -ArgumentList $arguments -WindowStyle Hidden -PassThru
     $null = $process.Handle
@@ -49,16 +65,20 @@ try {
         $elapsed = [int]([DateTimeOffset]::UtcNow - $installStarted).TotalSeconds
         if ($elapsed % 10 -eq 0) { Report-Update 'working' "Installing RTSPView ($elapsed seconds elapsed). Please keep this host on." }
     }
-    if ($process.ExitCode -ne 0) { throw "The installer exited with code $($process.ExitCode)." }
+    if ($process.ExitCode -ne 0) { throw "The installer exited with code $($process.ExitCode). Installation was not confirmed. See the installer log." }
 
     $installRoot = Split-Path -Parent $PSScriptRoot
     $controllerPath = Join-Path $installRoot 'Controller\SpotMonitor.Controller.exe'
     $viewerPath = Join-Path $installRoot 'Viewer\SpotMonitor.Viewer.exe'
     if ($ExpectedVersion) {
-        $installedVersion = (Get-Item -LiteralPath $controllerPath).VersionInfo.ProductVersion.Split('+')[0]
-        if ($installedVersion -ne $ExpectedVersion) { throw "Expected $ExpectedVersion but found $installedVersion after installation." }
+        foreach ($component in @($controllerPath, $viewerPath, (Join-Path $installRoot 'Maintenance\RTSPView.Maintenance.exe'))) {
+            $installedVersion = (Get-Item -LiteralPath $component).VersionInfo.ProductVersion.Split('+')[0]
+            if ($installedVersion -ne $ExpectedVersion) { throw "Installed components do not all match $ExpectedVersion." }
+        }
     }
     Report-Update 'working' 'Installation finished. Starting RTSPView and waiting for the viewer...'
+    Invoke-InstallationShutdown -Restore
+    $shutdownPrepared = $false
     Start-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -ErrorAction Stop
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(60)
     do {
@@ -73,6 +93,7 @@ try {
 catch {
     $failure = $_.Exception.Message -replace '(?i)(?:rtsp|https?)://[^\s]+', '[URL redacted]' -replace '(?i)(?:[A-Z]:\\|\\\\)[^\r\n]+', '[path redacted]'
     $failure | Add-Content -LiteralPath $logPath
+    if ($shutdownPrepared) { try { Invoke-InstallationShutdown -Restore; $shutdownPrepared = $false } catch { $failure += ' Startup recovery also failed. Check the maintenance service and startup task on the host.' } }
     if ($wallStopped) { Start-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -ErrorAction SilentlyContinue }
     Report-Update 'failed' "Update needs attention: $failure"
 }

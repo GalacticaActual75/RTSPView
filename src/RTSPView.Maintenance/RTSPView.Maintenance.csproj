@@ -10,6 +10,7 @@
     <ProjectReference Include="..\RTSPView.Core\RTSPView.Core.csproj" />
     <ProjectReference Include="..\RTSPView.Infrastructure\RTSPView.Infrastructure.csproj" />
     <Content Include="..\..\deployment\Apply-ServiceUpdate.ps1" Link="Apply-ServiceUpdate.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\deployment\Prepare-Installation.ps1" Link="Prepare-Installation.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\RTSPView.Controller\ThirdParty\*.txt" Link="ThirdParty\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

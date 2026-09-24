@@ -6,7 +6,7 @@ using RTSPView.Core;
 namespace RTSPView.Controller;
 
 // Interactive local-user commands; no unauthenticated HTTP installation endpoint.
-public sealed class WallUpdateServer(UpdateMonitor monitor) : BackgroundService
+public sealed class WallUpdateServer(UpdateMonitor monitor, RTSPView.Infrastructure.RollingFileLogger logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -25,7 +25,7 @@ public sealed class WallUpdateServer(UpdateMonitor monitor) : BackgroundService
                 var request = JsonSerializer.Deserialize<WallUpdateRequest>(Encoding.UTF8.GetString(bytes.ToArray())) ?? throw new InvalidDataException();
                 WallUpdateResponse result;
                 try { result = await monitor.InstallFromWallAsync(request, stoppingToken); }
-                catch (Exception) { result = new(false, "Unable to start the update. Check the System page and host logs."); }
+                catch (Exception error) { var reference = Guid.NewGuid().ToString("N")[..8]; logger.Write("ERROR", $"Reference {reference}: Wall update failed ({error.GetType().Name})."); result = new(false, $"Unable to start the update. Reference {reference}. Open Settings → Updates."); }
                 await using var writer = new StreamWriter(pipe) {AutoFlush=true};
                 await writer.WriteLineAsync(JsonSerializer.Serialize(result));
             }

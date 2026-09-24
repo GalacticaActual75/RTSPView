@@ -34,6 +34,11 @@ internal static class WallDiagnosticsChecks
         if (panel.Visibility != Visibility.Visible) throw new Exception("Diagnostics button did not open windowed panel");
         if (panel.WarningCount != 2) throw new Exception("Simultaneous main/overlay errors were not preserved");
         if (!overlay.DiagnosticWarning!.Contains("Decoder could not recover")) throw new Exception("Connection error lost its explanatory text");
+        panel.Refresh([main, overlay], showStatistics: false);
+        var detailStats = (FrameworkElement)typeof(WallDiagnosticsPanel).GetField("_stats", flags)!.GetValue(panel)!;
+        if (detailStats.Visibility != Visibility.Collapsed || panel.WarningCount != 2) throw new Exception("Statistics toggle hid alerts or failed to hide details.");
+        panel.Refresh([main, overlay], showStatistics: true);
+        if (detailStats.Visibility != Visibility.Visible) throw new Exception("Statistics toggle failed to restore details.");
         panel.SelectCamera(17, true);
         if (panel.SelectedSlot != 17 || !overlay.DiagnosticLabel.Contains("Overlay") || !main.DiagnosticLabel.Contains("Main feed"))
             throw new Exception("Duplicate camera names were not distinguished by feed type and slot");

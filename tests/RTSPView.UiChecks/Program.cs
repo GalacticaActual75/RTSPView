@@ -87,9 +87,12 @@ internal static class Program
             var url = (TextBox)window.FindName("UrlBox");
             name.Text = "UI draft";url.Text = "rtsp://example.test/live";
             ((CheckBox)window.FindName("CompositeBox")).IsChecked = true;
+            ((ComboBox)window.FindName("SourceModeBox")).SelectedIndex = 1;
+            ((ComboBox)window.FindName("QualityBox")).SelectedIndex = 3;
             list.SelectedIndex = 1;list.SelectedIndex = 0;
             if(name.Text != "UI draft" || url.Text != "rtsp://example.test/live")throw new Exception("Switching streams lost a draft.");
             if(((CheckBox)window.FindName("CompositeBox")).IsChecked != true)throw new Exception("Composite option was lost.");
+            if(((ComboBox)window.FindName("SourceModeBox")).SelectedIndex != 1 || ((ComboBox)window.FindName("QualityBox")).SelectedIndex != 3)throw new Exception("Website source preferences were lost.");
             if(File.Exists(Path.Combine(directory,"settings.json")))throw new Exception("Editing unexpectedly persisted settings.");
             if(list.Items.Count != settings.CameraCount)throw new Exception("Stream list count differs from configuration.");
             window.Width=700;window.Height=550;window.UpdateLayout();

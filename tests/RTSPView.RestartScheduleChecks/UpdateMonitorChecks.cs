@@ -14,6 +14,13 @@ internal static class UpdateMonitorChecks
         Task<UpdateLaunchResult> Install(string c,string v,CancellationToken token){installs++;return Task.FromResult(new UpdateLaunchResult(true,"Started"));}
         UpdateMonitor Monitor()=>new(directory,Initial,Check,Install,_=>{});
         void Assert(bool result,string message){if(!result)throw new Exception(message);}
+        Directory.CreateDirectory(directory);
+        foreach(var cache in new[]{"{", "{\"Channels\":null}", "{\"Channels\":{\"bogus\":null}}", "{\"Channels\":{\"beta\":{\"InstalledVersion\":\"invalid\"}}}", "{\"Channels\":{\"beta\":null}}"}) {
+            File.WriteAllText(Path.Combine(directory,"update-monitor.json"),cache);
+            using var recovered=Monitor();
+            Assert((await recovered.StatusAsync()).InstalledVersion==version,"Damaged update cache cannot prevent startup");
+        }
+        File.Delete(Path.Combine(directory,"update-monitor.json"));
         using var monitor=Monitor();
         await monitor.StatusAsync();Assert(calls==0,"reading cached status never calls GitHub");
         var first=await monitor.CheckAsync(false,now);Assert(calls==1&&first.NextCheck==now.AddHours(24),"daily timer");

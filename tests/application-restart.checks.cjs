@@ -3,7 +3,7 @@ const source=fs.readFileSync('src/RTSPView.Controller/wwwroot/app.js','utf8');
 const handler=source.slice(source.indexOf("for (const button of document.querySelectorAll('[data-application]'))"),source.indexOf("for(const button of document.querySelectorAll('[data-system]'))"));
 async function scenario({confirm=true,fail=false}={}) {
  const button={disabled:false}, messages=[],busy=[],calls=[];let polls=0,telemetry=0;
- const context={document:{querySelectorAll:()=>[button]},confirm:()=>confirm,AbortSignal:{timeout:()=>null},setTimeout:fn=>fn(),viewerControls:{busy:v=>busy.push(v),message:v=>messages.push(v)},updateTelemetry:async()=>telemetry++,api:async(url,options)=>{calls.push(url);if(options.method==='POST'){if(fail)throw Error('Maintenance active');assert.equal(JSON.parse(options.body).confirmed,true);return {instance:'old',message:'Restarting'}}polls++;return {instance:polls===1?'old':'new'};}};
+ const context={document:{querySelectorAll:()=>[button]},uiDialogs:{ask:async()=>confirm},AbortSignal:{timeout:()=>null},setTimeout:fn=>fn(),viewerControls:{busy:v=>busy.push(v),message:v=>messages.push(v)},updateTelemetry:async()=>telemetry++,api:async(url,options)=>{calls.push(url);if(options.method==='POST'){if(fail)throw Error('Maintenance active');assert.equal(JSON.parse(options.body).confirmed,true);return {instance:'old',message:'Restarting'}}polls++;return {instance:polls===1?'old':'new'};}};
  vm.runInNewContext(handler,context);await button.onclick();return {messages,busy,calls,polls,telemetry};
 }
 (async()=>{

@@ -142,7 +142,7 @@ public partial class MainWindow : Window
                 QueueOverlayLayouts();
             if (DateTime.UtcNow - _lastLanAddressRefresh >= TimeSpan.FromSeconds(30)) UpdateLanAddressText();
             foreach (var tile in _allTiles) tile.Tick();
-            DiagnosticsPanel.Refresh(_allTiles, _settings.DiagnosticsAutoOpenExcludedSlots);
+            DiagnosticsPanel.Refresh(_allTiles, _settings.DiagnosticsAutoOpenExcludedSlots, _settings.ShowCameraStats);
             DiagnosticsButton.Content = DiagnosticsPanel.WarningCount > 0 ? $"Diagnostics ({DiagnosticsPanel.WarningCount})" : "Diagnostics";
             RaiseWarningWindows();
             _telemetryPublisher.Publish(new ViewerTelemetry
@@ -152,6 +152,7 @@ public partial class MainWindow : Window
                 ViewerUptimeSeconds = (long)_viewerUptime.Elapsed.TotalSeconds,
                 ViewerMemoryMb = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1024d / 1024d, 1),
                 HardwareDecoder = "See per-camera decoder status",
+                Displays = DisplayMonitors.Current(),
                 Cameras = _allTiles.Select(tile => tile.GetTelemetry()).ToArray()
             });
             await ReloadExternalConfigurationAsync();
@@ -365,7 +366,7 @@ public partial class MainWindow : Window
     private void PositionOnPreferredMonitor()
     {
         var screens = System.Windows.Forms.Screen.AllScreens;
-        var index = Math.Clamp(_settings.PreferredMonitor, 0, Math.Max(0, screens.Length - 1));
+        var index = DisplayMonitors.Selected(_settings, screens);
         var bounds = screens[index].Bounds;
         var dpi = VisualTreeHelper.GetDpi(this);
         WindowState = WindowState.Normal;
@@ -378,7 +379,7 @@ public partial class MainWindow : Window
     private void SetFullScreen(bool enabled)
     {
         _isFullScreen = enabled;
-        DiagnosticsPanel.Refresh(_allTiles, _settings.DiagnosticsAutoOpenExcludedSlots);
+        DiagnosticsPanel.Refresh(_allTiles, _settings.DiagnosticsAutoOpenExcludedSlots, _settings.ShowCameraStats);
         DiagnosticsPanel.SetFullScreen(enabled);
         if (enabled)
         {
@@ -985,7 +986,7 @@ public partial class MainWindow : Window
         _leftButtonWasDown = leftButtonDown;
         if (!_isFullScreen || !newClick) return;
         var screens = System.Windows.Forms.Screen.AllScreens;
-        var index = Math.Clamp(_settings.PreferredMonitor, 0, Math.Max(0, screens.Length - 1));
+        var index = DisplayMonitors.Selected(_settings, screens);
         var bounds = screens[index].Bounds;
         var position = System.Windows.Forms.Cursor.Position;
         if (position.X < bounds.Right - 64 || position.X >= bounds.Right || position.Y < bounds.Top || position.Y >= bounds.Top + 64) return;
@@ -1011,6 +1012,11 @@ public partial class MainWindow : Window
         var commandTile = _allTiles.FirstOrDefault(tile => tile.GetTelemetry().Slot == command.Slot);
         switch (command.Type)
         {
+            case ViewerCommandType.IdentifyDisplays:
+                DisplayMonitors.Identify();
+                return new ViewerCommandResult(command.Id, true, "Display numbers shown on the host for five seconds.");
+            case ViewerCommandType.Ping:
+                return new ViewerCommandResult(command.Id, true, "Viewer connected.");
             case ViewerCommandType.AutomationOverlays:
                 return ApplyAutomation(command);
             case ViewerCommandType.SensorAutomation:
@@ -1027,7 +1033,7 @@ public partial class MainWindow : Window
                 return new ViewerCommandResult(command.Id, captured,
                     captured ? $"{snapshotName} snapshot refreshed." : $"{snapshotName} snapshot could not be captured.");
             case ViewerCommandType.RestartAllCameras:
-                foreach (var tile in _allTiles) tile.Start();
+                foreach (var tile in _allTiles.Where(tile => tile.OwnsDecoder)) tile.Start();
                 _logger.Write("INFO", "Remote command: restarted all configured streams");
                 return new ViewerCommandResult(command.Id, true, "All configured streams restarted.");
             case ViewerCommandType.EnterFullScreen:
@@ -1040,14 +1046,9 @@ public partial class MainWindow : Window
                 return new ViewerCommandResult(command.Id, true, "Full-screen mode disabled.");
             case ViewerCommandType.RestartViewer:
                 var executable = Environment.ProcessPath ?? throw new InvalidOperationException("Viewer executable path is unavailable.");
-                var escapedExecutable = executable.Replace("'", "''");
-                var restartHelper = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
-                restartHelper.ArgumentList.Add("-NoProfile");
-                restartHelper.ArgumentList.Add("-WindowStyle");
-                restartHelper.ArgumentList.Add("Hidden");
-                restartHelper.ArgumentList.Add("-Command");
-                restartHelper.ArgumentList.Add($"Start-Sleep -Seconds 2; Start-Process -FilePath '{escapedExecutable}' -ArgumentList '--respect-viewer-pause'");
-                Process.Start(restartHelper);
+                using (var current = Process.GetCurrentProcess())
+                using (var helper = Process.Start(ViewerRestart.StartInfo(executable, current.Id, current.StartTime.ToUniversalTime().Ticks)))
+                    if (helper is null) throw new IOException("Viewer restart helper could not start.");
                 _logger.Write("INFO", "Remote command: restarting viewer");
                 _ = Dispatcher.BeginInvoke(System.Windows.Application.Current.Shutdown);
                 return new ViewerCommandResult(command.Id, true, "Viewer restart started.");
@@ -1136,7 +1137,8 @@ public partial class MainWindow : Window
             if (previousGarage != updated.GarageOverlay.Camera)
                 GarageTile.Apply(updated.GarageOverlay.Camera);
             ApplyOverlayPreferences();
-            if (previousSettings.PreferredMonitor != updated.PreferredMonitor) PositionOnPreferredMonitor();
+            foreach (var tile in _allTiles) tile.SetHardwareDecoding(updated.RequestHardwareDecoding);
+            if (previousSettings.PreferredMonitor != updated.PreferredMonitor || previousSettings.PreferredMonitorDevice != updated.PreferredMonitorDevice) PositionOnPreferredMonitor();
             if (previousSettings.StartFullScreen != updated.StartFullScreen) SetFullScreen(updated.StartFullScreen);
             _settingsLastWriteUtc = writeTime;
             LoadEditor(Math.Max(0, SlotBox.SelectedIndex));
@@ -1162,7 +1164,7 @@ public partial class MainWindow : Window
         _hoverExitWindow?.Close();
         _temperatureWarning?.Close();
         Mouse.OverrideCursor = null;
-        foreach (var tile in _allTiles) tile.Dispose();
+        foreach (var tile in _allTiles.OrderBy(tile => tile.OwnsDecoder)) tile.Dispose();
         foreach (var entry in _additionalOverlays.Values)
         {
             entry.Window.Content = null;

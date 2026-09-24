@@ -113,3 +113,19 @@ var appTask = sharedGate.RunAppUpdateAsync(() => appBlocker.Task);
 Check(!sharedGate.TryBeginStop() && (await sharedGate.HandleAsync(new("prepare"))).State == "downloading", "update verification excludes driver installation and service shutdown");
 appBlocker.SetResult(new() { Available = true, State = "update-installing" }); await appTask;
 Check(sharedGate.TryBeginStop(), "service can stop after handing installation to independent worker");
+
+var historyDirectory = Path.Combine(Path.GetTempPath(), "RTSPView-update-history-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var operation = Guid.NewGuid();
+    var jobDirectory = Path.Combine(historyDirectory, "Updates", operation.ToString("N"));
+    Directory.CreateDirectory(jobDirectory);
+    File.WriteAllText(Path.Combine(historyDirectory, "app-update.json"), operation.ToString());
+    File.WriteAllText(Path.Combine(jobDirectory, "progress.json"), """
+        {"state":"failed","message":"Installer exited with code 5.","updatedAt":"2026-09-22T19:52:28Z"}
+        """);
+    var history = new ServiceUpdateCoordinator(historyDirectory, historyDirectory, "unused");
+    Check(history.Status is { State: "update-failed" } status && status.Message.Contains("Last update attempt (") && status.Message.Contains("2026-09-22"),
+        "persisted failure is dated and identified as the last attempt, not a new installer run");
+}
+finally { Directory.Delete(historyDirectory, true); }

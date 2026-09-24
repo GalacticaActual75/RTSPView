@@ -64,7 +64,8 @@ public static class ConnectorEndpoints
                 if (!authorization.StartsWith("Bearer ", StringComparison.Ordinal)) return Results.Unauthorized();
                 var sync = await ReadAsync<ConnectorSync>(context);
                 if (!pairing.Authorize(authorization[7..], sync.InstanceId, sessionVersion())) return Results.Unauthorized();
-                var previous = await store.LoadAsync();
+                await using var transaction = await store.BeginWriteAsync(context.RequestAborted);
+                var previous = await transaction.LoadAsync();
                 var updated = ConnectorImport.Merge(previous, sync);
                 var oldAutomation = automation.CurrentSettings;
                 var broker = sync.Broker;
@@ -74,14 +75,14 @@ public static class ConnectorEndpoints
                     (oldAutomation.Host != broker.Host || oldAutomation.Port != broker.Port || oldAutomation.Tls != broker.Tls ||
                      oldAutomation.Username != broker.Username))
                     throw new InvalidDataException("Existing rules use a different MQTT connection. Align the broker in Automation before syncing.");
-                await store.SaveAsync(updated);
+                await transaction.SaveAsync(updated);
                 try
                 {
                     if (broker is not null) await automation.SaveAsync(new(nextAutomation, broker.Password, broker.Password.Length == 0), CancellationToken.None);
                 }
                 catch
                 {
-                    await store.SaveAsync(previous);
+                    await transaction.SaveAsync(previous with { StorageRevision = updated.StorageRevision });
                     throw;
                 }
                 return Results.Ok(new { version = 1, imported = sync.Cameras.Length,

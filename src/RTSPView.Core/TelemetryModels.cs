@@ -11,6 +11,10 @@ public sealed record CameraTelemetry
     public uint? Width { get; init; }
     public uint? Height { get; init; }
     public string Decoder { get; init; } = "Unknown";
+    public bool ConfiguredPlayer { get; init; }
+    public int? SharedDecoderSlot { get; init; }
+    public bool Visible { get; init; }
+    public long CompositedUploads { get; init; }
     public DateTimeOffset? SnapshotCapturedAt { get; init; }
     public string? FrameWarning { get; init; }
     public int ReconnectCount { get; init; }
@@ -21,8 +25,11 @@ public sealed record CameraTelemetry
     public string? LastError { get; init; }
 }
 
+public sealed record DisplayMonitor(int Index, string DeviceName, string Label, bool Primary, int Width, int Height);
+
 public sealed record ViewerTelemetry
 {
+    public IReadOnlyList<DisplayMonitor> Displays { get; init; } = [];
     public AutomationVisibility? Automation { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
     public bool? IsFullScreen { get; init; }
@@ -66,7 +73,9 @@ public enum ViewerCommandType
     ExitFullScreen,
     CaptureCameraSnapshot,
     AutomationOverlays,
-    SensorAutomation
+    SensorAutomation,
+    Ping,
+    IdentifyDisplays
 }
 
 public sealed record ViewerCommand(Guid Id, ViewerCommandType Type, int? Slot = null, AutomationPresentation? Automation = null, SensorPresentation? Sensors = null);

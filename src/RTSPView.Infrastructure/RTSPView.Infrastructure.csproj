@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup><ProjectReference Include="..\RTSPView.Core\RTSPView.Core.csproj" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="streaming-update-public.txt" /></ItemGroup>
 </Project>

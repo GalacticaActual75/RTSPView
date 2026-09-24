@@ -27,11 +27,15 @@ public sealed class ServiceUpdateCoordinator
             {
                 using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(_jobDirectory, "progress.json")));
                 var state = document.RootElement.GetProperty("state").GetString();
+                var message = document.RootElement.GetProperty("message").GetString() ?? "RTSPView update in progress.";
+                if (state == "failed" && document.RootElement.TryGetProperty("updatedAt", out var updatedAt) &&
+                    updatedAt.TryGetDateTimeOffset(out var failedAt))
+                    message = $"Last update attempt ({failedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss zzz}): {message}";
                 if (state == "working" && !WorkerOrInstallerRunning())
                     return new() { Available = true, SupportsAppUpdates = true, State = "update-failed", Message = "The update worker stopped before reporting completion. Check the installed version before retrying." };
                 return new() { Available = true, SupportsAppUpdates = true, OperationId = _operation,
                     State = state == "working" ? "update-installing" : state == "ready" ? "update-ready" : "update-" + state,
-                    Message = document.RootElement.GetProperty("message").GetString() ?? "RTSPView update in progress.",
+                    Message = message,
                     ProgressPath = Path.Combine(_jobDirectory, "progress.json") };
             }
             catch (Exception error) when (error is IOException or JsonException or KeyNotFoundException)
@@ -91,6 +95,9 @@ public sealed class ServiceUpdateCoordinator
         var script = Path.Combine(AppContext.BaseDirectory, "Apply-ServiceUpdate.ps1");
         HelperSetup.ValidateProtectedPath(script);
         File.Copy(script, Path.Combine(directory, "Apply-ServiceUpdate.ps1"));
+        var shutdownScript = Path.Combine(AppContext.BaseDirectory, "Prepare-Installation.ps1");
+        HelperSetup.ValidateProtectedPath(shutdownScript);
+        File.Copy(shutdownScript, Path.Combine(directory, "Prepare-Installation.ps1"));
         File.WriteAllText(Path.Combine(directory, "job.json"), JsonSerializer.Serialize(new
         { InstallRoot = _root, Version = request.Version, Sha256 = release.Manifest.Sha256, AllowedSid = _allowedSid, SessionId = session }));
         File.WriteAllText(Path.Combine(directory, "progress.json"), JsonSerializer.Serialize(new { state = "ready", message = "Verified RTSPView update ready.", windowSession = "service" }));

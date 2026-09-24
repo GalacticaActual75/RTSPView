@@ -24,8 +24,8 @@ const workspace = (() => {
       apply.disabled = true;
       try {
         const latest = await api('/api/config');
-        const result = await api('/api/layouts', {method:'PUT',body:JSON.stringify({layouts:latest.layouts,activeLayoutId:layouts.value})});
-        config = {...latest,...result}; wallDesigner.load({...config,cameras:cameraInventory}); sync();
+        const result = await api('/api/layouts', {method:'PUT',body:JSON.stringify({layouts:latest.layouts,activeLayoutId:layouts.value,revision:latest.layoutRevision})});
+        config = {...latest,...result,layoutRevision:result.revision}; wallDesigner.load({...config,cameras:cameraInventory}); sync();
       } catch (error) { $('#monitorNotice').textContent = error.message; }
       finally { apply.disabled = false; }
     });
@@ -71,20 +71,23 @@ const workspace = (() => {
     if(!camera.enabled)return ['Disabled','neutral'];
     if(!camera.rtspUrl)return ['Not configured','neutral'];
     if(!telemetry)return ['Checking…','neutral'];
+    if(telemetry.viewerPaused)return ['Viewer paused','neutral'];
     if(!telemetry.viewerConnected)return ['Viewer offline','neutral'];
     const stream=telemetry.viewer?.cameras.find(c=>c.slot===camera.slot);
+    if(stream?.state==='Resolving')return ['Opening website stream','warning'];
+    if(stream?.lastError)return ['Stream error','error'];
     if(stream?.frameWarning)return ['Stale video','warning'];
     const name=stream?.state||'Unknown';
-    return [({Live:'Connected',StreamError:'Stream error',NotConfigured:'Not configured'})[name]||name,name==='Live'?'healthy':['Connecting','Reconnecting','Buffering'].includes(name)?'warning':'error'];
+    return [({Live:'Connected',StreamError:'Stream error',NotConfigured:'Not configured'})[name]||name,name==='Live'?'healthy':['Disabled','NotConfigured','Stopped'].includes(name)?'neutral':['Connecting','Reconnecting','Buffering'].includes(name)?'warning':'error'];
   }
   function status() {
     for(const item of document.querySelectorAll('[data-stream-status]')){
       const camera=cameraInventory.find(c=>c.slot===Number(item.dataset.streamStatus));if(!camera)continue;
-      const [text,tone]=state(camera);item.textContent=text;item.dataset.tone=tone;
+      const [text,tone]=state(camera);item.textContent=text;item.dataset.tone=tone;item.title=text;
     }
     const enabled=cameraInventory.filter(c=>c.enabled&&c.rtspUrl),live=enabled.filter(c=>state(c)[1]==='healthy').length;
-    $('#monitorHealth').textContent=!telemetry?'Checking viewer…':!telemetry.viewerConnected?'Viewer offline · showing last available snapshots':`${live} of ${enabled.length} streams connected`;
-    $('#monitorHealth').dataset.tone=telemetry&&!telemetry.viewerConnected?'warning':'neutral';
+    $('#monitorHealth').textContent=!telemetry?'Checking viewer…':telemetry.viewerPaused?'Viewer paused · use Start Viewer in Settings → Maintenance to resume':!telemetry.viewerConnected?'Viewer offline · showing last available snapshots':`${live} of ${enabled.length} streams connected`;
+    $('#monitorHealth').dataset.tone=telemetry&&telemetry.viewerConnected&&enabled.length>0&&live===enabled.length?'healthy':telemetry?'warning':'neutral';
   }
   function sync() {
     if(!editor)return;
@@ -128,9 +131,9 @@ const workspace = (() => {
         if(monitorMode==='wall'){const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});}
         const image=node('img');image.alt='';image.className='feed-thumbnail';
         const name=node('span',camera.name,'monitor-name'),health=node('span',undefined,'status-label');health.dataset.streamStatus=camera.slot;
-        card.append(image,name,health);board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
+        health.id='monitor-state-'+camera.slot;card.setAttribute('aria-describedby',health.id);card.append(image,name,health);board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
       }
-      if(!tiles.length)board.append(node('p',config?'No streams in this view. Add streams, then assign them in Layouts.':'Loading snapshot previews…','empty-state'));
+      if(!tiles.length)board.append(node('p',config?cameraInventory.some(c=>c.rtspUrl)?'Streams configured but unassigned. Open Layouts to place them, then Apply to wall.':'No source configured. Open Streams and add an RTSP address, then assign the stream in Layouts.':'Loading snapshot previews…','empty-state'));
     }
     status();fitMonitor();
   }
@@ -150,6 +153,16 @@ const workspace = (() => {
     if(form)dashboardUX.preview(form);
   }
   function overlay(form) {
+    const context=node('div',undefined,'overlay-context');
+    const host=node('span'),source=node('span'),health=node('span',undefined,'status-label');
+    context.append(host,source,health);form.querySelector('.card-head').after(context);
+    const syncContext=()=>{
+      host.textContent='Host · '+(form.elements.hostCameraSlot.selectedOptions[0]?.textContent||'Select stream');
+      source.textContent='Source · '+(form.elements.sourceCameraSlot?.selectedOptions[0]?.textContent||'Own source URL');
+      const state=form.querySelector('.camera-live');health.textContent=state.querySelector('.state').textContent;health.dataset.tone=state.dataset.tone||'neutral';
+    };
+    form.addEventListener('input',syncContext);form.addEventListener('change',syncContext);
+    new MutationObserver(syncContext).observe(form.querySelector('.camera-live'),{childList:true,subtree:true,attributes:true});syncContext();
     const settings=form.querySelector('.camera-settings');settings.open=true;
     const placement=settings.querySelector('.overlay-placement');
     form.elements.viewportShape.closest('label').hidden=true;
@@ -170,5 +183,5 @@ const workspace = (() => {
     if(info){const details=node('details');details.append(node('summary','Automation'));info.before(details);details.append(info);}
     form.addEventListener('invalid',event=>{const i=sections.findIndex(s=>s.contains(event.target));if(i>=0)select(i);},true);
   }
-  return {init,load,sync,reset,openStream,overlay,telemetry(value){telemetry=value;status();fitMonitor();},unavailable(){telemetry=null;status();$('#monitorHealth').textContent='Connection to controller lost · status may be out of date';}};
+  return {init,load,sync,reset,openStream,overlay,telemetry(value){telemetry=value;status();fitMonitor();},unavailable(){telemetry=null;status();$('#monitorHealth').textContent='Connection to controller lost · status may be out of date';$('#monitorHealth').dataset.tone='warning';}};
 })();

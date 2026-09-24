@@ -6,7 +6,7 @@ using RTSPView.Viewer;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         Environment.SetEnvironmentVariable("RTSPVIEW_DATA_DIR", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "RTSPView-native-" + Guid.NewGuid().ToString("N")));
         var result = 1;
@@ -22,6 +22,7 @@ internal static class Program
         {
             try
             {
+                if(args.Contains("--capacity")) { await CapacityChecks.Run(); result=0; app.Shutdown(); return; }
                 OverlayEdgeChecks.Run();
                 await SetLayout(9);
                 Check(9, "startup 3x3 hides seven unused status windows");
@@ -38,6 +39,7 @@ internal static class Program
                 await StreamTelemetryChecks.Run(nativeBackground: true);
                 await StreamTelemetryChecks.Run();
                 await StreamTelemetryChecks.Run(preserveWholeFrame: true);
+                await SharedFrameChecks.Run();
                 WallDiagnosticsChecks.Run();
                 await UpdateBadgeChecks.Run(window);
                 result = 0;

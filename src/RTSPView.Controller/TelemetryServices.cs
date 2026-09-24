@@ -40,6 +40,7 @@ public sealed class ViewerTelemetryClient : BackgroundService
 
 public sealed class SystemMetricsCollector : IDisposable
 {
+    private readonly object _gate = new();
     private readonly PerformanceCounter? _cpu;
     private readonly List<PerformanceCounter> _gpu = [];
     private readonly List<PerformanceCounter> _videoDecode = [];
@@ -57,6 +58,13 @@ public sealed class SystemMetricsCollector : IDisposable
     }
 
     public SystemTelemetry GetSnapshot()
+    {
+        // HTTP requests overlap, especially while a viewer restart changes GPU instances.
+        // Discovery disposes/rebuilds these lists; serialize it with sampling and shutdown.
+        lock (_gate) return CollectSnapshot();
+    }
+
+    private SystemTelemetry CollectSnapshot()
     {
         RefreshGpuCounters();
         var now = DateTimeOffset.UtcNow;
@@ -124,7 +132,7 @@ public sealed class SystemMetricsCollector : IDisposable
         percent = Math.Round((double)status.MemoryLoad, 1);
         return true;
     }
-    public void Dispose() { _cpu?.Dispose(); DisposeCounters(_gpu); DisposeCounters(_videoDecode); }
+    public void Dispose() { lock (_gate) { _cpu?.Dispose(); DisposeCounters(_gpu); DisposeCounters(_videoDecode); } }
     private static void DisposeCounters(IEnumerable<PerformanceCounter> counters) { foreach (var counter in counters) counter.Dispose(); }
 
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GlobalMemoryStatusEx([In, Out] MemoryStatusEx buffer);

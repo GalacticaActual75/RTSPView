@@ -38,6 +38,22 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const savedCsrf=a.csrf;a.csrf='';
   assert.equal((await request(a,'/api/control/application/restart','POST',{confirmed:true})).status,400,'restart requires CSRF');a.csrf=savedCsrf;
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  const directTest=await request(a,'/api/streams/test','POST',{rtspUrl:'https://media.example/live.m3u8'});
+  assert.equal(directTest.status,200);assert.match(directTest.json.message,/URL accepted/);
+  assert.equal((await request(a,'/api/streams/test','POST',{rtspUrl:'file:///C:/private.txt'})).status,400);
+  const streamCsrf=a.csrf;a.csrf='';
+  assert.equal((await request(a,'/api/streams/test','POST',{rtspUrl:'https://media.example/live.m3u8'})).status,400);a.csrf=streamCsrf;
+  if(fs.existsSync(path.join(root,'src/RTSPView.Controller/bin/Release/net8.0-windows/win-x64/Streaming/stream-resolver.exe'))){
+    const media=Buffer.from('isolated media fixture'.repeat(100));
+    const origin=require('node:http').createServer((req,res)=>{const page=req.url==='/watch';res.setHeader('Content-Type',page?'text/html':'video/mp4');res.end(page?'<html><head><title>Fixture</title></head><body><video src="/fixture.mp4"></video></body></html>':media);});
+    await new Promise(resolve=>origin.listen(0,'127.0.0.1',resolve));
+    try{const result=await request(a,'/api/streams/test','POST',{rtspUrl:'http://127.0.0.1:'+origin.address().port+'/watch',sourceMode:3,maximumHeight:720});assert.equal(result.status,200,JSON.stringify(result.json));assert.match(result.json.message,/yt-dlp.*received media/);}
+    finally{await new Promise(resolve=>origin.close(resolve));}
+  }
+  const website={...config.cameras[0],rtspUrl:'https://site.example/watch?v=fixture',sourceMode:3,maximumHeight:1080};
+  assert.equal((await request(a,'/api/cameras/1','PUT',website)).status,200);
+  const websiteSaved=(await request(a,'/api/config')).json.cameras[0];assert.equal(websiteSaved.sourceMode,3);assert.equal(websiteSaved.maximumHeight,1080);
+  assert.equal((await request(a,'/api/cameras/1','PUT',config.cameras[0])).status,200);
   const weather={location:'Seattle',latitude:47.6062,longitude:-122.3321,preset:'compact',units:'imperial',fields:['temperature','condition','highLow']};
   const weatherOverlay={hostCameraSlot:1,enabled:true,weather,widthPercent:40,x:0,y:100,margin:12};
   assert.equal((await request(a,'/api/weather/overlays/1','PUT',weatherOverlay)).status,200,'weather overlay saves');
@@ -57,6 +73,15 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore initial layouts');
   assert.equal((await request(a,'/api/display','PUT',{...config,diagnosticsAutoOpenExcludedSlots:[1,17]})).status,200);
   assert.deepEqual((await request(a,'/api/config')).json.diagnosticsAutoOpenExcludedSlots,[1,17],'diagnostics exclusions persist');
+  assert.equal((await request(a,'/api/display','PUT',{...config,preferredMonitor:1,preferredMonitorDevice:'\\\\.\\DISPLAY2',requestHardwareDecoding:false,showCameraStats:false})).status,200);
+  const displaySaved=(await request(a,'/api/config')).json;
+  assert.equal(displaySaved.preferredMonitorDevice,'\\\\.\\DISPLAY2','named display persists');
+  assert.equal(displaySaved.requestHardwareDecoding,false,'global hardware decoding preference persists');
+  assert.equal(displaySaved.showCameraStats,false,'Diagnostics statistics preference persists');
+  const {requestHardwareDecoding: ignoredHardware, ...legacyDisplay}=displaySaved;
+  assert.equal((await request(a,'/api/display','PUT',legacyDisplay)).status,200);
+  assert.equal((await request(a,'/api/config')).json.requestHardwareDecoding,false,'legacy save preserves hardware preference');
+  assert.equal((await request(a,'/api/display','PUT',config)).status,200);
   const addedStream=(await request(a,'/api/cameras','POST')).json;
   assert.equal((await request(a,'/api/cameras/'+addedStream.slot,'DELETE')).status,200,'stream deletes');
   const afterDeletion=(await request(a,'/api/config')).json;assert(afterDeletion.deletedCameraSlots.includes(addedStream.slot));
@@ -176,6 +201,13 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/snapshots/settings','PUT',{enabled:true,intervalHours:0.5})).status,200);
   assert.equal((await request(a,'/api/config')).json.snapshots.intervalHours,0.5,'snapshot settings persisted');
   a.csrf='';assert.equal((await request(a,'/api/snapshots/settings','PUT',{enabled:false,intervalHours:1})).status,400,'snapshot CSRF required');await session(a);
+  const revisionConfig=(await request(a,'/api/config')).json;
+  const draft={layouts:revisionConfig.layouts.map(l=>({...l,name:l.name+' revised'})),activeLayoutId:revisionConfig.activeLayoutId,revision:revisionConfig.layoutRevision};
+  const applied=await request(a,'/api/layouts','PUT',draft);assert.equal(applied.status,200);assert.notEqual(applied.json.revision,draft.revision);
+  assert.equal((await request(a,'/api/layouts','PUT',draft)).status,409,'stale layout rejected');
+  const autoDraft={layouts:revisionConfig.automationViewLayouts.map(l=>({...l,name:l.name+' revised'})),revision:revisionConfig.automationLayoutRevision};
+  assert.equal((await request(a,'/api/automation/layouts','PUT',autoDraft)).status,200);
+  assert.equal((await request(a,'/api/automation/layouts','PUT',autoDraft)).status,409,'stale automation layout rejected');
   const state=fs.readFileSync(path.join(data,'web-security.json'),'utf8');assert(!state.includes(password));assert(!state.includes('admin'));assert.equal(JSON.parse(state).PasswordChangeRequired,false);assert(!fs.existsSync(path.join(data,'initial-admin-password.txt')));
   const url='rtsp://test-user:test-pass@camera.example/live?token=test-query';const camera={...config.cameras[0],rtspUrl:url};assert.equal((await request(a,'/api/cameras/1','PUT',camera)).status,200);
   const exported=await request(a,'/api/config/export');assert(!exported.text.includes('test-pass'));assert(!exported.text.includes('test-query'));

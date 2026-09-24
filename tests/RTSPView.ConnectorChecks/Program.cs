@@ -4,6 +4,7 @@ using RTSPView.Controller;
 
 static void Check(bool condition, string reason) { if (!condition) throw new Exception(reason); }
 static void Reject(Action action) { try { action(); } catch (InvalidDataException) { return; } throw new Exception("Expected rejection"); }
+await PasswordRecoveryChecks.Run();
 var instance = Guid.NewGuid().ToString();
 var sync = new ConnectorSync(1, instance, [new("camera-1", "Driveway", "rtsp://scrypted-host:34197/main", "rtspview/test/ObjectDetector")], null);
 var initial = new AppSettings();

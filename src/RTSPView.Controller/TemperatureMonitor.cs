@@ -1,5 +1,6 @@
 using System.Text.Json;
 using RTSPView.Core;
+using RTSPView.Infrastructure;
 using RTSPView.Hardware;
 
 namespace RTSPView.Controller;
@@ -20,16 +21,8 @@ public sealed class TemperatureMonitor : BackgroundService
         _settingsPath = Path.Combine(directory, "temperature-settings.json");
         _statusPath = Path.Combine(directory, "temperature-status.json");
         (_sensors, _log) = (sensors, log);
-        try
-        {
-            if (File.Exists(_settingsPath))
-            {
-                var settings = JsonSerializer.Deserialize<TemperatureSettings>(File.ReadAllText(_settingsPath)) ?? throw new InvalidDataException();
-                settings.Validate(); _latest = new() { Settings = settings };
-            }
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
-        { _log("Temperature settings could not be read; warnings are disabled until settings are saved."); }
+        var settings = DurableJson.Read(_settingsPath, () => new TemperatureSettings(), value => value.Validate(), _log);
+        _latest = new() { Settings = settings };
     }
 
     public TemperatureStatus Status(DateTimeOffset now)
@@ -47,7 +40,8 @@ public sealed class TemperatureMonitor : BackgroundService
             Write(_settingsPath, settings);
             var status = _latest with { Settings = settings };
             Volatile.Write(ref _latest, status);
-            Write(_statusPath, status);
+            try { Write(_statusPath, status); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { _log("Temperature settings saved, but the Viewer status file could not be updated."); }
         }
         finally { _gate.Release(); }
     }
@@ -80,9 +74,7 @@ public sealed class TemperatureMonitor : BackgroundService
 
     private static void Write<T>(string path, T value)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(value));
-        File.Move(path + ".tmp", path, true);
+        DurableJson.Write(path, value, backup: !path.EndsWith("temperature-status.json", StringComparison.OrdinalIgnoreCase));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

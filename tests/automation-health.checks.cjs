@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const context=vm.createContext({});
+vm.runInContext(fs.readFileSync('src/RTSPView.Controller/wwwroot/automation-presentation.js','utf8')+';globalThis.presentation=automationPresentation;',context);
+const now=Date.now(),failed={attemptedAt:new Date(now-5000).toISOString(),success:false,message:'Viewer command timed out.'};
+const state={connection:'Connected',lastResult:'Viewer command timed out.',delivery:failed};
+assert.equal(context.presentation.mqttConnection(state,true,now).tone,'error');
+const recovered={...state,viewerConnection:{attemptedAt:new Date(now).toISOString(),success:true,message:'Viewer connected.'}};
+const shown=context.presentation.mqttConnection(recovered,true,now);
+assert.equal(shown.tone,'healthy');assert.match(shown.text,/Viewer connected/);assert.match(shown.text,/previous automation delivery failed/);assert.doesNotMatch(shown.text,/Check Live View|timed out/);
+assert.equal(context.presentation.mqttConnection(recovered,true,now+11000).tone,'error');
+assert.equal(context.presentation.mqttConnection({...recovered,configurationError:'Invalid rule'},true,now).tone,'error');
+assert.equal(context.presentation.mqttConnection({...recovered,delivery:{...failed,attemptedAt:new Date(now+1000).toISOString()}},true,now+1000).tone,'error');
+assert.match(context.presentation.delivery(failed),/failed/);
+console.log('PASS MQTT banner distinguishes current recovery from historical failure, expires stale health and retains rule errors.');

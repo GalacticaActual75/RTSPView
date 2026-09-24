@@ -1,5 +1,5 @@
 const overlaySourceUi = (() => {
-  const connectionFields = ['rtspUrl','transport','networkCacheMilliseconds','startupTimeoutSeconds','watchdogTimeoutSeconds','maximumReconnectBackoffSeconds','compositeStream','lowLatency','decodeAudio'];
+  const connectionFields = ['rtspUrl','sourceMode','maximumHeight','transport','networkCacheMilliseconds','startupTimeoutSeconds','watchdogTimeoutSeconds','maximumReconnectBackoffSeconds','compositeStream','lowLatency','decodeAudio'];
   function bind(form, overlay, inventory) {
     const label = document.createElement('label'), select = document.createElement('select'), note = document.createElement('p');
     label.textContent = 'Video source'; select.name = 'sourceCameraSlot'; label.append(select);
@@ -15,11 +15,11 @@ const overlaySourceUi = (() => {
         const input = form.elements[name]; input.disabled = id !== 0;
         if (source) write(input, source[name]);
       }
-      note.textContent = id ? 'Uses the saved connection from Streams. Source URL and connection changes follow automatically. Overlay visibility, shape, zoom, position and opacity remain independent. Playback may use another camera connection.' : 'Enter a separate RTSP URL, or choose an existing stream above. Overlay framing never changes the main tile.';
+      note.textContent = id ? 'Uses the saved connection from Streams. Source URL and connection changes follow automatically. Overlay visibility, shape, zoom, position and opacity remain independent. Playback may use another camera connection.' : 'Enter a separate source URL, or choose an existing stream above. Overlay framing never changes the main tile.';
     }
     function refresh(next) {
       sources = next; const current = selected;
-      select.replaceChildren(new Option('Own RTSP URL', '0'));
+      select.replaceChildren(new Option('Own source URL', '0'));
       for (const camera of sources.filter(c => !c.overlaySourceSlot && c.rtspUrl)) select.add(new Option(camera.name + ' · #' + camera.slot, camera.slot));
       if (current && ![...select.options].some(o => Number(o.value) === current)) select.add(new Option('Source unconfigured / unavailable · #' + current, current));
       select.value = String(current); sync();

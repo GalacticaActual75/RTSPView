@@ -104,6 +104,8 @@ public sealed record WallLayout
 
 public sealed record WallLayoutsRequest
 {
+    public string? Revision { get; init; }
+    public static string RevisionFor(IReadOnlyList<WallLayout> layouts, string active) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { layouts, active })));
     public IReadOnlyList<WallLayout> Layouts { get; init; } = [];
     public string ActiveLayoutId { get; init; } = "default";
 }
