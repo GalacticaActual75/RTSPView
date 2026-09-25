@@ -67,6 +67,9 @@ builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, 
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
 builder.Services.AddSingleton(new WeatherService(dataDirectory));
+builder.Services.AddSingleton(new AircraftService(dataDirectory));
+builder.Services.AddSingleton(new StartupService(builder.Environment.IsEnvironment("Testing")));
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService(provider => provider.GetRequiredService<AircraftService>());
 if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService(provider => provider.GetRequiredService<WeatherService>());
 builder.Services.AddSingleton<ViewerCommandClient>();
 builder.Services.AddSingleton(provider => new TapoService(dataDirectory,
@@ -570,6 +573,20 @@ app.MapPut("/api/snapshots/settings", async (SnapshotSettings snapshots) =>
     finally { configGate.Release(); }
 }).RequireAuthorization();
 
+app.MapGet("/api/startup", async (StartupService startup) =>
+{
+    try { return Results.Ok(await startup.StatusAsync()); }
+    catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or JsonException)
+    { return Results.Json(new { error = "Windows startup status is unavailable. Refresh or check Task Scheduler on the host." }, statusCode: 503); }
+}).RequireAuthorization();
+app.MapPut("/api/startup", async (StartupRequest request, StartupService startup) =>
+{
+    try { return Results.Ok(await startup.SetAsync(request.Enabled)); }
+    catch (InvalidOperationException e) { return Results.BadRequest(new { error = e.Message }); }
+    catch (Exception e) when (e is System.ComponentModel.Win32Exception or JsonException)
+    { return Results.Json(new { error = "Windows could not verify the startup change. Refresh its status on this host." }, statusCode: 503); }
+}).RequireAuthorization();
+
 app.MapPut("/api/display", async (DisplaySettings display) =>
 {
     await configGate.WaitAsync();
@@ -851,6 +868,7 @@ app.MapPost("/api/auth/password", async (HttpContext context, PasswordChangeRequ
 
 app.MapFallbackToFile("index.html");
 app.MapWeather(settingsStore, configGate);
+app.MapAircraft(settingsStore, configGate);
 await app.RunAsync();
 
 static string[] GetLanAddresses() => NetworkInterface.GetAllNetworkInterfaces()

@@ -15,6 +15,7 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const program=fs.readFileSync(path.join(root,'src/RTSPView.Controller/Program.cs'),'utf8');
   const routes=[...program.matchAll(/app\.Map(Get|Post|Put|Delete)\("([^"\n]+)"/g)].map(m=>[m[1].toUpperCase(),m[2].replace(/\{slot:int\}/g,'1')]).filter(([,p])=>!['/api/session','/api/auth/login'].includes(p));
   routes.push(['GET','/api/weather'],['GET','/api/weather/search?q=Seattle'],['PUT','/api/weather/overlays/1']);
+  routes.push(['GET','/api/aircraft'],['PUT','/api/aircraft/overlays/1']);
   for(const[method,url]of routes)assert.equal((await request(a,url,method,method==='GET'?undefined:{})).status,401,'anonymous blocked: '+url);
   assert.equal((await request(a,'/api/auth/login','POST',{password:'admin'})).json.passwordChangeRequired,true);
   assert.equal((await session(a)).passwordChangeRequired,true);
@@ -38,6 +39,8 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const savedCsrf=a.csrf;a.csrf='';
   assert.equal((await request(a,'/api/control/application/restart','POST',{confirmed:true})).status,400,'restart requires CSRF');a.csrf=savedCsrf;
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
+  assert.equal((await request(a,'/api/startup')).json.managed,false,'isolated Controller cannot modify Windows startup');
+  assert.equal((await request(a,'/api/startup','PUT',{enabled:true})).status,400,'unmanaged startup changes rejected');
   const directTest=await request(a,'/api/streams/test','POST',{rtspUrl:'https://media.example/live.m3u8'});
   assert.equal(directTest.status,200);assert.match(directTest.json.message,/URL accepted/);
   assert.equal((await request(a,'/api/streams/test','POST',{rtspUrl:'file:///C:/private.txt'})).status,400);
@@ -66,6 +69,21 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/config')).json.layouts[0].tiles[8].kind,'weather','weather tile survives reload');
   const weatherCsrf=a.csrf;a.csrf='';assert.equal((await request(a,'/api/weather/overlays/1','PUT',weatherOverlay)).status,400,'weather mutations require CSRF');a.csrf=weatherCsrf;
   assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore camera layout after weather checks');
+  const aircraft={location:'Seattle',latitude:47.6062,longitude:-122.3321,radiusMiles:10,preset:'featured',units:'imperial',fields:['altitude','speed','distance']};
+  const aircraftOverlay={hostCameraSlot:1,enabled:true,aircraft,widthPercent:40,x:100,y:100,margin:12};
+  assert.equal((await request(a,'/api/aircraft/overlays/1','PUT',aircraftOverlay)).status,200,'aircraft overlay saves');
+  const withAircraft=(await request(a,'/api/config')).json;
+  assert.equal(withAircraft.aircraftOverlays[0].aircraft.location,'Seattle','aircraft location persists');
+  assert.deepEqual(withAircraft.cameras,config.cameras,'aircraft save preserves camera connections');
+  assert.equal(withAircraft.weatherOverlays[0].weather.location,'Seattle','aircraft preserves weather');
+  assert.equal((await request(a,'/api/aircraft/overlays/1','PUT',{...aircraftOverlay,aircraft:{...aircraft,latitude:91}})).status,400,'invalid aircraft location rejected');
+  assert.equal((await request(a,'/api/aircraft/overlays/10','PUT',aircraftOverlay)).status,400,'invalid aircraft host rejected');
+  const aircraftLayouts=config.layouts.map((l,i)=>i===0?{...l,tiles:l.tiles.map((t,j)=>j===8?{...t,kind:'aircraft',cameraSlot:0,itemId:'aircraft-1',aircraft:{...aircraft,preset:'board'}}:t)}:l);
+  assert.equal((await request(a,'/api/layouts','PUT',{layouts:aircraftLayouts,activeLayoutId:config.activeLayoutId})).status,200,'mixed aircraft layout saves');
+  assert.equal((await request(a,'/api/config')).json.layouts[0].tiles[8].aircraft.preset,'board','aircraft board survives reload');
+  const aircraftCsrf=a.csrf;a.csrf='';assert.equal((await request(a,'/api/aircraft/overlays/1','PUT',aircraftOverlay)).status,400,'aircraft mutations require CSRF');a.csrf=aircraftCsrf;
+  assert.equal((await request(a,'/api/aircraft')).status,200,'aircraft feed accessible after login');
+  assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore camera layout after aircraft checks');
   const appearanceLayouts=config.layouts.map(l=>({...l,borderColor:'#ff0000',backgroundColor:'#123456',showTileBorders:false}));
   const appearanceSave=await request(a,'/api/layouts','PUT',{layouts:appearanceLayouts,activeLayoutId:config.activeLayoutId});
   assert.equal(appearanceSave.status,200,'real layout appearance API saves: '+appearanceSave.text);

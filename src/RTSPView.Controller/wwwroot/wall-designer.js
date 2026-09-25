@@ -10,6 +10,7 @@ function createWallDesigner(isAutomation = false) {
   let root, board, status, observer, armedCamera = null;
   const redoHistory=[];
   window.addEventListener('weather-overlay-saved',event=>{if(!config)return;config.weatherOverlays=[...(config.weatherOverlays||[]).filter(o=>o.hostCameraSlot!==event.detail.hostCameraSlot),event.detail];render();});
+  window.addEventListener('aircraft-overlay-saved',event=>{if(!config)return;config.aircraftOverlays=[...(config.aircraftOverlays||[]).filter(o=>o.hostCameraSlot!==event.detail.hostCameraSlot),event.detail];render();});
   function fitPreview(){
     if(!board||!root?.getClientRects().length)return;
     const stage=board.parentElement,foot=root.querySelector('.designer-preview-foot');
@@ -32,7 +33,9 @@ function createWallDesigner(isAutomation = false) {
       Object.assign(image.style,{width:rw+'px',height:rh+'px',left:(w-rw)*(tile.horizontalPositionPercent??50)/100+'px',top:(h-rh)*(tile.verticalPositionPercent??50)/100+'px',objectFit:'fill'});
     });
     board.querySelectorAll('.designer-weather-preview').forEach(host=>{const bounds=wallProportions(current()).bounds(current().tiles[Number(host.dataset.weatherIndex)]),[w,h]=resolution(current());const card=host.firstElementChild;Object.assign(card.style,{width:w*bounds.width+'px',height:h*bounds.height+'px',transformOrigin:'top left',transform:'scale('+host.clientWidth/(w*bounds.width)+')'});});
+    board.querySelectorAll('.designer-aircraft-preview').forEach(host=>{const bounds=wallProportions(current()).bounds(current().tiles[Number(host.dataset.aircraftIndex)]),[w,h]=resolution(current());const card=host.firstElementChild;Object.assign(card.style,{width:w*bounds.width+'px',height:h*bounds.height+'px',transformOrigin:'top left',transform:'scale('+host.clientWidth/(w*bounds.width)+')'});});
     board.querySelectorAll('.designer-weather-overlay').forEach(node=>{const overlay=config.weatherOverlays.find(o=>o.hostCameraSlot===Number(node.dataset.weatherSlot));const host=node.parentElement;const b=weatherUi.overlayBounds(overlay,host.clientWidth/scale,host.clientHeight/scale);Object.assign(node.style,Object.fromEntries(Object.entries(b).map(([key,value])=>[key,value*scale+'px'])));});
+    board.querySelectorAll('.designer-aircraft-overlay').forEach(node=>{const overlay=config.aircraftOverlays.find(o=>o.hostCameraSlot===Number(node.dataset.aircraftSlot));const host=node.parentElement;const b=aircraftUi.overlayBounds(overlay,host.clientWidth/scale,host.clientHeight/scale);Object.assign(node.style,Object.fromEntries(Object.entries(b).map(([key,value])=>[key,value*scale+'px'])));});
     const note=root.querySelector('[data-dimensions-note]');if(note)note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));
   }
 
@@ -69,7 +72,7 @@ function createWallDesigner(isAutomation = false) {
     return [candidate.row,candidate.column,candidate.rowSpan,candidate.columnSpan].every(Number.isInteger) &&
       candidate.row >= 0 && candidate.column >= 0 && candidate.rowSpan >= 1 && candidate.columnSpan >= 1 &&
       candidate.row + candidate.rowSpan <= layout.rows && candidate.column + candidate.columnSpan <= layout.columns &&
-      !layout.tiles.some((tile,i) => i !== index && ((tile.kind === "weather" || candidate.kind === "weather" ? tile.itemId && tile.itemId === candidate.itemId : tile.cameraSlot === candidate.cameraSlot) ||
+      !layout.tiles.some((tile,i) => i !== index && ((["weather","aircraft"].includes(tile.kind) || ["weather","aircraft"].includes(candidate.kind) ? tile.itemId && tile.itemId === candidate.itemId : tile.cameraSlot === candidate.cameraSlot) ||
         candidate.row < tile.row+tile.rowSpan && candidate.row+candidate.rowSpan > tile.row &&
         candidate.column < tile.column+tile.columnSpan && candidate.column+candidate.columnSpan > tile.column));
   }
@@ -178,12 +181,25 @@ function createWallDesigner(isAutomation = false) {
       }
       if(!place){
         const dialog=el('dialog',undefined,'weather-choice');dialog.append(el('h2','Add weather'),el('p','This grid is full. Choose a camera, then add an overlay or replace its tile.'));
-        const choices=el('select');layout.tiles.forEach((t,i)=>{if(t.kind!=='weather')choices.add(new Option(config.cameras.find(c=>c.slot===t.cameraSlot)?.name||'Stream',i));});if(selectedTile>=0)choices.value=String(selectedTile);if(!choices.value&&choices.options.length)choices.selectedIndex=0;field('Camera tile',choices,dialog);
+        const choices=el('select');layout.tiles.forEach((t,i)=>{if(!['weather','aircraft'].includes(t.kind))choices.add(new Option(config.cameras.find(c=>c.slot===t.cameraSlot)?.name||'Stream',i));});if(selectedTile>=0)choices.value=String(selectedTile);if(!choices.value&&choices.options.length)choices.selectedIndex=0;field('Camera tile',choices,dialog);
         const addOverlayButton=button('Add Weather Widget',()=>{const t=layout.tiles[Number(choices.value)];dialog.close();weatherUi.overlayEditor(t.cameraSlot);},dialog);choices.onchange=()=>{const slot=layout.tiles[Number(choices.value)]?.cameraSlot;addOverlayButton.disabled=!slot||slot>32;};choices.onchange();
         button('Replace tile with weather',()=>{const index=Number(choices.value);dialog.close();weatherUi.editor(weatherUi.defaults(),weather=>{layout.tiles[index]={...layout.tiles[index],kind:'weather',itemId:layoutItemId(),cameraSlot:0,weather};selectedTile=index;drawer='tile';changed();});},dialog).disabled=!choices.options.length;
         button('Cancel',()=>dialog.close(),dialog);dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();return;
       }
       weatherUi.editor(weatherUi.defaults(),weather=>{layout.tiles.push({...place,weather});selectedTile=layout.tiles.length-1;drawer='tile';changed();});
+    },actions);
+    if(!isAutomation)button('Add aircraft',()=>{
+      let place;for(let row=0;row<layout.rows&&!place&&layout.tiles.length<16;row++)for(let column=0;column<layout.columns;column++){
+        const candidate={kind:'aircraft',itemId:layoutItemId(),cameraSlot:0,row,column,rowSpan:1,columnSpan:1,sizing:'fit'};if(validTile(candidate,-1)){place=candidate;break;}
+      }
+      if(!place){
+        const dialog=el('dialog',undefined,'aircraft-choice');dialog.append(el('h2','Add aircraft'),el('p','This grid is full. Choose a camera, then add an overlay or replace its tile.'));
+        const choices=el('select');layout.tiles.forEach((t,i)=>{if(!['weather','aircraft'].includes(t.kind))choices.add(new Option(config.cameras.find(c=>c.slot===t.cameraSlot)?.name||'Stream',i));});if(selectedTile>=0)choices.value=String(selectedTile);if(!choices.value&&choices.options.length)choices.selectedIndex=0;field('Camera tile',choices,dialog);
+        const addOverlayButton=button('Add Aircraft Widget',()=>{const t=layout.tiles[Number(choices.value)];dialog.close();aircraftUi.overlayEditor(t.cameraSlot);},dialog);choices.onchange=()=>{const slot=layout.tiles[Number(choices.value)]?.cameraSlot;addOverlayButton.disabled=!slot||slot>32;};choices.onchange();
+        button('Replace tile with aircraft',()=>{const index=Number(choices.value);dialog.close();aircraftUi.editor(aircraftUi.defaults(),aircraft=>{layout.tiles[index]={...layout.tiles[index],kind:'aircraft',itemId:layoutItemId(),cameraSlot:0,aircraft};selectedTile=index;drawer='tile';changed();});},dialog).disabled=!choices.options.length;
+        button('Cancel',()=>dialog.close(),dialog);dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();return;
+      }
+      aircraftUi.editor(aircraftUi.defaults(),aircraft=>{layout.tiles.push({...place,aircraft});selectedTile=layout.tiles.length-1;drawer='tile';changed();});
     },actions);
     for(const [id,label] of [['add','Add stream'],['presets','Presets'],['sizing','Sizing'],['advanced','Canvas settings'],['help','Help']]){const control=button(label,()=>toggleDrawer(id),actions);control.setAttribute('aria-expanded',String(drawer===id));}
 
@@ -193,7 +209,7 @@ function createWallDesigner(isAutomation = false) {
     if(isAutomation)button('Save automation layouts',()=>persist(),actions,false);
     else {if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);button('Apply to wall',()=>persist(true),actions,false);}
     for(const [caption,labels] of [
-      ['Add content',['Add weather','Add stream']],
+      ['Add content',['Add weather','Add aircraft','Add stream']],
       ['Editing',['Presets','Sizing','Canvas settings','Help','Undo','Redo']],
       ['Wall action',['Save layout','Apply to wall','Save automation layouts']]
     ]) {
@@ -271,19 +287,22 @@ function createWallDesigner(isAutomation = false) {
       board.onpointerup=()=>{const t=region();stop();addCamera(t.cameraSlot,t.row,t.column,t.rowSpan,t.columnSpan);};board.onpointercancel=stop;
     };
     layout.tiles.forEach((tile,index)=>{
-      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.kind==='weather'?'Weather · '+tile.weather.location:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
+      const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.kind==='aircraft'?'Aircraft · '+tile.aircraft.location:tile.kind==='weather'?'Weather · '+tile.weather.location:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
       const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
       const rect=proportions.bounds(tile);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
       const previewSlot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);
-      const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);if(tile.kind!=='weather')image.dataset.tileIndex=index;image.addEventListener('load',sizeImages);
+      const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);if(!['weather','aircraft'].includes(tile.kind))image.dataset.tileIndex=index;image.addEventListener('load',sizeImages);
       if(tile.kind==='weather'){image.hidden=true;const host=el('div',undefined,'designer-weather-preview');host.dataset.weatherIndex=index;host.append(weatherUi.preview(tile.weather,true));node.append(host);}
-      const guide=el('span','','designer-aspect-guide');guide.hidden=tile.kind==='weather'||index!==selectedTile;node.append(guide);
+      if(tile.kind==='aircraft'){image.hidden=true;const host=el('div',undefined,'designer-aircraft-preview');host.dataset.aircraftIndex=index;host.append(aircraftUi.preview(tile.aircraft,true));node.append(host);}
+      const guide=el('span','','designer-aspect-guide');guide.hidden=['weather','aircraft'].includes(tile.kind)||index!==selectedTile;node.append(guide);
       const updateGuide=r=>{const ratio=streamAspects.get(previewSlot);guide.textContent=ratio?'Picture fit '+Math.round(Math.min(r.width/r.height*(outputWidth/outputHeight)/ratio,ratio/(r.width/r.height*(outputWidth/outputHeight)))*100)+'%':'Load a preview for sizing';};
       image.onload=()=>{if(image.naturalWidth&&image.naturalHeight){streamAspects.set(previewSlot,image.naturalWidth/image.naturalHeight);image.style.visibility='';updateGuide(rect);}};updateGuide(rect);
       node.append(el('span',camera.name,'designer-caption'));
       const weatherOverlay=(config.weatherOverlays||[]).find(o=>o.enabled&&o.hostCameraSlot===tile.cameraSlot);
       if(weatherOverlay){const placeholder=el('div','Weather Widget','designer-weather-overlay');placeholder.dataset.weatherSlot=tile.cameraSlot;placeholder.title='Weather enabled · '+weatherOverlay.weather.location;node.append(placeholder);}
+      const aircraftOverlay=(config.aircraftOverlays||[]).find(o=>o.enabled&&o.hostCameraSlot===tile.cameraSlot);
+      if(aircraftOverlay){const placeholder=el('div','Aircraft Widget','designer-aircraft-overlay');placeholder.dataset.aircraftSlot=tile.cameraSlot;placeholder.title='Aircraft enabled · '+aircraftOverlay.aircraft.location;node.append(placeholder);}
 
       if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot)){
         node.append(el('span','Chosen by automation','designer-overlay'));
@@ -303,7 +322,7 @@ function createWallDesigner(isAutomation = false) {
         const edge=e.target.dataset.edge||'',resize=!!edge,startX=e.clientX,startY=e.clientY,bounds=board.getBoundingClientRect();let candidate=copy(tile);
         node.setPointerCapture(e.pointerId);
         node.onpointermove=move=>{
-          if(panImage&&!resize&&tile.kind!=="weather"){
+          if(panImage&&!resize&&!["weather","aircraft"].includes(tile.kind)){
             const slackX=node.clientWidth-parseFloat(image.style.width),slackY=node.clientHeight-parseFloat(image.style.height);
             candidate={...tile,horizontalPositionPercent:Math.abs(slackX)>1?Math.round(Math.max(0,Math.min(100,(tile.horizontalPositionPercent??50)+(move.clientX-startX)/slackX*100))):(tile.horizontalPositionPercent??50),verticalPositionPercent:Math.abs(slackY)>1?Math.round(Math.max(0,Math.min(100,(tile.verticalPositionPercent??50)+(move.clientY-startY)/slackY*100))):(tile.verticalPositionPercent??50)};
             sizeImages(candidate,index);return;
@@ -327,7 +346,7 @@ function createWallDesigner(isAutomation = false) {
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
     sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Choose Original, Fit, Fill or Stretch per tile. Small tiles remain equal in size.','designer-help'));
     button('Fit tiles to streams',()=>{
-      if(layout.tiles.some(t=>t.kind==='weather')){message('Use Fine sizing for a wall containing weather.');return;}
+      if(layout.tiles.some(t=>['weather','aircraft'].includes(t.kind))){message('Use Fine sizing for a wall containing weather or aircraft.');return;}
       const targets={};
       for(const tile of layout.tiles){const slot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);const ratio=streamAspects.get(slot);
         if(!ratio){message('Load each stream preview and choose preview streams for focus tiles before fitting.');return;}targets[tile.cameraSlot]=ratio;}
@@ -353,9 +372,17 @@ function createWallDesigner(isAutomation = false) {
       for(const [key,label,offset] of [['row','Row',1],['column','Column',1],['rowSpan','Height',0],['columnSpan','Width',0]]){const n=el('input');n.type='number';n.min=1;n.max=key==='row'||key==='rowSpan'?layout.rows:layout.columns;n.value=tile[key]+offset;n.onchange=()=>updateTile({...tile,[key]:Number(n.value)-offset},selectedTile);field(label,n,tilePanel);}
       button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=-1;changed();},tilePanel);
     }
-    if(tile&&tile.kind!=='weather'){
+    if(tile?.kind==='aircraft'){
+      tilePanel.append(el('h3',tile.aircraft.location||'Aircraft'),el('p','Drag or resize this tile just like a stream. Changes stay in the layout draft.','designer-help'));
+      button('Edit aircraft',()=>aircraftUi.editor(tile.aircraft,aircraft=>updateTile({...tile,aircraft},selectedTile)),tilePanel);
+      for(const [key,label,offset] of [['row','Row',1],['column','Column',1],['rowSpan','Height',0],['columnSpan','Width',0]]){const n=el('input');n.type='number';n.min=1;n.max=key==='row'||key==='rowSpan'?layout.rows:layout.columns;n.value=tile[key]+offset;n.onchange=()=>updateTile({...tile,[key]:Number(n.value)-offset},selectedTile);field(label,n,tilePanel);}
+      button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=-1;changed();},tilePanel);
+    }
+    if(tile&&!['weather','aircraft'].includes(tile.kind)){
       if(!isAutomation)button('Replace with weather',()=>weatherUi.editor(weatherUi.defaults(),weather=>updateTile({...tile,kind:'weather',itemId:layoutItemId(),cameraSlot:0,weather},selectedTile)),tilePanel);
+      if(!isAutomation)button('Replace with aircraft',()=>aircraftUi.editor(aircraftUi.defaults(),aircraft=>updateTile({...tile,kind:'aircraft',itemId:layoutItemId(),cameraSlot:0,aircraft},selectedTile)),tilePanel);
       if(!isAutomation&&tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25))button('Weather Widget',()=>weatherUi.overlayEditor(tile.cameraSlot),tilePanel);
+      if(!isAutomation&&tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25))button('Aircraft Widget',()=>aircraftUi.overlayEditor(tile.cameraSlot),tilePanel);
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Unavailable camera '+tile.cameraSlot};
       const selected=el('div',undefined,'designer-selected');selected.append(el('span','SELECTED TILE','designer-eyebrow'),el('h3',camera.name));tilePanel.append(selected);
       const cameraSelect=el('select');for(const camera of config.cameras)cameraSelect.add(new Option(camera.name+' · #'+camera.slot,camera.slot));cameraSelect.value=tile.cameraSlot;

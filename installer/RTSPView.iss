@@ -60,6 +60,7 @@ Source: "..\deployment\Enable-LanAccess.ps1"; DestDir: "{app}\Controller"; Flags
 Source: "..\deployment\Apply-Update.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 Source: "..\deployment\Prepare-Installation.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 Source: "..\deployment\Show-UpdateProgress.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
+Source: "..\deployment\Configure-Startup.ps1"; DestDir: "{app}\Controller"; Flags: ignoreversion
 
 [InstallDelete]
 ; Remove only known files/shortcuts owned by earlier installers; retain settings and updater identities.
@@ -89,7 +90,7 @@ Filename: "{sys}\sc.exe"; Parameters: "start RTSPViewMaintenance"; Flags: runhid
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""SpotMonitor Web Admin - Private LAN"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""SpotMonitor Web Admin - Block Public"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""SpotMonitor Web Admin - LAN Only"""; Flags: runhidden waituntilterminated
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""$runner=Join-Path '{app}' 'Run-Appliance.ps1'; $arguments='-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '+[char]34+$runner+[char]34; $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments; $trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME; $trigger.Delay='PT20S'; $settings=New-ScheduledTaskSettingsSet -RestartCount 20 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Days 3650) -StartWhenAvailable; Register-ScheduledTask -TaskName 'SpotMonitor Camera Wall' -Action $action -Trigger $trigger -Settings $settings -Description 'Starts and supervises the RTSPView camera wall.' -Force | Out-Null"""; Flags: runhidden waituntilterminated; Tasks: autostart; Check: NotServiceUpdate
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Controller\Configure-Startup.ps1"" -Mode Enable -AllowElevation"; Flags: runhidden waituntilterminated runasoriginaluser; Tasks: autostart; Check: NotServiceUpdate
 Filename: "{app}\Start-RTSPView.cmd"; Description: "Launch RTSPView"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]

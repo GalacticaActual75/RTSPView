@@ -1,4 +1,4 @@
-param([switch]$FunctionsOnly)
+param([switch]$FunctionsOnly, [switch]$AtLogon)
 $ErrorActionPreference = 'Stop'
 
 function Invoke-ControllerSupervisionStep {
@@ -40,7 +40,12 @@ try {
     try { $owned = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owned = $true }
     if (!$owned) { exit 0 }
     if (!(Test-InstalledProcess $controller)) { Start-Process -FilePath $controller -WindowStyle Hidden }
-    if (!(Test-InstalledProcess $viewer)) { Start-Process -FilePath $viewer -ArgumentList '--respect-viewer-pause' }
+    if (!(Test-InstalledProcess $viewer)) {
+        # A new Windows sign-in is an explicit startup request. Watchdog restarts
+        # during the same session must still respect an intentional Live View exit.
+        if ($AtLogon) { Start-Process -FilePath $viewer }
+        else { Start-Process -FilePath $viewer -ArgumentList '--respect-viewer-pause' }
+    }
     $state = @{ Failures = 0 }
     while ($true) {
         Start-Sleep -Seconds 5

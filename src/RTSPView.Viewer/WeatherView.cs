@@ -28,9 +28,7 @@ public sealed class WeatherView : Border
     {
         var o = _options; var s = _snapshot; var now = DateTimeOffset.UtcNow;
         var light = o.Theme == "light";
-        var bg = light ? Color.FromRgb(240, 244, 249) : Color.FromRgb(18, 22, 29);
-        bg.A = (byte)(o.BackgroundOpacity * 255 / 100);
-        Background = new SolidColorBrush(bg); CornerRadius = new(o.CornerRadius); Padding = new(o.Padding);
+        WidgetAppearance.Apply(this, o);
         var foreground = light ? Brushes.Black : Brushes.White;
         var muted = new SolidColorBrush(light ? Color.FromRgb(70, 80, 95) : Color.FromRgb(160, 174, 190));
         var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

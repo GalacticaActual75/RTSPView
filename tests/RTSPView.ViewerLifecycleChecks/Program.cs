@@ -21,6 +21,7 @@ Directory.CreateDirectory(directory);
 try
 {
     await CommandIsolationChecks.Run();
+    await StartupSettingsChecks.Run();
     await ViewerRestartChecks.Run();
     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
     var state = new ViewerRuntimeState(directory);

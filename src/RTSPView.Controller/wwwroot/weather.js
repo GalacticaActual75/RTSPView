@@ -41,10 +41,13 @@ const weatherUi = (() => {
     if(omitted)credit.textContent='Details hidden · '+credit.dataset.label;
     card.title=omitted?'Some selected weather details do not fit. Enlarge the tile or widget.':'';
   }
-  function preview(o, sampleAllowed=false) {
-    const node=el('div',undefined,'weather-card'); node.dataset.preset=o.preset;node.dataset.theme=o.theme;
+  function applyAppearance(node,o) {
     const bg=o.theme==='light'?'240,244,249':'18,22,29';Object.assign(node.style,{background:`rgba(${bg},${o.backgroundOpacity/100})`,padding:o.padding+'px',borderRadius:o.cornerRadius+'px',textAlign:o.alignment,'--weather-font':o.fontSize+'px','--weather-icon':o.iconSize+'px','--weather-accent':o.accent});
     node.style.setProperty('--weather-font',o.fontSize+'px');node.style.setProperty('--weather-icon',o.iconSize+'px');node.style.setProperty('--weather-accent',o.accent);
+  }
+  function preview(o, sampleAllowed=false) {
+    const node=el('div',undefined,'weather-card'); node.dataset.preset=o.preset;node.dataset.theme=o.theme;
+    applyAppearance(node,o);
     const actual=snapshots.find(s=>s.key===key(o)),s=actual||(sampleAllowed?sample():null),has=f=>o.fields.includes(f);
     const text=(value,cls)=>{const n=el('div',value,cls);node.append(n);return n;};
     if(has('location'))text(o.location||'Your location','weather-location');
@@ -119,5 +122,5 @@ const weatherUi = (() => {
     const resize=new ResizeObserver(paint);resize.observe(stage);dialog.onclose=()=>{resize.disconnect();dialog.remove();if(opener?.isConnected)opener.focus();};document.body.append(dialog);dialog.showModal();paint();search.focus();refresh().then(()=>{if(dialog.isConnected)paint();});
   }
   async function overlayEditor(slot){try{const config=await api('/api/config');const existing=(config.weatherOverlays||[]).find(o=>o.hostCameraSlot===slot)||{hostCameraSlot:slot,enabled:true,widthPercent:40,x:0,y:100,margin:12,weather:{...defaults(),preset:'overlay',fields:[...presets.overlay]}};editor(existing.weather,async(_,overlay)=>{const saved=await api('/api/weather/overlays/'+slot,{method:'PUT',body:JSON.stringify(overlay)});window.dispatchEvent(new CustomEvent('weather-overlay-saved',{detail:saved}));},existing,slot,[...(config.layouts||[]).filter(l=>l.tiles.some(t=>t.cameraSlot===slot)).map(l=>l.name),...(config.automationViewLayouts||[]).filter(l=>l.tiles.some(t=>t.cameraSlot===slot)).map(l=>l.name+' (automation)')]);}catch(error){uiDialogs.toast(error.message, 'error');}}
-  return {defaults,preview,editor,overlayEditor,overlayBounds,refresh};
+  return {defaults,preview,editor,overlayEditor,overlayBounds,refresh,applyAppearance};
 })();

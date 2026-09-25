@@ -44,6 +44,12 @@
       "SpotMonitor.Controller",
       "SpotMonitor.Viewer"
     ],
+    "deployment/Configure-Startup.ps1": [
+      "SpotMonitor Camera Wall"
+    ],
+    "docs/windows-startup.md": [
+      "SpotMonitor Camera Wall"
+    ],
     "deployment/Start-RTSPView.cmd": [
       "SpotMonitor.Controller",
       "SpotMonitor.Viewer"

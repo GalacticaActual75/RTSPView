@@ -5,6 +5,7 @@ public sealed record WallTile
     public string Kind { get; init; } = "camera";
     public string ItemId { get; init; } = "";
     public WeatherOptions? Weather { get; init; }
+    public AircraftOptions? Aircraft { get; init; }
     public int CameraSlot { get; init; }
     public int Row { get; init; }
     public int Column { get; init; }
@@ -78,7 +79,13 @@ public sealed record WallLayout
                     throw new InvalidDataException("Choose original, fit, fill, or stretch for tile sizing.");
                 if (tile.ZoomPercent is < 25 or > 400 || tile.HorizontalPositionPercent is < 0 or > 100 || tile.VerticalPositionPercent is < 0 or > 100)
                     throw new InvalidDataException("Tile zoom must be 25–400%; image positions must be 0–100%.");
-                if (tile.Kind == "weather")
+                if (tile.Kind == "aircraft")
+                {
+                    if (allowFocusTiles || tile.CameraSlot != 0 || string.IsNullOrWhiteSpace(tile.ItemId) || tile.ItemId.Length > 64 || !widgets.Add(tile.ItemId) || tile.Aircraft is null)
+                        throw new InvalidDataException("Aircraft tiles need unique IDs and aircraft settings in a standard layout.");
+                    tile.Aircraft.Validate();
+                }
+                else if (tile.Kind == "weather")
                 {
                     if (allowFocusTiles || tile.CameraSlot != 0 || string.IsNullOrWhiteSpace(tile.ItemId) || tile.ItemId.Length > 64 || !widgets.Add(tile.ItemId) || tile.Weather is null)
                         throw new InvalidDataException("Weather tiles need unique IDs and weather settings in a standard layout.");

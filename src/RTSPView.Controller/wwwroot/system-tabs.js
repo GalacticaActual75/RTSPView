@@ -33,7 +33,7 @@ const systemTabs = (() => {
   function init() {
     const page = document.querySelector('#page-system');
     const groups = [
-      ['viewer', 'Display', [document.querySelector('#displayForm'), document.querySelector('#snapshotForm')]],
+      ['viewer', 'Display', [document.querySelector('#displayForm'), document.querySelector('#startupPanel'), document.querySelector('#snapshotForm')]],
       ['network', 'Network & security', [document.querySelector('#networkForm'), document.querySelector('#connectorPanel'), document.querySelector('#passwordForm')]],
       ['updates', 'Updates', [document.querySelector('#updatePanel')]],
       ['backups', 'Backups', [document.querySelector('#configPanel')]],

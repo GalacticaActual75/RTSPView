@@ -86,7 +86,7 @@ internal static class Program
         {
             var path=Path.Combine(directory,"settings.json");var store=new JsonSettingsStore(path);
             await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new AppSettings{SchemaVersion=15}));
-            var settings=await store.LoadAsync();Check(settings.SchemaVersion==16&&settings.WeatherOverlays.Count==0,"stable settings migrate with weather off");
+            var settings=await store.LoadAsync();Check(settings.SchemaVersion==AppSettings.CurrentSchemaVersion&&settings.WeatherOverlays.Count==0,"stable settings migrate with weather off");
             var weather=new WeatherOptions{Location="Seattle",Latitude=47.6062,Longitude=-122.3321};
             var layout=settings.Layouts[0] with { Tiles=settings.Layouts[0].Tiles.Take(8).Append(new(){Kind="weather",ItemId="weather-1",Row=2,Column=2,Weather=weather}).ToArray() };
             settings=settings with { Layouts=[layout],WeatherOverlays=[new(){HostCameraSlot=1,Weather=weather}] };

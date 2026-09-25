@@ -18,7 +18,7 @@ internal static class StreamTelemetryChecks
         using (var output = File.Create(file))
         {
             output.Write(Encoding.ASCII.GetBytes("YUV4MPEG2 W160 H120 F30:1 Ip A1:1 C420jpeg\n"));
-            for (var frame = 0; frame < 180; frame++)
+            for (var frame = 0; frame < (nativeBackground ? 600 : 180); frame++)
             {
                 output.Write(Encoding.ASCII.GetBytes("FRAME\n"));
                 output.Write(Enumerable.Repeat((byte)(40 + frame % 100), 160 * 120).ToArray());
@@ -83,6 +83,18 @@ internal static class StreamTelemetryChecks
                             throw new Exception("Weather overlay update interrupted native decoding");
                         tile.ContentOverlayRoot.Children.Remove(weather);
                         Console.WriteLine("PASS native weather add, style change, unavailable state and removal preserve player, HWND and decoding");
+                        var aircraft = new AircraftView { Width = 240, Height = 180 };
+                        tile.ContentOverlayRoot.Children.Insert(0, aircraft);
+                        aircraft.Update(new() { Location = "Aircraft isolation" }, new AircraftSnapshot { FetchedAt = DateTimeOffset.UtcNow,
+                            Aircraft = [new() { Hex = "a12345", Callsign = "TEST123", PositionAt = DateTimeOffset.UtcNow, Latitude = .01, Longitude = .01, AltitudeFeet = 12000 }] }, true);
+                        window.UpdateLayout();
+                        var aircraftFrame = tile.GetTelemetry().LastFrameAt;
+                        aircraft.Update(new() { Theme = "light", Preset = "board" }, null, true);
+                        for (var wait = 0; wait < 20 && tile.GetTelemetry().LastFrameAt <= aircraftFrame; wait++) { await Task.Delay(100); tile.Tick(); }
+                        if (player.Hwnd != handle || !ReferenceEquals(player, typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)) || !player.IsPlaying || tile.GetTelemetry().LastFrameAt <= aircraftFrame)
+                            throw new Exception("Aircraft overlay update interrupted native decoding");
+                        tile.ContentOverlayRoot.Children.Remove(aircraft);
+                        Console.WriteLine("PASS native aircraft add, style change, unavailable state and removal preserve player, HWND and decoding");
                         tile.SetWallVisibility(false);
                         tile.Apply(new CameraSettings { Enabled = false });
                         for (var wait = 0; wait < 30 && player.IsPlaying; wait++) await Task.Delay(100);

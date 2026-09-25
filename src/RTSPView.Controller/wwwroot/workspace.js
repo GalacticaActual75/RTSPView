@@ -121,6 +121,9 @@ const workspace = (() => {
       const proportions=active?wallProportions(active):null;
       const tiles=monitorMode==='wall'?(active?.tiles||[]):cameraInventory.map(c=>({cameraSlot:c.slot}));
       for(const tile of tiles){
+        if(tile.kind==='aircraft'){
+          const card=node('div',undefined,'monitor-tile');const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});card.append(aircraftUi.preview(tile.aircraft));board.append(card);continue;
+        }
         if(tile.kind==='weather'){
           const card=node('div',undefined,'monitor-tile');const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});card.append(weatherUi.preview(tile.weather));board.append(card);continue;
         }

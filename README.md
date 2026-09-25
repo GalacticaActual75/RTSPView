@@ -289,6 +289,8 @@ See [privacy guidance](docs/privacy.md). Do not attach raw configuration exports
 
 ## Development and contributing
 
+The beta branch adds [aircraft widgets and flight-board tiles](docs/aircraft.md), with the same appearance controls as weather, and [Live View startup settings and repair](docs/windows-startup.md). See [1.0.47-beta.1 notes](docs/releases/1.0.47-beta.1.md) for the current local beta work.
+
 Build from the tag corresponding to the version you intend to run. Release tags and the default branch can differ. Use Windows x64, the .NET 8 SDK selected by [global.json](global.json), Node.js 22 and PowerShell 7 for the check runner. Native rendering checks need an interactive Windows desktop.
 
 ```powershell

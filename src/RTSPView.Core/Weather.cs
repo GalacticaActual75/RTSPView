@@ -91,9 +91,10 @@ public static class WeatherConfiguration
         static string Signature(AppSettings settings) => System.Text.Json.JsonSerializer.Serialize(settings with
         {
             WeatherOverlays = [],
+            AircraftOverlays = [],
             Layouts = settings.Layouts.Select(layout => layout with
             {
-                Tiles = layout.Tiles.Select(tile => tile with { Weather = null }).ToArray()
+                Tiles = layout.Tiles.Select(tile => tile with { Weather = null, Aircraft = null }).ToArray()
             }).ToArray()
         });
         return Signature(previous) == Signature(updated);

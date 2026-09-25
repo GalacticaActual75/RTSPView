@@ -1,0 +1,99 @@
+using System.IO;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using RTSPView.Core;
+using RTSPView.Infrastructure;
+using RTSPView.Controller;
+using RTSPView.Viewer;
+
+internal static class Program
+{
+    private static void Check(bool pass, string message) { if (!pass) throw new Exception(message); Console.WriteLine("PASS " + message); }
+    [STAThread]
+    private static void Main()
+    {
+        Backend().GetAwaiter().GetResult();
+        var now = DateTimeOffset.UtcNow;
+        var options = new AircraftOptions { Location = "Seattle", Latitude = 47.6062, Longitude = -122.3321 };
+        var snapshot = new AircraftSnapshot { Key = options.CacheKey, FetchedAt = now, Aircraft = [Track(now), Track(now) with { Hex = "b12345", Callsign = "ASA456", Type = "B39M", AltitudeFeet = 18200 }] };
+        var root = new Grid { Width = 1100, Height = 620, Background = System.Windows.Media.Brushes.Black };
+        root.ColumnDefinitions.Add(new()); root.ColumnDefinitions.Add(new());
+        var weather = new WeatherView { Width = 370, Height = 230, VerticalAlignment = VerticalAlignment.Center };
+        weather.Update(new() { Location = "Seattle" }, new() { FetchedAt = now, ValidAt = now, Temperature = 22, Code = 2 }); root.Children.Add(weather);
+        var aircraft = new AircraftView { Margin = new(16) }; Grid.SetColumn(aircraft, 1); root.Children.Add(aircraft); aircraft.Update(options with { Preset = "board" }, snapshot);
+        root.Measure(new System.Windows.Size(1100, 620)); root.Arrange(new Rect(0, 0, 1100, 620)); root.UpdateLayout();
+        Check(((SolidColorBrush)weather.Background).Color == ((SolidColorBrush)aircraft.Background).Color && weather.CornerRadius == aircraft.CornerRadius && weather.Padding == aircraft.Padding, "weather and aircraft share surface styling");
+        Check(Texts(aircraft).Contains("UAL123") && Texts(aircraft).Contains("ASA456"), "native flight board renders both callsigns");
+        Directory.CreateDirectory("artifacts/aircraft");
+        var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
+        using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
+        aircraft.Update(options, snapshot with { Aircraft = [] }, true); Check(aircraft.Visibility == Visibility.Hidden, "empty overlay hides");
+        aircraft.Update(options, snapshot with { FetchedAt = now.AddMinutes(-2) }, true); Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("Aircraft data unavailable"), "outage remains visible and hides stale aircraft");
+        aircraft.Update(options, snapshot with { Aircraft = [] }); Check(Texts(aircraft).Contains("No aircraft nearby"), "empty tile stays visible");
+        foreach (var font in new[] { 12,24,64 }) foreach (var width in new[] { 160d,640d,1920d })
+        {
+            var b = AircraftGeometry.Bounds(new() { Aircraft = options with { FontSize = font }, HostCameraSlot = 1 }, width, width / 1.777);
+            Check(b.Width >= 0 && b.Height >= 0 && b.Left + b.Width <= width + .001 && b.Top + b.Height <= width / 1.777 + .001, "overlay geometry stays within camera bounds");
+        }
+    }
+    private static string[] Texts(DependencyObject parent)
+    {
+        var output = new List<string>();
+        if (parent is TextBlock text) output.Add(text.Text);
+        for (var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++) output.AddRange(Texts(VisualTreeHelper.GetChild(parent,i)));
+        return output.ToArray();
+    }
+    private static AircraftTrack Track(DateTimeOffset now) => new() { Hex = "a12345", Callsign = "UAL123", Type = "B738", Registration = "N123EX", Latitude = 47.62, Longitude = -122.32, AltitudeFeet = 12400, SpeedKnots = 285, TrackDegrees = 245, VerticalRate = 640, PositionAt = now };
+    private static async Task Backend()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var o = new AircraftOptions { Latitude = 47.6062, Longitude = -122.3321 };
+        var json = "{\"now\":" + now.ToUnixTimeMilliseconds() + ",\"ac\":[{\"hex\":\"a12345\",\"flight\":\"UAL123  \",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":2,\"alt_baro\":12400,\"gs\":285},{\"hex\":\"b12345\",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":2,\"alt_baro\":\"ground\"},{\"hex\":\"c12345\",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":120}]}";
+        var parsed = AdsbLolProvider.Parse(json, o.CacheKey, now);
+        foreach (var invalid in new[] { "[]", "null", "{}", "{\"now\":0,\"ac\":[]}" })
+        {
+            try { AdsbLolProvider.Parse(invalid,o.CacheKey,now); throw new Exception("invalid provider response accepted"); } catch (InvalidDataException) { }
+        }
+        Check(true,"malformed and expired provider responses are recoverable");
+        Check(parsed.Aircraft.Length == 1 && parsed.Aircraft[0].Callsign == "UAL123", "provider removes ground and old-position reports, trims callsigns");
+        Check(parsed.Aircraft[0].PositionAt == now.AddSeconds(-2).AddTicks(-(now.Ticks % TimeSpan.TicksPerMillisecond)), "position timestamp uses observation time minus seen_pos");
+        Check(AircraftSelection.Nearby(o, parsed, now).Length == 1, "nearby airborne aircraft selected");
+        Check(AircraftSelection.Nearby(o with { MinimumAltitudeFeet = 13000 }, parsed, now).Length == 0, "altitude filter excludes aircraft");
+        Check(AircraftSelection.Nearby(o, parsed, now.AddSeconds(65)).Length == 0, "old individual positions expire even if feed exists");
+        Check(AircraftSelection.Nearby(o with { Latitude = 0, Longitude = 0 }, parsed, now).Length == 0, "radius filters distant aircraft");
+        Check(AircraftSelection.DistanceMiles(0,179.99,0,-179.99) < 2, "distance handles antimeridian");
+        Check(AircraftSelection.Metric("altitude", Track(now), o with { Units = "metric" }) == "ALT 3,780 m", "metric altitude conversion");
+        try { (o with { MinimumAltitudeFeet=10000,MaximumAltitudeFeet=1000 }).Validate(); throw new Exception("range accepted"); } catch (InvalidDataException) { }
+        try { (o with { Longitude=double.NaN }).Validate(); throw new Exception("NaN accepted"); } catch (InvalidDataException) { }
+        var directory=Path.Combine(Path.GetTempPath(),"RTSPView-aircraft-checks-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
+        try
+        {
+            var path=Path.Combine(directory,"settings.json");await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new AppSettings { SchemaVersion=16 }));
+            var store=new JsonSettingsStore(path);var settings=await store.LoadAsync();Check(settings.AircraftOverlays.Count==0,"stable configuration upgrades with aircraft off");
+            var tile=new WallTile { Kind="aircraft", ItemId="aircraft-1", Aircraft=o, Row=2, Column=2 };
+            settings=settings with { Layouts=[settings.Layouts[0] with { Tiles=settings.Layouts[0].Tiles.Take(8).Append(tile).ToArray() }], AircraftOverlays=[new() { HostCameraSlot=1,Aircraft=o }] };
+            await store.SaveAsync(settings);var loaded=await store.LoadAsync();
+            Check(loaded.Layouts[0].Tiles.Last().Aircraft!.CacheKey==o.CacheKey&&loaded.AircraftOverlays.Count==1,"aircraft tile and overlay round trip");
+            Check(File.Exists(path+".before-aircraft.json"),"stable rollback backup retained");
+            Check(JsonSettingsStore.ParseImport(JsonSerializer.Serialize(loaded)).AircraftOverlays.Count==1,"aircraft export/import round trip");
+            Check(StreamCatalog.DeleteCamera(loaded,1).AircraftOverlays.Count==0,"host deletion removes aircraft overlay");
+            Check(WeatherConfiguration.OnlyPresentationChanged(loaded,loaded with { AircraftOverlays=[] }),"aircraft appearance uses isolated viewer update");
+            try { WallLayout.Validate([loaded.Layouts[0] with { Tiles=[tile,tile] }],loaded.ActiveLayoutId); throw new Exception("duplicate accepted"); } catch(InvalidDataException) { }
+            await AircraftCache.WriteAsync(directory,[parsed],CancellationToken.None);Check((await AircraftCache.ReadAsync(directory)).Single().Aircraft.Length==1,"cache round trip");
+            await File.WriteAllTextAsync(AircraftCache.PathFor(directory),"broken");Check((await AircraftCache.ReadAsync(directory)).Length==0,"corrupt cache does not affect settings");
+            var provider=new FakeProvider();using var service=new AircraftService(directory,provider);await service.StartAsync(CancellationToken.None);
+            for(var i=0;i<40&&service.Snapshots.Length==0;i++)await Task.Delay(100);
+            await service.StopAsync(CancellationToken.None);Check(provider.Calls==1,"tile and overlay share one provider request");
+            Check((await store.LoadAsync()).Cameras.SequenceEqual(settings.Cameras),"aircraft updates leave cameras untouched");
+        }
+        finally { Directory.Delete(directory,true); }
+    }
+    private sealed class FakeProvider : IAircraftProvider
+    {
+        public int Calls;
+        public Task<AircraftSnapshot> FetchAsync(AircraftOptions options,CancellationToken token) { Calls++;return Task.FromResult(new AircraftSnapshot {Key=options.CacheKey,FetchedAt=DateTimeOffset.UtcNow,Aircraft=[Track(DateTimeOffset.UtcNow)]}); }
+    }
+}

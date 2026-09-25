@@ -25,6 +25,9 @@ http.createServer(async(req,res)=>{
  const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value))};
  if(documentation?.handle(req,res,route,json))return;
  if(route==='/api/weather')return json([]);
+ if(route==='/api/startup'){if(req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;config.fixtureStartup=JSON.parse(body).enabled;}return json({enabled:config.fixtureStartup??true,managed:true,repairNeeded:false,message:config.fixtureStartup===false?'Live View will not open automatically at Windows sign-in.':'Live View opens about 20 seconds after this Windows account signs in.'});}
+ if(route==='/api/aircraft')return json([]);
+ if(route.startsWith('/api/aircraft/overlays/')){let body='';for await(const chunk of req)body+=chunk;const o=JSON.parse(body);config.aircraftOverlays=[...(config.aircraftOverlays||[]).filter(w=>w.hostCameraSlot!==o.hostCameraSlot),o];return json(o);}
  if(route==='/api/weather/search')return json({results:[{name:'Seattle',admin1:'Washington',country:'United States',latitude:47.6062,longitude:-122.3321,timezone:'America/Los_Angeles'}]});
  if(route.startsWith('/api/weather/overlays/')){let body='';for await(const chunk of req)body+=chunk;const o=JSON.parse(body);config.weatherOverlays=[...(config.weatherOverlays||[]).filter(w=>w.hostCameraSlot!==o.hostCameraSlot),o];return json(o);}
 

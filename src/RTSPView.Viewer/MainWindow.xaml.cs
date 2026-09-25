@@ -280,7 +280,7 @@ public partial class MainWindow : Window
         SizeWall();
         CameraWallPresentation.Apply(WallGrid, [.._tiles, .._rawOverlaySources.Values.Select(e => e.Tile)], layout, EffectiveFocusedSlot, _settings.ShowTileBorders);
         WallViewport.Background = WallGrid.Background;
-        SyncWeather();
+        SyncWeather(); SyncAircraft();
         QueueOverlayLayouts();
     }
 
@@ -1116,7 +1116,7 @@ public partial class MainWindow : Window
             if (WeatherConfiguration.OnlyPresentationChanged(previousSettings, updated))
             {
                 _settings = updated;
-                SyncWeather();
+                SyncWeather(); SyncAircraft();
                 _settingsLastWriteUtc = writeTime;
                 return;
             }
@@ -1156,6 +1156,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        _aircraftTimer?.Stop();
+        _aircraftTimer = null;
         _weatherTimer?.Stop();
         _weatherTimer = null;
         _diagnosticsTimer.Stop();
