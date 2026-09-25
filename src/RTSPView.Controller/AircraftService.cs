@@ -13,9 +13,18 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
     private readonly ConcurrentDictionary<string, AircraftSnapshot> _cache = new();
     private readonly Dictionary<string, DateTimeOffset> _next = [];
     private DateTimeOffset _providerRetryAt;
-    public AircraftSnapshot[] Snapshots => _cache.Values.ToArray();
+    private AircraftPhotos? _photos;
+    private AircraftDetails? _details;
+    public AircraftSnapshot[] Snapshots => _cache.Values.Select(s => s with { Aircraft = s.Aircraft.Select(a => (_details?.Enrich(a) ?? a) with { Photo = _photos?.Find(a.Hex) }).ToArray() }).ToArray();
     protected override async Task ExecuteAsync(CancellationToken token)
     {
+        _photos = new AircraftPhotos(_http);
+        _details = new AircraftDetails(_http);
+        await Task.WhenAll(FeedAsync(token), _photos.RunAsync(token), _details.RunAsync(token));
+    }
+    private async Task FeedAsync(CancellationToken token)
+    {
+        long photoRevision = -1, detailRevision = -1;
         var source = provider ?? new AdsbLolProvider(_http);
         var store = new JsonSettingsStore(Path.Combine(directory, "settings.json"));
         while (!token.IsCancellationRequested)
@@ -23,10 +32,11 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
             try
             {
                 var settings = await store.LoadAsync(token);
-                var areas = settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Kind == "aircraft").Select(t => t.Aircraft!)
+                var areas = settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!)
                     .Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)).DistinctBy(o => o.CacheKey).Take(4).ToArray();
                 var keys = areas.Select(o => o.CacheKey).ToHashSet();
-                var changed = false;
+                var changed = photoRevision != _photos!.Revision || detailRevision != _details!.Revision;
+                photoRevision = _photos.Revision; detailRevision = _details!.Revision;
                 foreach (var key in _cache.Keys.Where(k => !keys.Contains(k))) { _cache.TryRemove(key, out _); _next.Remove(key); changed = true; }
                 foreach (var area in areas)
                 {
@@ -46,7 +56,9 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
                         _providerRetryAt = DateTimeOffset.UtcNow.AddSeconds(Math.Clamp(delay.TotalSeconds, 30, 86400));
                     }
                 }
-                if (changed) await AircraftCache.WriteAsync(directory, _cache.Values, token);
+                foreach (var options in settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)).Where(o => o.ShowPhoto || o.Fields.Any(f => f is "owner" or "airline" or "destination")))
+                    foreach (var track in AircraftSelection.Nearby(options, _cache.GetValueOrDefault(options.CacheKey), DateTimeOffset.UtcNow).Take(options.Preset == "board" ? options.MaximumAircraft : 1)) { if (options.ShowPhoto) _photos.Request(track.Hex); if (options.Fields.Any(f => f is "owner" or "airline" or "destination")) _details.Request(track); }
+                if (changed) await AircraftCache.WriteAsync(directory, Snapshots, token);
             }
             catch (Exception e) when (e is IOException or JsonException or InvalidDataException or UnauthorizedAccessException) { /* Retry separately from cameras. */ }
             await Task.Delay(TimeSpan.FromSeconds(2), token);

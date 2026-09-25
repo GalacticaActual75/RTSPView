@@ -11,3 +11,5 @@ Weather data attribution and provider service terms are separate from the applic
 ## Aircraft data
 
 The optional aircraft integration queries [ADSB.lol](https://www.adsb.lol/docs/open-data/api/), which lists API data under ODbL 1.0. Aircraft widgets and tiles display provider/license attribution. No FlightWall source code, branding, artwork, or airline logos are included.
+
+Aircraft photos are requested on demand from the Planespotters.net public photo API, retain photographer attribution, and are not bundled with RTSPView. Optional aircraft owner and route lookups use adsbdb (https://github.com/mrjackwills/adsbdb); aircraft data is credited there to PlaneBase, and route data to David Taylor and Jim Mason. RTSPView does not ship a route database. Destinations are database lookups rather than live flight plans.

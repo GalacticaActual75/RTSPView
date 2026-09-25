@@ -69,7 +69,7 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/config')).json.layouts[0].tiles[8].kind,'weather','weather tile survives reload');
   const weatherCsrf=a.csrf;a.csrf='';assert.equal((await request(a,'/api/weather/overlays/1','PUT',weatherOverlay)).status,400,'weather mutations require CSRF');a.csrf=weatherCsrf;
   assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore camera layout after weather checks');
-  const aircraft={location:'Seattle',latitude:47.6062,longitude:-122.3321,radiusMiles:10,preset:'featured',units:'imperial',fields:['altitude','speed','distance']};
+  const aircraft={location:'Seattle',latitude:47.123456789012345,longitude:-122.98765432109876,radiusMiles:10,preset:'featured',units:'imperial',fields:['altitude','speed','distance']};
   const aircraftOverlay={hostCameraSlot:1,enabled:true,aircraft,widthPercent:40,x:100,y:100,margin:12};
   assert.equal((await request(a,'/api/aircraft/overlays/1','PUT',aircraftOverlay)).status,200,'aircraft overlay saves');
   const withAircraft=(await request(a,'/api/config')).json;
@@ -81,6 +81,9 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const aircraftLayouts=config.layouts.map((l,i)=>i===0?{...l,tiles:l.tiles.map((t,j)=>j===8?{...t,kind:'aircraft',cameraSlot:0,itemId:'aircraft-1',aircraft:{...aircraft,preset:'board'}}:t)}:l);
   assert.equal((await request(a,'/api/layouts','PUT',{layouts:aircraftLayouts,activeLayoutId:config.activeLayoutId})).status,200,'mixed aircraft layout saves');
   assert.equal((await request(a,'/api/config')).json.layouts[0].tiles[8].aircraft.preset,'board','aircraft board survives reload');
+  const conditionalLayouts=aircraftLayouts.map((l,i)=>i===0?{...l,tiles:l.tiles.map((t,j)=>j===0?{...t,aircraft:{...aircraft,fields:['owner','airline','destination','altitude','speed'],showPhoto:true}}:t)}:l);
+  assert.equal((await request(a,'/api/layouts','PUT',{layouts:conditionalLayouts,activeLayoutId:config.activeLayoutId})).status,200,'conditional aircraft replacement saves');
+  const conditional=(await request(a,'/api/config')).json.layouts[0].tiles[0];assert.equal(conditional.cameraSlot,1);assert.equal(conditional.kind,'camera');assert.equal(conditional.aircraft.latitude,47.123456789012345);assert.equal(conditional.aircraft.showPhoto,true);
   const aircraftCsrf=a.csrf;a.csrf='';assert.equal((await request(a,'/api/aircraft/overlays/1','PUT',aircraftOverlay)).status,400,'aircraft mutations require CSRF');a.csrf=aircraftCsrf;
   assert.equal((await request(a,'/api/aircraft')).status,200,'aircraft feed accessible after login');
   assert.equal((await request(a,'/api/layouts','PUT',{layouts:config.layouts,activeLayoutId:config.activeLayoutId})).status,200,'restore camera layout after aircraft checks');

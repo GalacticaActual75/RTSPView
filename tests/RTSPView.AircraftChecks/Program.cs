@@ -50,7 +50,16 @@ internal static class Program
     private static async Task Backend()
     {
         var now = DateTimeOffset.UtcNow;
-        var o = new AircraftOptions { Latitude = 47.6062, Longitude = -122.3321 };
+        var o = new AircraftOptions { Latitude = 47.6062, Longitude = -122.3321, ShowPhoto = false, Fields = ["type", "altitude", "speed", "distance", "track", "verticalRate"] };
+        (o with { Latitude = 47.123456789012345, Longitude = -122.98765432109876 }).Validate();
+        Check(true, "full-precision GPS coordinates accepted");
+        var photo = AircraftPhotos.Parse("""{"photos":[{"thumbnail_large":{"src":"https://t.plnspttrs.net/test.jpg"},"link":"https://www.planespotters.net/photo/1","photographer":"Test Photographer"}]}""");
+        Check(photo is { IsValid: true, Photographer: "Test Photographer" }, "photo metadata retains photographer and source");
+        Check(AircraftPhotos.Parse("""{"photos":[]}""") is null, "missing photo falls back to aircraft icon");
+        Check(photo is not null && !(photo with { Url = "https://example.org/test.jpg" }).IsValid && !(photo with { Link = "javascript:alert(1)" }).IsValid, "photo URLs restricted to provider hosts");
+        var detail = AircraftDetails.Parse("""{"response":{"aircraft":{"registered_owner":"Example Owner LLC"},"flightroute":{"airline":{"name":"Example Airline"},"destination":{"iata_code":"SEA","municipality":"Seattle"}}}}""");
+        Check(detail.Owner == "Example Owner LLC" && detail.Airline == "Example Airline" && detail.Destination == "SEA · Seattle", "owner and operator remain distinct, destination includes airport and city");
+        Check(AircraftDetails.Parse("""{"response":"unknown callsign"}""") == new AircraftDetail(), "unknown route remains unavailable");
         var json = "{\"now\":" + now.ToUnixTimeMilliseconds() + ",\"ac\":[{\"hex\":\"a12345\",\"flight\":\"UAL123  \",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":2,\"alt_baro\":12400,\"gs\":285},{\"hex\":\"b12345\",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":2,\"alt_baro\":\"ground\"},{\"hex\":\"c12345\",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":120}]}";
         var parsed = AdsbLolProvider.Parse(json, o.CacheKey, now);
         foreach (var invalid in new[] { "[]", "null", "{}", "{\"now\":0,\"ac\":[]}" })
@@ -61,6 +70,11 @@ internal static class Program
         Check(parsed.Aircraft.Length == 1 && parsed.Aircraft[0].Callsign == "UAL123", "provider removes ground and old-position reports, trims callsigns");
         Check(parsed.Aircraft[0].PositionAt == now.AddSeconds(-2).AddTicks(-(now.Ticks % TimeSpan.TicksPerMillisecond)), "position timestamp uses observation time minus seen_pos");
         Check(AircraftSelection.Nearby(o, parsed, now).Length == 1, "nearby airborne aircraft selected");
+        Check(AircraftSelection.ShouldReplaceCamera(o, parsed, now), "fresh nearby aircraft activates camera replacement");
+        Check(!AircraftSelection.ShouldReplaceCamera(o, parsed with { Aircraft = [] }, now) &&
+            !AircraftSelection.ShouldReplaceCamera(o, parsed with { RefreshFailed = true }, now) &&
+            !AircraftSelection.ShouldReplaceCamera(o, parsed, now.AddSeconds(31)) &&
+            !AircraftSelection.ShouldReplaceCamera(o with { MinimumAltitudeFeet = 13000 }, parsed, now), "camera returns on empty, failed, stale or filtered traffic");
         Check(AircraftSelection.Nearby(o with { MinimumAltitudeFeet = 13000 }, parsed, now).Length == 0, "altitude filter excludes aircraft");
         Check(AircraftSelection.Nearby(o, parsed, now.AddSeconds(65)).Length == 0, "old individual positions expire even if feed exists");
         Check(AircraftSelection.Nearby(o with { Latitude = 0, Longitude = 0 }, parsed, now).Length == 0, "radius filters distant aircraft");
@@ -78,9 +92,18 @@ internal static class Program
             await store.SaveAsync(settings);var loaded=await store.LoadAsync();
             Check(loaded.Layouts[0].Tiles.Last().Aircraft!.CacheKey==o.CacheKey&&loaded.AircraftOverlays.Count==1,"aircraft tile and overlay round trip");
             Check(File.Exists(path+".before-aircraft.json"),"stable rollback backup retained");
+            var betaPath = Path.Combine(directory, "beta-settings.json");
+            await File.WriteAllTextAsync(betaPath, JsonSerializer.Serialize(settings with { SchemaVersion = 17 }));
+            var betaStore = new JsonSettingsStore(betaPath); await betaStore.SaveAsync(await betaStore.LoadAsync());
+            Check((await betaStore.LoadAsync()).SchemaVersion == 18 && File.Exists(betaPath + ".before-aircraft-details.json"), "beta.1 upgrade keeps schema-17 rollback backup");
             Check(JsonSettingsStore.ParseImport(JsonSerializer.Serialize(loaded)).AircraftOverlays.Count==1,"aircraft export/import round trip");
             Check(StreamCatalog.DeleteCamera(loaded,1).AircraftOverlays.Count==0,"host deletion removes aircraft overlay");
             Check(WeatherConfiguration.OnlyPresentationChanged(loaded,loaded with { AircraftOverlays=[] }),"aircraft appearance uses isolated viewer update");
+            var conditional = loaded with { Layouts = [loaded.Layouts[0] with { Tiles = loaded.Layouts[0].Tiles.Select(t => t.CameraSlot == 1 ? t with { Aircraft = o } : t).ToArray() }] };
+            conditional.Normalize();
+            Check(WeatherConfiguration.OnlyPresentationChanged(loaded, conditional), "conditional replacement preserves camera layout and playback signature");
+            await store.SaveAsync(conditional);
+            Check((await store.LoadAsync()).Layouts[0].Tiles.First().Aircraft is not null, "conditional camera configuration persists");
             try { WallLayout.Validate([loaded.Layouts[0] with { Tiles=[tile,tile] }],loaded.ActiveLayoutId); throw new Exception("duplicate accepted"); } catch(InvalidDataException) { }
             await AircraftCache.WriteAsync(directory,[parsed],CancellationToken.None);Check((await AircraftCache.ReadAsync(directory)).Single().Aircraft.Length==1,"cache round trip");
             await File.WriteAllTextAsync(AircraftCache.PathFor(directory),"broken");Check((await AircraftCache.ReadAsync(directory)).Length==0,"corrupt cache does not affect settings");

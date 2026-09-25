@@ -93,6 +93,7 @@ public sealed record WallLayout
                 }
                 else if (tile.Kind != "camera" || !(AppSettings.MainCameraSlots.Contains(tile.CameraSlot) || StreamCatalog.IsOverlaySource(tile.CameraSlot) || (allowFocusTiles && tile.CameraSlot is -1 or -2)) || !cameras.Add(tile.CameraSlot))
                     throw new InvalidDataException("Each tile must reference a different main camera.");
+                if (tile.Kind == "camera" && tile.Aircraft is not null) { if (allowFocusTiles) throw new InvalidDataException("Aircraft replacement requires a standard layout."); tile.Aircraft.Validate(); }
                 if (tile.Row < 0 || tile.Column < 0 || tile.RowSpan < 1 || tile.ColumnSpan < 1 ||
                     tile.RowSpan > layout.Rows || tile.ColumnSpan > layout.Columns ||
                     tile.Row > layout.Rows - tile.RowSpan || tile.Column > layout.Columns - tile.ColumnSpan)

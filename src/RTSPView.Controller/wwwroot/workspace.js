@@ -134,7 +134,7 @@ const workspace = (() => {
         if(monitorMode==='wall'){const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});}
         const image=node('img');image.alt='';image.className='feed-thumbnail';
         const name=node('span',camera.name,'monitor-name'),health=node('span',undefined,'status-label');health.dataset.streamStatus=camera.slot;
-        health.id='monitor-state-'+camera.slot;card.setAttribute('aria-describedby',health.id);card.append(image,name,health);board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
+        health.id='monitor-state-'+camera.slot;card.setAttribute('aria-describedby',health.id);card.append(image,name,health);if(monitorMode==='wall'&&tile.aircraft){const replacement=aircraftUi.preview(tile.aircraft,false,false,true);replacement.classList.add('aircraft-replacement');card.append(replacement);}board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
       }
       if(!tiles.length)board.append(node('p',config?cameraInventory.some(c=>c.rtspUrl)?'Streams configured but unassigned. Open Layouts to place them, then Apply to wall.':'No source configured. Open Streams and add an RTSP address, then assign the stream in Layouts.':'Loading snapshot previews…','empty-state'));
     }

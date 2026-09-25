@@ -32,3 +32,11 @@ Coordinates and radius are sent to [ADSB.lol](https://www.adsb.lol/docs/open-dat
 This work starts from current `origin/codex/beta` / `origin/main` commit `c72f5a6`. Its application source matches release `v1.0.46` (`b04de0a`); changes after that tag were documentation, screenshots, and documentation fixtures. The aircraft build is `1.0.47-beta.1`.
 
 Settings schema 17 adds aircraft options. Existing installations start with no aircraft widgets. The first save retains `settings.json.before-aircraft.json` when upgrading an older schema. Stop the beta before restoring that file for an older release; older releases cannot load schema 17. Normal configuration export/import includes aircraft settings.
+
+## Beta.2 updates
+
+Camera tiles now offer **Replace while aircraft nearby**. This keeps the camera assigned and decoding, shows the aircraft card only for fresh matching traffic, and returns to the camera on empty, stale or failed data. Existing dedicated aircraft tiles can choose a return camera in their tile panel and select **Use conditional replacement**. Standalone tiles remain supported.
+
+Photos use Planespotters.net when available, with photographer credit. Registered owner, airline and destination use adsbdb. Enable the fields under **Choose aircraft information** for existing widgets. Destination is a callsign lookup, not a confirmed live flight plan. New coordinates retain full precision. Aircraft identifiers/callsigns are sent to these services for enabled metadata; lookups are cached and run independently of position updates. Photo and lookup failures leave the flight metrics available.
+
+Beta.2 uses schema 18 and saves settings.json.before-aircraft-details.json before the first upgrade save. Restore that backup after stopping beta.2 to return to beta.1.

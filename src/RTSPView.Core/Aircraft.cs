@@ -14,6 +14,7 @@ public sealed record AircraftOptions
     public string Units { get; init; } = "imperial";
     public int MaximumAircraft { get; init; } = 5;
     public bool HideWhenEmpty { get; init; } = true;
+    public bool ShowPhoto { get; init; } = true;
     public string Theme { get; init; } = "auto";
     public string Accent { get; init; } = "#F2C75C";
     public int BackgroundOpacity { get; init; } = 80;
@@ -22,8 +23,8 @@ public sealed record AircraftOptions
     public int Padding { get; init; } = 14;
     public int CornerRadius { get; init; } = 10;
     public string Alignment { get; init; } = "left";
-    public string[] Fields { get; init; } = ["type", "altitude", "speed", "distance", "track", "verticalRate"];
-    public static readonly string[] AllowedFields = ["type", "altitude", "speed", "distance", "track", "verticalRate"];
+    public string[] Fields { get; init; } = ["type", "owner", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate"];
+    public static readonly string[] AllowedFields = ["type", "owner", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate"];
     // Filters and presentation share one query for the same area.
     public string CacheKey => FormattableString.Invariant($"{Latitude:F4},{Longitude:F4},{RadiusMiles:F1}");
     [System.Text.Json.Serialization.JsonIgnore]
@@ -60,6 +61,10 @@ public sealed record AircraftOverlay
 
 public sealed record AircraftTrack
 {
+    public AircraftPhoto? Photo { get; init; }
+    public string RegisteredOwner { get; init; } = "";
+    public string Airline { get; init; } = "";
+    public string Destination { get; init; } = "";
     public string Hex { get; init; } = "";
     public string Callsign { get; init; } = "";
     public string Registration { get; init; } = "";
@@ -86,6 +91,8 @@ public sealed record AircraftSnapshot
 
 public static class AircraftSelection
 {
+    public static bool ShouldReplaceCamera(AircraftOptions options, AircraftSnapshot? snapshot, DateTimeOffset now) =>
+        snapshot?.Freshness(now) == "fresh" && Nearby(options, snapshot, now).Length > 0;
     public static double DistanceMiles(double lat, double lon, double targetLat, double targetLon)
     {
         const double radians = Math.PI / 180;
@@ -111,6 +118,9 @@ public static class AircraftSelection
         static string Number(double? value, string format = "N0") => value?.ToString(format, CultureInfo.InvariantCulture) ?? "—";
         return field switch
         {
+            "owner" => "Registered owner: " + (a.RegisteredOwner.Length > 0 ? a.RegisteredOwner : "Unavailable"),
+            "airline" => "Airline: " + (a.Airline.Length > 0 ? a.Airline : "Unavailable"),
+            "destination" => "Destination (lookup): " + (a.Destination.Length > 0 ? a.Destination : "Unavailable"),
             "altitude" => "ALT " + Number(a.AltitudeFeet * (o.Units == "metric" ? .3048 : 1)) + (o.Units == "metric" ? " m" : " ft"),
             "speed" => "SPD " + Number(a.SpeedKnots * (o.Units == "metric" ? 1.852 : 1)) + (o.Units == "metric" ? " km/h" : " kt"),
             "track" => "TRK " + Number(a.TrackDegrees) + (a.TrackDegrees.HasValue ? "° " + Cardinal(a.TrackDegrees.Value) : ""),
@@ -132,8 +142,8 @@ public static class AircraftGeometry
         var size = Math.Min(o.FontSize, Math.Max(12, (w - o.Padding * 2) / 5));
         var rows = o.Preset == "board" ? o.MaximumAircraft : 1;
         var columns = w - o.Padding * 2 >= 400 ? 3 : w - o.Padding * 2 >= 220 ? 2 : 1;
-        var lines = (o.Fields.Contains("type") ? 1 : 0) + Math.Ceiling(o.Fields.Count(f => f != "type") / (double)columns);
-        var h = Math.Min(Math.Max(0, height - margin * 2), Math.Ceiling(o.Padding * 2 + 42 + rows * (Math.Max(size * 1.7, Math.Min(o.IconSize, (w - o.Padding * 2) * .2)) + 8 + lines * (Math.Max(12, size * .6) * 1.4 + 2))));
+        var lines = o.Fields.Count(f => f is "type" or "owner" or "airline" or "destination") + Math.Ceiling(o.Fields.Count(f => f is not ("type" or "owner" or "airline" or "destination")) / (double)columns);
+        var h = Math.Min(Math.Max(0, height - margin * 2), Math.Ceiling(o.Padding * 2 + 42 + (o.ShowPhoto && w - o.Padding * 2 >= 180 ? 150 : 0) + rows * (Math.Max(size * 1.7, Math.Min(o.IconSize, (w - o.Padding * 2) * .2)) + 8 + lines * (Math.Max(12, size * .6) * 1.4 + 2))));
         return (w, h, margin + (Math.Max(0, width - margin * 2) - w) * overlay.X / 100, margin + (Math.Max(0, height - margin * 2) - h) * overlay.Y / 100);
     }
 }

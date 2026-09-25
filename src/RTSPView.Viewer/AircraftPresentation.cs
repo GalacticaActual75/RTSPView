@@ -10,6 +10,7 @@ public partial class MainWindow
 {
     private readonly Dictionary<string, AircraftView> _aircraftTiles = [];
     private readonly Dictionary<int, (Canvas Host, AircraftView View)> _aircraftOverlays = [];
+    private readonly Dictionary<int, AircraftView> _aircraftReplacements = [];
     private AircraftSnapshot[] _aircraftSnapshots = [];
     private DispatcherTimer? _aircraftTimer;
     private bool _readingAircraft;
@@ -31,6 +32,22 @@ public partial class MainWindow
         }
         foreach (var camera in _tiles)
         {
+            var replacement = EffectiveFocusedSlot.HasValue ? null : EffectiveLayout.Tiles.FirstOrDefault(t => t.Kind == "camera" && t.CameraSlot == camera.Slot)?.Aircraft;
+            if (replacement is null)
+            {
+                if (_aircraftReplacements.Remove(camera.Slot, out var old)) camera.ContentOverlayRoot.Children.Remove(old);
+            }
+            else
+            {
+                if (!_aircraftReplacements.TryGetValue(camera.Slot, out var view))
+                {
+                    view = new AircraftView(); _aircraftReplacements[camera.Slot] = view;
+                    System.Windows.Controls.Panel.SetZIndex(view, 10); camera.ContentOverlayRoot.Children.Add(view);
+                }
+                var snapshot = _aircraftSnapshots.FirstOrDefault(s => s.Key == replacement.CacheKey);
+                view.Update(replacement with { BackgroundOpacity = 100 }, snapshot);
+                view.Visibility = AircraftSelection.ShouldReplaceCamera(replacement, snapshot, DateTimeOffset.UtcNow) ? Visibility.Visible : Visibility.Collapsed;
+            }
             var setting = _settings.AircraftOverlays.FirstOrDefault(o => o.Enabled && o.HostCameraSlot == camera.Slot);
             if (setting is null)
             {

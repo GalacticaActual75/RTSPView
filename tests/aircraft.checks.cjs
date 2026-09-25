@@ -20,3 +20,7 @@ for(const width of [120,320,640,1920])for(const fontSize of [12,24,64]){
  assert(bounds.width>=0&&bounds.height>=0&&bounds.left+bounds.width<=width+.001&&bounds.top+bounds.height<=width*9/16+.001);
 }
 console.log('PASS aircraft browser selection: radius, altitude, missing values, old/future positions, outage expiry, units and bounded placement.');
+for(const state of ['fresh','stale','unavailable'])for(const count of [0,1])assert.equal(ui.shouldHide(options,state,count,false,true),state!=='fresh'||count===0,'camera takeover visibility follows fresh matching traffic');
+assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'fresh',0,true,false),true);
+assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'unavailable',0,true,false),false);
+console.log('PASS camera replacement restores camera on empty, stale and unavailable traffic; overlay outage remains visible.');

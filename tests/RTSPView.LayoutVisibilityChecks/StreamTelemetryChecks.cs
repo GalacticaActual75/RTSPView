@@ -89,6 +89,12 @@ internal static class StreamTelemetryChecks
                             Aircraft = [new() { Hex = "a12345", Callsign = "TEST123", PositionAt = DateTimeOffset.UtcNow, Latitude = .01, Longitude = .01, AltitudeFeet = 12000 }] }, true);
                         window.UpdateLayout();
                         var aircraftFrame = tile.GetTelemetry().LastFrameAt;
+                        var options = new AircraftOptions { Latitude = 0, Longitude = 0 };
+                        var traffic = new AircraftSnapshot { FetchedAt = DateTimeOffset.UtcNow, Aircraft = [new() { Hex = "a12345", Latitude = .01, Longitude = .01, PositionAt = DateTimeOffset.UtcNow }] };
+                        aircraft.Visibility = AircraftSelection.ShouldReplaceCamera(options, traffic, DateTimeOffset.UtcNow) ? Visibility.Visible : Visibility.Collapsed;
+                        if (aircraft.Visibility != Visibility.Visible) throw new Exception("Nearby traffic did not replace camera presentation");
+                        aircraft.Visibility = AircraftSelection.ShouldReplaceCamera(options, traffic with { Aircraft = [] }, DateTimeOffset.UtcNow) ? Visibility.Visible : Visibility.Collapsed;
+                        if (aircraft.Visibility != Visibility.Collapsed) throw new Exception("Camera did not return after traffic left");
                         aircraft.Update(new() { Theme = "light", Preset = "board" }, null, true);
                         for (var wait = 0; wait < 20 && tile.GetTelemetry().LastFrameAt <= aircraftFrame; wait++) { await Task.Delay(100); tile.Tick(); }
                         if (player.Hwnd != handle || !ReferenceEquals(player, typeof(CameraTile).GetField("_player", flags)!.GetValue(tile)) || !player.IsPlaying || tile.GetTelemetry().LastFrameAt <= aircraftFrame)
