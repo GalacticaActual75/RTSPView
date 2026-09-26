@@ -175,7 +175,7 @@ function createWallDesigner(isAutomation = false) {
     },menu);deleteButton.disabled=isAutomation?draft.layouts.length===1:selectedId===saved.activeLayoutId;deleteButton.classList.add('designer-danger');
     const revert=button('Revert last save',()=>persist(false,true),menu);revert.disabled=!previous;
     const actions=el('div',undefined,'designer-actions');top.append(actions);
-    if(!isAutomation)button('Add weather',()=>{
+    if(!isAutomation&&pluginsUi.enabled('weather'))button('Add weather',()=>{
       let place;for(let row=0;row<layout.rows&&!place&&layout.tiles.length<16;row++)for(let column=0;column<layout.columns;column++){
         const candidate={kind:'weather',itemId:layoutItemId(),cameraSlot:0,row,column,rowSpan:1,columnSpan:1,sizing:'fit'};if(validTile(candidate,-1)){place=candidate;break;}
       }
@@ -188,7 +188,7 @@ function createWallDesigner(isAutomation = false) {
       }
       weatherUi.editor(weatherUi.defaults(),weather=>{layout.tiles.push({...place,weather});selectedTile=layout.tiles.length-1;drawer='tile';changed();});
     },actions);
-    if(!isAutomation)button('Add aircraft',()=>{
+    if(!isAutomation&&pluginsUi.enabled('aircraft'))button('Add aircraft',()=>{
       let place;for(let row=0;row<layout.rows&&!place&&layout.tiles.length<16;row++)for(let column=0;column<layout.columns;column++){
         const candidate={kind:'aircraft',itemId:layoutItemId(),cameraSlot:0,row,column,rowSpan:1,columnSpan:1,sizing:'fit'};if(validTile(candidate,-1)){place=candidate;break;}
       }
@@ -287,7 +287,7 @@ function createWallDesigner(isAutomation = false) {
       const stop=()=>{board.onpointermove=null;board.onpointerup=null;board.onpointercancel=null;ghost.remove();};
       board.onpointerup=()=>{const t=region();stop();addCamera(t.cameraSlot,t.row,t.column,t.rowSpan,t.columnSpan);};board.onpointercancel=stop;
     };
-    layout.tiles.forEach((tile,index)=>{
+    layout.tiles.forEach((tile,index)=>{if(['weather','aircraft'].includes(tile.kind)&&!pluginsUi.enabled(tile.kind))return;
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.kind==='aircraft'?'Aircraft · '+tile.aircraft.location:tile.kind==='weather'?'Weather · '+tile.weather.location:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
       const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
@@ -295,16 +295,16 @@ function createWallDesigner(isAutomation = false) {
       const previewSlot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);
       const image=el('img');image.alt='';image.draggable=false;if(previewSlot)dashboardUX.snapshot(image,previewSlot);else image.hidden=true;image.onerror=()=>image.style.visibility='hidden';node.append(image);if(!['weather','aircraft'].includes(tile.kind))image.dataset.tileIndex=index;image.addEventListener('load',sizeImages);
       if(tile.kind==='weather'){image.hidden=true;const host=el('div',undefined,'designer-weather-preview');host.dataset.weatherIndex=index;host.append(weatherUi.preview(tile.weather,true));node.append(host);}
-      if(!['weather','aircraft'].includes(tile.kind)&&tile.aircraft){const badge=el('span','Aircraft when nearby','designer-aircraft-overlay');badge.style.inset='30% 10%';node.append(badge);}
+      if(pluginsUi.enabled('aircraft')&&!['weather','aircraft'].includes(tile.kind)&&tile.aircraft){const badge=el('span','Aircraft when nearby','designer-aircraft-overlay');badge.style.inset='30% 10%';node.append(badge);}
       if(tile.kind==='aircraft'){image.hidden=true;const host=el('div',undefined,'designer-aircraft-preview');host.dataset.aircraftIndex=index;host.append(aircraftUi.preview(tile.aircraft,true));node.append(host);}
       const guide=el('span','','designer-aspect-guide');guide.hidden=['weather','aircraft'].includes(tile.kind)||index!==selectedTile;node.append(guide);
       const updateGuide=r=>{const ratio=streamAspects.get(previewSlot);guide.textContent=ratio?'Picture fit '+Math.round(Math.min(r.width/r.height*(outputWidth/outputHeight)/ratio,ratio/(r.width/r.height*(outputWidth/outputHeight)))*100)+'%':'Load a preview for sizing';};
       image.onload=()=>{if(image.naturalWidth&&image.naturalHeight){streamAspects.set(previewSlot,image.naturalWidth/image.naturalHeight);image.style.visibility='';updateGuide(rect);}};updateGuide(rect);
       node.append(el('span',camera.name,'designer-caption'));
       const weatherOverlay=(config.weatherOverlays||[]).find(o=>o.enabled&&o.hostCameraSlot===tile.cameraSlot);
-      if(weatherOverlay){const placeholder=el('div','Weather Widget','designer-weather-overlay');placeholder.dataset.weatherSlot=tile.cameraSlot;placeholder.title='Weather enabled · '+weatherOverlay.weather.location;node.append(placeholder);}
+      if(pluginsUi.enabled('weather')&&weatherOverlay){const placeholder=el('div','Weather Widget','designer-weather-overlay');placeholder.dataset.weatherSlot=tile.cameraSlot;placeholder.title='Weather enabled · '+weatherOverlay.weather.location;node.append(placeholder);}
       const aircraftOverlay=(config.aircraftOverlays||[]).find(o=>o.enabled&&o.hostCameraSlot===tile.cameraSlot);
-      if(aircraftOverlay){const placeholder=el('div','Aircraft Widget','designer-aircraft-overlay');placeholder.dataset.aircraftSlot=tile.cameraSlot;placeholder.title='Aircraft enabled · '+aircraftOverlay.aircraft.location;node.append(placeholder);}
+      if(pluginsUi.enabled('aircraft')&&aircraftOverlay){const placeholder=el('div','Aircraft Widget','designer-aircraft-overlay');placeholder.dataset.aircraftSlot=tile.cameraSlot;placeholder.title='Aircraft enabled · '+aircraftOverlay.aircraft.location;node.append(placeholder);}
 
       if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot)){
         node.append(el('span','Chosen by automation','designer-overlay'));
@@ -348,7 +348,7 @@ function createWallDesigner(isAutomation = false) {
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
     sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Choose Original, Fit, Fill or Stretch per tile. Small tiles remain equal in size.','designer-help'));
     button('Fit tiles to streams',()=>{
-      if(layout.tiles.some(t=>['weather','aircraft'].includes(t.kind))){message('Use Fine sizing for a wall containing weather or aircraft.');return;}
+      if(layout.tiles.some(t=>['weather','aircraft'].includes(t.kind))){message('Use Fine sizing for a wall containing data tiles.');return;}
       const targets={};
       for(const tile of layout.tiles){const slot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);const ratio=streamAspects.get(slot);
         if(!ratio){message('Load each stream preview and choose preview streams for focus tiles before fitting.');return;}targets[tile.cameraSlot]=ratio;}
@@ -367,7 +367,7 @@ function createWallDesigner(isAutomation = false) {
       });
     }
     const tilePanel=el('div',undefined,'designer-tile-panel');tilePanel.hidden=drawer!=='tile';side.append(tilePanel);
-    const tile=layout.tiles[selectedTile];
+    const tile=layout.tiles[selectedTile];if(tile&&['weather','aircraft'].includes(tile.kind)&&!pluginsUi.enabled(tile.kind))return;
     if(tile?.kind==='weather'){
       tilePanel.append(el('h3',tile.weather.location||'Weather'),el('p','Drag or resize this tile just like a stream. Changes stay in the layout draft.','designer-help'));
       button('Edit weather',()=>weatherUi.editor(tile.weather,weather=>updateTile({...tile,weather},selectedTile)),tilePanel);
@@ -392,18 +392,18 @@ function createWallDesigner(isAutomation = false) {
       }
       if(isAutomation&&tile.cameraSlot>0){const focusActions=el('div',undefined,'designer-focus-actions');tilePanel.append(focusActions);for(const focusSlot of layout.focusSlots)button('Use as Focus '+(-focusSlot),()=>{const old=layout.tiles.find(t=>t.cameraSlot===focusSlot);old.cameraSlot=tile.cameraSlot;tile.cameraSlot=focusSlot;changed();},focusActions);}
       if(!isAutomation){
-        const aircraftSection=el('section',undefined,'designer-aircraft-controls');aircraftSection.append(el('h4','Aircraft display'));tilePanel.append(aircraftSection);
+        if(pluginsUi.enabled('aircraft')){const aircraftSection=el('section',undefined,'designer-aircraft-controls');aircraftSection.append(el('h4','Aircraft display'));tilePanel.append(aircraftSection);
         aircraftSection.append(el('p','Widget stays visible in a corner. Appear over camera fills this tile while aircraft are nearby. Permanent tile always shows aircraft information.','designer-help'));
         if(tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25))button('Aircraft widget',()=>aircraftUi.overlayEditor(tile.cameraSlot),aircraftSection);
         if(tile.aircraft){aircraftSection.append(aircraftUi.status(tile.aircraft));button('Edit appear-over-camera display',()=>aircraftUi.editor(tile.aircraft,aircraft=>updateTile({...tile,aircraft},selectedTile)),aircraftSection);button('Remove appear-over-camera display',()=>updateTile({...tile,aircraft:null},selectedTile),aircraftSection);}
         else button('Appear over camera when nearby',()=>aircraftUi.editor(aircraftUi.defaults(),aircraft=>updateTile({...tile,aircraft},selectedTile)),aircraftSection);
         button('Permanent aircraft tile',()=>aircraftUi.editor(tile.aircraft||aircraftUi.defaults(),aircraft=>updateTile({...tile,kind:'aircraft',itemId:layoutItemId(),cameraSlot:0,weather:null,aircraft},selectedTile)),aircraftSection);
         if(tile.aircraft){const opacity=el('input');opacity.type='number';opacity.min=0;opacity.max=100;opacity.step=1;opacity.value=tile.aircraft.backgroundOpacity;opacity.onchange=()=>{if(opacity.reportValidity())updateTile({...tile,aircraft:{...tile.aircraft,backgroundOpacity:Number(opacity.value)}},selectedTile);};field('Aircraft background opacity (%)',opacity,aircraftSection);aircraftSection.append(el('p','0% shows the camera behind the text; 100% hides the camera.','designer-help'));}
-        const content=el('details');content.append(el('summary','Widgets and tile content'));tilePanel.append(content);const actions=el('div',undefined,'designer-content-actions');content.append(actions);
-        if(tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25)){button('Weather Widget',()=>weatherUi.overlayEditor(tile.cameraSlot),actions);button('Aircraft Widget',()=>aircraftUi.overlayEditor(tile.cameraSlot),actions);}
+        } if(pluginsUi.enabled('weather')){const content=el('details');content.append(el('summary','Widgets and tile content'));tilePanel.append(content);const actions=el('div',undefined,'designer-content-actions');content.append(actions);
+        if(tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25)){button('Weather Widget',()=>weatherUi.overlayEditor(tile.cameraSlot),actions);if(pluginsUi.enabled('aircraft'))button('Aircraft Widget',()=>aircraftUi.overlayEditor(tile.cameraSlot),actions);}
         button('Replace with weather',()=>weatherUi.editor(weatherUi.defaults(),weather=>updateTile({...tile,kind:'weather',itemId:layoutItemId(),cameraSlot:0,aircraft:null,weather},selectedTile)),actions);
       }
-      const sizing=el('select');for(const [value,label] of [['fit','Fit · entire image (default)'],['original','Original size'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'fit';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);
+      } const sizing=el('select');for(const [value,label] of [['fit','Fit · entire image (default)'],['original','Original size'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'fit';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);
       const advanced=el('details');advanced.append(el('summary','Advanced image transform'));tilePanel.append(advanced);const framing=el('div',undefined,'designer-framing');advanced.append(framing);
       for(const [key,label,min,max,fallback] of [['zoomPercent','Zoom',25,400,100],['horizontalPositionPercent','Horizontal position',0,100,50],['verticalPositionPercent','Vertical position',0,100,50]]){
         const input=el('input');input.type='range';input.min=min;input.max=max;input.step=1;input.value=tile[key]??fallback;
@@ -451,7 +451,7 @@ function createWallDesigner(isAutomation = false) {
     status=el('p',dirty?'Unsaved changes. Apply when you are ready.':'Apply to wall saves all layout drafts and displays the selected layout. Save layout saves drafts without switching the wall.','designer-status');status.setAttribute('role','status');status.tabIndex=-1;root.append(status);
     const hiddenOverlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])]
       .filter(overlay=>overlay.camera.enabled&&!layout.tiles.some(tile=>tile.cameraSlot===overlay.hostCameraSlot));
-    if(hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
+    if(pluginsUi.enabled('pictureInPicture')&&hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
   }
   return {open(id){if(draft?.layouts.some(l=>l.id===id)){selectedId=id;selectedTile=-1;render();root.querySelector('select')?.focus();}},dimensions(cameras){streamDimensions=new Map((cameras||[]).filter(c=>c.width>0&&c.height>0).map(c=>[c.slot,c]));if(draft)sizeImages();},isDirty:()=>dirty,savedLayouts:()=>saved?.layouts||[],active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
     config=value;root=document.querySelector(isAutomation?'#automation-layout-editor':'#standard-layout-editor');

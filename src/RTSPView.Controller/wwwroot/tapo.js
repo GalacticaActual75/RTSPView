@@ -221,7 +221,7 @@ const tapoUi = (() => {
     catch (e) { automationPresentation.status(output, e.message, 'error'); }
     finally { delete card.dataset.testing; }
   }
-  async function refresh() {
+  async function refresh() {if(!pluginsUi.enabled('automations'))return;
     if (!loaded || busy || refreshing || document.hidden) return; refreshing = true;
     try {
       const status = await api('/api/tapo/status');

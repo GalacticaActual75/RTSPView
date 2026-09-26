@@ -16,8 +16,11 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
     private AircraftPhotos? _photos;
     private AircraftDetails? _details;
     public AircraftSnapshot[] Snapshots => _cache.Values.Select(s => s with { Aircraft = s.Aircraft.Select(a => (_details?.Enrich(a) ?? a) with { Photo = _photos?.Find(a.Hex) }).ToArray() }).ToArray();
-    protected override async Task ExecuteAsync(CancellationToken token)
+    protected override Task ExecuteAsync(CancellationToken token) =>
+        PluginRunner.RunAsync(directory, f => f.Aircraft, RunEnabledAsync, token);
+    private async Task RunEnabledAsync(CancellationToken token)
     {
+        _next.Clear();
         _photos = new AircraftPhotos(_http);
         _details = new AircraftDetails(_http);
         await Task.WhenAll(FeedAsync(token), _photos.RunAsync(token), _details.RunAsync(token));
@@ -72,8 +75,8 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
                             { RefreshFailed = true, LastError = reason, NextRetryAt = _providerRetryAt };
                     }
                 }
-                foreach (var options in settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)).Where(o => o.ShowPhoto || o.Fields.Any(f => f is "owner" or "airline" or "destination")))
-                    foreach (var track in AircraftSelection.Nearby(options, _cache.GetValueOrDefault(options.CacheKey), DateTimeOffset.UtcNow).Take(options.Preset == "board" ? options.MaximumAircraft : 1)) { if (options.ShowPhoto) _photos.Request(track.Hex); if (options.Fields.Any(f => f is "owner" or "airline" or "destination")) _details.Request(track); }
+                foreach (var options in settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)))
+                    foreach (var track in AircraftSelection.Nearby(options, _cache.GetValueOrDefault(options.CacheKey), DateTimeOffset.UtcNow).Take(options.Preset == "board" ? options.MaximumAircraft : 1)) { if (options.ShowPhoto) _photos.Request(track.Hex); _details.Request(track); }
                 if (changed) await AircraftCache.WriteAsync(directory, Snapshots, token);
             }
             catch (Exception e) when (e is IOException or JsonException or InvalidDataException or UnauthorizedAccessException) { /* Retry separately from cameras. */ }
@@ -87,7 +90,14 @@ public static class AircraftEndpoints
 {
     public static void MapAircraft(this WebApplication app, JsonSettingsStore store, SemaphoreSlim gate)
     {
-        app.MapGet("/api/aircraft", (AircraftService aircraft) => Results.Ok(aircraft.Snapshots)).RequireAuthorization();
+        app.MapGet("/api/aircraft", async (AircraftService aircraft) => Results.Ok((await store.LoadAsync()).Plugins.Aircraft ? aircraft.Snapshots : [])).RequireAuthorization();
+        app.MapGet("/api/aircraft/search", async (string q, WeatherService weather, CancellationToken token) =>
+        {
+            if (!(await store.LoadAsync(token)).Plugins.Aircraft) return Results.NotFound();
+            try { return Results.Ok(await weather.SearchAsync(q, token)); }
+            catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
+            catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException) { return Results.Json(new { error = "Location search is unavailable. Try again or enter coordinates." }, statusCode: 503); }
+        }).RequireAuthorization();
         app.MapPut("/api/aircraft/overlays/{slot:int}", async (int slot, AircraftOverlay overlay) =>
         {
             await gate.WaitAsync();
@@ -96,6 +106,7 @@ public static class AircraftEndpoints
                 overlay = overlay with { HostCameraSlot = slot }; overlay.Validate();
                 await using var transaction = await store.BeginWriteAsync();
                 var settings = await transaction.LoadAsync();
+                if (!settings.Plugins.Aircraft) return Results.NotFound();
                 if (settings.DeletedCameraSlots.Contains(slot)) return Results.BadRequest(new { error = "Choose an existing camera." });
                 await transaction.SaveAsync(settings with { AircraftOverlays = settings.AircraftOverlays.Where(o => o.HostCameraSlot != slot).Append(overlay).ToArray() });
                 return Results.Ok(overlay);

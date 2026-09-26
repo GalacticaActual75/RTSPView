@@ -235,6 +235,20 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseAuthorization();
+app.Use(async (context, next) =>
+{
+    var path = (context.Request.Path.Value ?? "").ToLowerInvariant();
+    if (path.StartsWith("/api/onvif/", StringComparison.Ordinal) || path.StartsWith("/api/automation", StringComparison.Ordinal)
+        || path.StartsWith("/api/tapo", StringComparison.Ordinal) || path == "/api/doorbell" || path == "/api/garage" || path.StartsWith("/api/overlays", StringComparison.Ordinal))
+    {
+        var plugins = (await settingsStore.LoadAsync(context.RequestAborted)).Plugins;
+        var blocked = !plugins.Onvif && path.StartsWith("/api/onvif/", StringComparison.Ordinal)
+            || !plugins.Automations && (path.StartsWith("/api/automation", StringComparison.Ordinal) || path.StartsWith("/api/tapo", StringComparison.Ordinal))
+            || !plugins.PictureInPicture && (path == "/api/doorbell" || path == "/api/garage" || path.StartsWith("/api/overlays", StringComparison.Ordinal));
+        if (blocked) { context.Response.StatusCode = 404; await context.Response.WriteAsJsonAsync(new { error = "Plugin disabled." }); return; }
+    }
+    await next();
+});
 app.MapConnector(dataDirectory, configGate, settingsStore, () => security.SessionVersion, () => security.PasswordChangeRequired);
 
 app.MapGet("/api/session", (HttpContext context, ClaimsPrincipal user) =>
@@ -362,6 +376,20 @@ app.MapGet("/api/config", async () => {
     return Results.Json(json);
 }).RequireAuthorization();
 app.MapTapo(configGate);
+app.MapPut("/api/plugins", async (Plugins features, AutomationService automation) =>
+{
+    await configGate.WaitAsync();
+    try
+    {
+        await using var transaction = await settingsStore.BeginWriteAsync();
+        var settings = await transaction.LoadAsync();
+        await transaction.SaveAsync(settings with { Plugins = features });
+        if (!features.Automations) await automation.Diagnostics.StopAsync(CancellationToken.None);
+        return Results.Ok(features);
+    }
+    finally { configGate.Release(); }
+}).RequireAuthorization();
+app.MapGet("/api/plugins", async () => Results.Ok((await settingsStore.LoadAsync()).Plugins)).RequireAuthorization();
 app.MapAutomationPriorities(configGate);
 app.MapGet("/api/automation", (AutomationService automation) => Results.Ok(automation.Configuration)).RequireAuthorization();
 app.MapGet("/api/automation/status", (AutomationService automation) => Results.Ok(automation.Status)).RequireAuthorization();

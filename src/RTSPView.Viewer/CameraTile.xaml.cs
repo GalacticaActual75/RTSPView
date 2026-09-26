@@ -250,13 +250,13 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
             StartPlayer(recreatePlayer: true);
     }
 
-    public void Apply(CameraSettings settings)
+    public void Apply(CameraSettings settings, bool force = false)
     {
         settings = PlaybackSettings(settings);
         if (_sharedSource is not null) { _settings = settings; NameText.Text = settings.Name; return; }
         // Overlay display-mode changes only affect MainWindow's visibility gate.
         // Keep the existing player, decoded frame and recovery state intact.
-        if (_useCompositedOutput && _settings == settings) return;
+        if (!force && _useCompositedOutput && _settings == settings) return;
         if (_settings.RtspUrl != settings.RtspUrl)
         {
             _activity = new StreamActivity();
@@ -403,8 +403,17 @@ public partial class CameraTile : System.Windows.Controls.UserControl, IDisposab
         RestartStreamButton.FontSize = compact ? 17 : 12;
     }
 
+    private bool _pluginEnabled = true;
+    public void SetPluginEnabled(bool enabled)
+    {
+        if (_pluginEnabled == enabled) return;
+        _pluginEnabled = enabled;
+        if (!enabled) Stop(CameraConnectionState.Disabled);
+        else if (_settings.Enabled && !string.IsNullOrWhiteSpace(_settings.RtspUrl)) Start();
+    }
     public void Start(bool manual = true)
     {
+        if (!_pluginEnabled) { Stop(CameraConnectionState.Disabled); return; }
         if (_sharedSource is not null) { _sharedSource.Start(manual); return; }
         if (_disposed || _libVlc is null || !_settings.Enabled || string.IsNullOrWhiteSpace(_settings.RtspUrl)) return;
         if (manual)

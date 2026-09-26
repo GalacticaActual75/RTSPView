@@ -6,7 +6,7 @@ const form={querySelector:()=>({children:[]}),querySelectorAll:selector=>({'.sen
 const app=fs.readFileSync('src/RTSPView.Controller/wwwroot/app.js','utf8');
 const inventory=app.slice(app.indexOf('function layoutStreamInventory('),app.indexOf('function overlaySourceCard('));
 const source=fs.readFileSync('src/RTSPView.Controller/wwwroot/tapo.js','utf8').replace('return {init, load, refresh, updateTargets, updateCamera, updateOverlay}', 'return {updateTargets, updateCamera, updateOverlay, seed(f,c){form=f;config=c}}');
-const ctx=vm.createContext({Option,console});vm.runInContext(inventory+'\n'+source+'\nthis.ui=tapoUi;',ctx);
+const ctx=vm.createContext({Option,console,pluginsUi:{enabled:()=>true}});vm.runInContext(inventory+'\n'+source+'\nthis.ui=tapoUi;',ctx);
 const camera=(slot,name='Stream '+slot)=>({slot,name,enabled:true,rtspUrl:'rtsp://camera.example.invalid/live'});
 ctx.ui.seed(form,{cameraCount:1,cameras:[camera(1),camera(2,'Unused placeholder')],doorbellOverlay:{camera:camera(10)},garageOverlay:{camera:{...camera(11),rtspUrl:''}},deletedCameraSlots:[26]});
 ctx.ui.updateCamera(camera(26,'New stream'));assert(focus.options.some(o=>o.value==='26'),'new stream beyond old cameraCount appears');assert(!focus.options.some(o=>o.value==='2'),'inactive placeholders stay excluded');assert.equal(focus.value,'1');

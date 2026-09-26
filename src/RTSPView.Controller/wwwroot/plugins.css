@@ -1,0 +1,17 @@
+html[data-onvif-enabled="false"] .onvif-open,
+html[data-onvif-enabled="false"] .onvif-dialog,
+html[data-picture-in-picture-enabled="false"] [data-page="overlays"],
+html[data-picture-in-picture-enabled="false"] #page-overlays,
+html[data-picture-in-picture-enabled="false"] .overlay-source-card,
+html[data-picture-in-picture-enabled="false"] .designer-overlay,
+html[data-automations-enabled="false"] [data-page="automation"],
+html[data-automations-enabled="false"] #page-automation,
+html[data-automations-enabled="false"] [data-layout-tab="automation"],
+html[data-automations-enabled="false"] #automation-layout-editor,
+html[data-automations-enabled="false"] .overlay-automation-info,
+html[data-automations-enabled="false"] .automation-badge,
+html[data-weather-enabled="false"] [data-plugin="weather"],
+html[data-aircraft-enabled="false"] [data-plugin="aircraft"]{display:none!important}
+#pluginsUiForm .display-options{display:grid;gap:16px;max-width:540px}
+#pluginsUiForm .display-options label{display:flex;align-items:center;gap:12px}
+html[data-yt-dlp-enabled="false"][data-streamlink-enabled="false"] .streaming-plugins-status{display:none!important}

@@ -121,7 +121,7 @@ public static class AircraftSelection
         static string Number(double? value, string format = "N0") => value?.ToString(format, CultureInfo.InvariantCulture) ?? "—";
         return field switch
         {
-            "owner" => "Registered owner: " + (a.RegisteredOwner.Length > 0 ? a.RegisteredOwner : "Unavailable"),
+            "owner" => a.RegisteredOwner.Length > 0 ? a.RegisteredOwner : "Unavailable",
             "airline" => "Airline: " + (a.Airline.Length > 0 ? a.Airline : "Unavailable"),
             "destination" => "Destination (lookup): " + (a.Destination.Length > 0 ? a.Destination : "Unavailable"),
             "altitude" => "ALT " + Number(a.AltitudeFeet * (o.Units == "metric" ? .3048 : 1)) + (o.Units == "metric" ? " m" : " ft"),

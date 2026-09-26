@@ -417,6 +417,10 @@ public partial class MainWindow : Window
 
     private void ApplyOverlays()
     {
+        foreach (var tile in _tiles) tile.SetPluginEnabled(_settings.Plugins.AllowsSource(_settings.Cameras.First(c => c.Slot == tile.Slot)));
+        foreach (var entry in _rawOverlaySources.Values) entry.Tile.SetPluginEnabled(_settings.Plugins.PictureInPicture && _settings.Plugins.AllowsSource(entry.Camera));
+        foreach (var overlay in _settings.AllOverlays())
+            foreach (var tile in _allTiles.Where(t => t.Slot == overlay.Camera.Slot)) tile.SetPluginEnabled(_settings.Plugins.PictureInPicture && _settings.Plugins.AllowsSource(overlay.Camera));
         UpdateOverlayWindowLayouts();
         QueueOverlayLayouts();
     }
@@ -540,6 +544,7 @@ public partial class MainWindow : Window
         DoorbellOverlaySettings overlay)
     {
         if (overlayWindow is null || _tiles.Length == 0) return;
+        if (!_settings.Plugins.PictureInPicture) { HideOverlayWindowHierarchy(overlayWindow, overlayTile); return; }
         if (EffectiveFocusedSlot.HasValue)
         {
             if (EffectiveFocusedSlot != overlay.Camera.Slot || !CanDisplayOverlayWindows())
@@ -1123,8 +1128,9 @@ public partial class MainWindow : Window
             ClearAutomation();
             var previousDoorbell = _settings.DoorbellOverlay.Camera;
             var previousGarage = _settings.GarageOverlay.Camera;
+            var resolverChanged = _settings.Plugins.YtDlp != updated.Plugins.YtDlp || _settings.Plugins.Streamlink != updated.Plugins.Streamlink;
             for (var index = 0; index < _tiles.Length; index++)
-                if (_settings.Cameras[index] != updated.Cameras[index]) _tiles[index].Apply(updated.Cameras[index]);
+                if (_settings.Cameras[index] != updated.Cameras[index] || resolverChanged) _tiles[index].Apply(updated.Cameras[index], force: resolverChanged);
             var selectedCamera = Math.Max(0, SlotBox.SelectedIndex);
             _settings = updated;
             SlotBox.ItemsSource = Enumerable.Range(1, _settings.CameraCount).ToArray();
@@ -1132,10 +1138,10 @@ public partial class MainWindow : Window
             SyncAdditionalOverlays();
             ApplyWallLayout();
             ApplyOverlays();
-            if (previousDoorbell != updated.DoorbellOverlay.Camera)
-                DoorbellTile.Apply(updated.DoorbellOverlay.Camera);
-            if (previousGarage != updated.GarageOverlay.Camera)
-                GarageTile.Apply(updated.GarageOverlay.Camera);
+            if (previousDoorbell != updated.DoorbellOverlay.Camera || resolverChanged)
+                DoorbellTile.Apply(updated.DoorbellOverlay.Camera, force: resolverChanged);
+            if (previousGarage != updated.GarageOverlay.Camera || resolverChanged)
+                GarageTile.Apply(updated.GarageOverlay.Camera, force: resolverChanged);
             ApplyOverlayPreferences();
             foreach (var tile in _allTiles) tile.SetHardwareDecoding(updated.RequestHardwareDecoding);
             if (previousSettings.PreferredMonitor != updated.PreferredMonitor || previousSettings.PreferredMonitorDevice != updated.PreferredMonitorDevice) PositionOnPreferredMonitor();

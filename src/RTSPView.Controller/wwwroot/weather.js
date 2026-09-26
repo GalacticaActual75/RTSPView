@@ -76,7 +76,7 @@ const weatherUi = (() => {
     views.set(node,{options:structuredClone(o),sampleAllowed});cardResize.observe(node);
     return node;
   }
-  async function refresh(){try{snapshots=await api('/api/weather');polling=true;for(const [node,entry] of [...views]){views.delete(node);cardResize.unobserve(node);if(!node.isConnected)continue;const next=preview(entry.options,entry.sampleAllowed);for(const property of ['width','height','transform','transformOrigin'])if(node.style[property])next.style[property]=node.style[property];node.replaceWith(next);}}catch{/* Preview remains usable offline. */}}
+  async function refresh(){if(typeof pluginsUi!=='undefined'&&!pluginsUi.enabled('weather'))return;try{snapshots=await api('/api/weather');polling=true;for(const [node,entry] of [...views]){views.delete(node);cardResize.unobserve(node);if(!node.isConnected)continue;const next=preview(entry.options,entry.sampleAllowed);for(const property of ['width','height','transform','transformOrigin'])if(node.style[property])next.style[property]=node.style[property];node.replaceWith(next);}}catch{/* Preview remains usable offline. */}}
   setInterval(()=>{if(polling&&document.visibilityState==='visible')refresh();},60000);
   function editor(initial,onSave,overlay=null,backgroundSlot=null,usage=[]){
     const opener=document.activeElement;

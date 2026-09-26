@@ -37,6 +37,12 @@ public static class StreamResolver
     {
         StreamSource.Validate(settings);
         if (!StreamSource.NeedsResolver(settings)) return new(new Uri(settings.RtspUrl), "Direct");
+        var plugins = (await new JsonSettingsStore(Path.Combine(AppPaths.DataDirectory, "settings.json")).LoadAsync(cancellationToken)).Plugins;
+        var mode = settings.SourceMode;
+        if (mode == StreamSourceMode.Streamlink && !plugins.Streamlink || mode == StreamSourceMode.YtDlp && !plugins.YtDlp || !plugins.Streamlink && !plugins.YtDlp)
+            throw new InvalidOperationException("The required source plugin is disabled.");
+        if (mode == StreamSourceMode.Auto && !plugins.Streamlink) mode = StreamSourceMode.YtDlp;
+        if (mode == StreamSourceMode.Auto && !plugins.YtDlp) mode = StreamSourceMode.Streamlink;
         IDisposable? packageLease = null;
         Process? process = null;
         var acquired = false;
@@ -63,7 +69,7 @@ public static class StreamResolver
             _ = process.StandardError.ReadToEndAsync();
             await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new
             {
-                url = settings.RtspUrl, mode = (int)settings.SourceMode, maximumHeight = settings.MaximumHeight
+                url = settings.RtspUrl, mode = (int)mode, maximumHeight = settings.MaximumHeight
             }).AsMemory(), timeout.Token);
             await process.StandardInput.FlushAsync(timeout.Token);
             var line = await process.StandardOutput.ReadLineAsync(timeout.Token);

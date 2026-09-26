@@ -10,7 +10,7 @@ for (const id of ids) assert.match(id, /^[a-f0-9]{32}$/);
 assert(!source.includes('crypto.randomUUID('), 'layout actions must work on LAN HTTP');
 
 // Execute the actual Add weather handler with both a full and an empty grid.
-const action = source.slice(source.indexOf("if(!isAutomation)button('Add weather'"), source.indexOf("    for(const [id,label] of [['add','Add stream']"));
+const action = source.slice(source.indexOf("if(!isAutomation&&pluginsUi.enabled('weather'))button('Add weather'"), source.indexOf("    for(const [id,label] of [['add','Add stream']"));
 for (const full of [true, false]) {
   class Element {
     constructor() {this.options = [];this.value = '';this.children = [];}
@@ -19,7 +19,7 @@ for (const full of [true, false]) {
     showModal() {context.dialogs++;}
   }
   Object.assign(context, {
-    isAutomation: false, selectedTile: -1, actions: {}, drawer: '', dialogs: 0, editors: 0, changes: 0,
+    pluginsUi:{enabled:()=>true}, isAutomation: false, selectedTile: -1, actions: {}, drawer: '', dialogs: 0, editors: 0, changes: 0,
     layout: {rows: 3, columns: 3, tiles: full ? Array.from({length:9},(_,i)=>({cameraSlot:i+1})) : []},
     config: {cameras: Array.from({length:9},(_,i)=>({slot:i+1,name:'Camera '+(i+1)}))},
     validTile: () => !full, el: () => new Element(), field() {},

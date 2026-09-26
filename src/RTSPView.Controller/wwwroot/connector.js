@@ -2,12 +2,12 @@ function createConnectorPanel() {
   const panel = document.createElement('section');
   panel.id = 'connectorPanel'; panel.className = 'panel control-panel';
   panel.innerHTML = `<h2>RTSPview connector</h2>
-    <p>Import selected Scrypted camera streams and MQTT settings. Enter this computer’s LAN address and a pairing code in the Scrypted plugin.</p>
+    <p>Import selected Scrypted camera streams and available integration settings. Enter this computer’s LAN address and a pairing code in the Scrypted plugin.</p>
     <div class="control-buttons"><button type="button" data-code>Create pairing code</button>
     <button type="button" class="secondary" data-status>Refresh status</button>
     <button type="button" class="danger" data-revoke>Disconnect connector</button></div>
     <label hidden data-code-label>One-time code (expires in five minutes)<input readonly autocomplete="off" aria-label="Connector pairing code"></label>
-    <p role="status"></p><p>Pairing permits camera and MQTT configuration changes. Use HTTP only on a trusted private network, or HTTPS with a trusted certificate.</p>`;
+    <p role="status"></p><p>Pairing permits camera and integration configuration changes. Use HTTP only on a trusted private network, or HTTPS with a trusted certificate.</p>`;
   document.querySelector('#page-system').append(panel);
   const message = panel.querySelector('[role="status"]'), label = panel.querySelector('[data-code-label]');
   let expiry;
@@ -25,7 +25,7 @@ function createConnectorPanel() {
   };
   panel.querySelector('[data-status]').onclick = refresh;
   panel.querySelector('[data-revoke]').onclick = async () => {
-    if (!await uiDialogs.ask('Revoke connector access? Imported streams and existing automation rules will remain.')) return;
+    if (!await uiDialogs.ask('Revoke connector access? Imported streams and saved settings will remain.')) return;
     try { await api('/api/connector', {method:'DELETE'}); clearCode(); await refresh(); }
     catch (e) { message.textContent = e.message; }
   };

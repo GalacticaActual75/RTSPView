@@ -239,7 +239,8 @@ public sealed class TapoService : BackgroundService
         }
         return await PresentAsync(token);
     }
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.WhenAll(PollAsync(stoppingToken), PresentLoopAsync(stoppingToken));
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => PluginRunner.RunAsync(Path.GetDirectoryName(_path)!, p => p.Automations,
+        token => Task.WhenAll(PollAsync(token), PresentLoopAsync(token)), stoppingToken);
     private async Task PollAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested)

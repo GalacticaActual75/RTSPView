@@ -4,7 +4,9 @@ namespace RTSPView.Controller;
 
 public sealed class StreamingUpdateMonitor(RollingFileLogger logger) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => PluginRunner.RunAsync(RTSPView.Core.AppPaths.DataDirectory,
+        p => p.YtDlp || p.Streamlink, RunEnabledAsync, stoppingToken);
+    private async Task RunEnabledAsync(CancellationToken stoppingToken)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("RTSPView-StreamingUpdater/1.0");

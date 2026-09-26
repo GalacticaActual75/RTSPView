@@ -49,7 +49,17 @@ public partial class ConfigurationWindow : Window
         NameBox.Text = camera.Name;
         UrlBox.Text = camera.RtspUrl;
         SourceModeBox.SelectedIndex = (int)camera.SourceMode;
+        foreach (var pair in new[] { (Index: 2, Enabled: _settings.Plugins.Streamlink), (Index: 3, Enabled: _settings.Plugins.YtDlp) })
+        {
+            var item = (ComboBoxItem)SourceModeBox.Items[pair.Index];
+            item.Visibility = pair.Enabled || SourceModeBox.SelectedIndex == pair.Index ? Visibility.Visible : Visibility.Collapsed;
+            item.IsEnabled = pair.Enabled;
+            item.Content = pair.Enabled ? pair.Index == 2 ? "Streamlink" : "yt-dlp" : "Saved source (disabled)";
+        }
         QualityBox.SelectedIndex = Array.IndexOf(new[] { 360, 480, 720, 1080, 1440, 2160, 0 }, camera.MaximumHeight);
+        QualityBox.Visibility = _settings.Plugins.YtDlp || _settings.Plugins.Streamlink ? Visibility.Visible : Visibility.Collapsed;
+        if (QualityBox.Parent is System.Windows.Controls.Panel qualityPanel && qualityPanel.Children.IndexOf(QualityBox) is var qualityIndex && qualityIndex > 0)
+            qualityPanel.Children[qualityIndex - 1].Visibility = QualityBox.Visibility;
         TransportBox.SelectedIndex = (int)camera.Transport;
         CacheBox.Text = camera.NetworkCacheMilliseconds.ToString();
         StartupBox.Text = camera.StartupTimeoutSeconds.ToString();

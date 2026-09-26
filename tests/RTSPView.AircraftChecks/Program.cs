@@ -32,6 +32,18 @@ internal static class Program
         root.Measure(new System.Windows.Size(1100, 620)); root.Arrange(new Rect(0, 0, 1100, 620)); root.UpdateLayout();
         Check(((SolidColorBrush)weather.Background).Color == ((SolidColorBrush)aircraft.Background).Color && weather.CornerRadius == aircraft.CornerRadius && weather.Padding == aircraft.Padding, "weather and aircraft share surface styling");
         Check(Texts(aircraft).Contains("UAL123") && Texts(aircraft).Contains("ASA456"), "native flight board renders both callsigns");
+        aircraft.Width = 420; aircraft.Height = 300;
+        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() });
+        root.UpdateLayout();
+        Check(Texts(aircraft).Contains("Owner 0") && Texts(aircraft).Contains("Owner 1") && Texts(aircraft).Contains("B738") && Texts(aircraft).Contains("N123EX"), "compact native board preserves two owners, aircraft type and tail number");
+        Check(!Texts(aircraft).Any(t => t.StartsWith("Registered owner:")), "owner heading has no registered-owner prefix");
+        var owners = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ")).ToArray();
+        var first = owners[0].TranslatePoint(new Point(), aircraft); var second = owners[1].TranslatePoint(new Point(), aircraft);
+        Check(Math.Abs(first.Y-second.Y)<1 && second.X>first.X+100, "two aircraft occupy separate columns on the same row");
+        var stableTree = aircraft.Child;
+        var boardSnapshot = snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() };
+        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, boardSnapshot);
+        Check(ReferenceEquals(stableTree, aircraft.Child), "unchanged polling retains the native aircraft visual tree");
         Directory.CreateDirectory("artifacts/aircraft");
         var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
         using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
@@ -41,6 +53,13 @@ internal static class Program
         Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("No aircraft nearby"), "empty widget stays visible by default");
         aircraft.Update(options with { HideWhenEmpty = true }, snapshot, true);
         Check(aircraft.Visibility == Visibility.Visible, "hidden widget returns when aircraft arrive");
+        foreach (var feed in new AircraftSnapshot?[] { null, snapshot with { RefreshFailed = true }, snapshot with { FetchedAt = now.AddSeconds(-40) }, snapshot with { FetchedAt = now.AddMinutes(-2) }, snapshot with { Aircraft = [Track(now) with { Latitude = 0, Longitude = 0 }] } })
+        {
+            aircraft.Update(options with { HideWhenEmpty = true }, feed, true);
+            Check(aircraft.Visibility == Visibility.Hidden, "auto-hide widget stays hidden without fresh matching traffic");
+        }
+        aircraft.Update(options with { HideWhenEmpty = true, MinimumAltitudeFeet = 50000 }, snapshot, true);
+        Check(aircraft.Visibility == Visibility.Hidden, "auto-hide widget honors altitude filters");
         aircraft.Update(options with { HideWhenEmpty = true }, snapshot with { Aircraft = [] });
         Check(aircraft.Visibility == Visibility.Visible, "permanent tile stays visible regardless of widget hiding preference");
         aircraft.Update(options, snapshot with { FetchedAt = now.AddMinutes(-2) }, true); Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("Aircraft data unavailable"), "outage remains visible and hides stale aircraft");
@@ -57,6 +76,12 @@ internal static class Program
         if (parent is TextBlock text) output.Add(text.Text);
         for (var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++) output.AddRange(Texts(VisualTreeHelper.GetChild(parent,i)));
         return output.ToArray();
+    }
+    private static IEnumerable<TextBlock> VisualTexts(DependencyObject parent)
+    {
+        if (parent is TextBlock text) yield return text;
+        for (var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++)
+            foreach (var child in VisualTexts(VisualTreeHelper.GetChild(parent,i))) yield return child;
     }
     private static async Task ProviderSmoke(string[] args)
     {
@@ -128,10 +153,31 @@ internal static class Program
             Check((await store.LoadAsync()).Layouts[0].Tiles.First().Aircraft is not null, "conditional camera configuration persists");
             try { WallLayout.Validate([loaded.Layouts[0] with { Tiles=[tile,tile] }],loaded.ActiveLayoutId); throw new Exception("duplicate accepted"); } catch(InvalidDataException) { }
             await AircraftCache.WriteAsync(directory,[parsed],CancellationToken.None);Check((await AircraftCache.ReadAsync(directory)).Single().Aircraft.Length==1,"cache round trip");
+            await AircraftCache.WriteAsync(directory, [parsed with { Aircraft = [parsed.Aircraft[0] with { Type = "Cessna 182T Skylane single-engine aircraft" }] }], CancellationToken.None);
+            Check((await AircraftCache.ReadAsync(directory)).Single().Aircraft.Length == 1, "full model names do not drop aircraft from the native cache");
             await File.WriteAllTextAsync(AircraftCache.PathFor(directory),"broken");Check((await AircraftCache.ReadAsync(directory)).Length==0,"corrupt cache does not affect settings");
             var provider=new FakeProvider();using var service=new AircraftService(directory,provider);await service.StartAsync(CancellationToken.None);
             for(var i=0;i<40&&service.Snapshots.Length==0;i++)await Task.Delay(100);
             await service.StopAsync(CancellationToken.None);Check(provider.Calls==1,"tile and overlay share one provider request");
+            var beforeDisable = await store.LoadAsync();
+            await store.SaveAsync(beforeDisable with { Plugins = new() { Aircraft = false, Weather = false } });
+            var disabledProvider = new FakeProvider(); using var disabledService = new AircraftService(directory, disabledProvider);
+            await disabledService.StartAsync(CancellationToken.None); await Task.Delay(1200);
+            Check(disabledProvider.Calls == 0, "disabled aircraft plugin makes no provider requests");
+            Check(System.Text.Json.JsonSerializer.Serialize((await store.LoadAsync()).Layouts) == System.Text.Json.JsonSerializer.Serialize(beforeDisable.Layouts), "plugin switches preserve saved aircraft layouts");
+            await store.SaveAsync((await store.LoadAsync()) with { Plugins = beforeDisable.Plugins });
+            for (var i=0;i<30&&disabledProvider.Calls==0;i++) await Task.Delay(100);
+            Check(disabledProvider.Calls == 1, "re-enabled aircraft plugin resumes saved feed");
+            await disabledService.StopAsync(CancellationToken.None);
+            var delayedProvider = new DelayedProvider(); using var refreshing = new AircraftService(directory, delayedProvider);
+            await refreshing.StartAsync(CancellationToken.None);
+            await delayedProvider.RefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(18));
+            Check(AircraftSelection.ShouldReplaceCamera(o, refreshing.Snapshots.Single(), DateTimeOffset.UtcNow), "in-progress refresh retains fresh matching aircraft");
+            Check((await AircraftCache.ReadAsync(directory)).Single().Aircraft.Length == 1, "native cache retains aircraft while refresh is pending");
+            delayedProvider.Complete.TrySetResult(true);
+            for (var i=0; i<40 && refreshing.Snapshots.Single().Aircraft.Length>0; i++) await Task.Delay(50);
+            Check(refreshing.Snapshots.Single().Aircraft.Length == 0, "completed empty refresh clears departed aircraft");
+            await refreshing.StopAsync(CancellationToken.None);
             using var failing = new AircraftService(directory, new FailedProvider()); await failing.StartAsync(CancellationToken.None);
             for (var i = 0; i < 40 && failing.Snapshots.Length == 0; i++) await Task.Delay(100);
             await failing.StopAsync(CancellationToken.None);
@@ -144,7 +190,19 @@ internal static class Program
     private sealed class FakeProvider : IAircraftProvider
     {
         public int Calls;
-        public Task<AircraftSnapshot> FetchAsync(AircraftOptions options,CancellationToken token) { Calls++;return Task.FromResult(new AircraftSnapshot {Key=options.CacheKey,FetchedAt=DateTimeOffset.UtcNow,Aircraft=[Track(DateTimeOffset.UtcNow)]}); }
+        public Task<AircraftSnapshot> FetchAsync(AircraftOptions options,CancellationToken token) { Calls++;return Task.FromResult(new AircraftSnapshot {Key=options.CacheKey,FetchedAt=DateTimeOffset.UtcNow,Aircraft=[Track(DateTimeOffset.UtcNow) with { Hex = "sample", Callsign = "" }]}); }
+    }
+    private sealed class DelayedProvider : IAircraftProvider
+    {
+        private int _calls;
+        public TaskCompletionSource<bool> RefreshStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> Complete { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task<AircraftSnapshot> FetchAsync(AircraftOptions options, CancellationToken token)
+        {
+            if (++_calls == 1) return new() { Key = options.CacheKey, FetchedAt = DateTimeOffset.UtcNow, Aircraft = [Track(DateTimeOffset.UtcNow) with { Hex = "sample", Callsign = "" }] };
+            RefreshStarted.TrySetResult(true); await Complete.Task.WaitAsync(token);
+            return new() { Key = options.CacheKey, FetchedAt = DateTimeOffset.UtcNow, Aircraft = [] };
+        }
     }
     private sealed class FailedProvider : IAircraftProvider
     {

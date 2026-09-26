@@ -4,7 +4,7 @@ using RTSPView.Core;
 
 namespace RTSPView.Infrastructure;
 
-public sealed record AircraftDetail(string Owner = "", string Airline = "", string Destination = "");
+public sealed record AircraftDetail(string Owner = "", string Airline = "", string Destination = "", string Model = "");
 
 // Callsign routes are database lookups, not live flight plans or arrival predictions.
 public sealed class AircraftDetails(HttpClient http)
@@ -15,6 +15,7 @@ public sealed class AircraftDetails(HttpClient http)
     public long Revision => Interlocked.Read(ref _revision);
     private AircraftDetail Read(string key) => _cache.TryGetValue(key, out var entry) && entry.Until > DateTimeOffset.UtcNow ? entry.Value : new();
     public AircraftTrack Enrich(AircraftTrack track) => track with { RegisteredOwner = Read("aircraft/" + track.Hex).Owner,
+        Type = Read("aircraft/" + track.Hex).Model is { Length: > 0 } model ? model : track.Type,
         Airline = Read("callsign/" + track.Callsign).Airline, Destination = Read("callsign/" + track.Callsign).Destination };
     public void Request(AircraftTrack track)
     {
@@ -58,6 +59,6 @@ public sealed class AircraftDetails(HttpClient http)
         var response = Child(doc.RootElement, "response"); var route = Child(response, "flightroute"); var destination = Child(route, "destination");
         var code = Text(destination, "iata_code"); if (code.Length == 0) code = Text(destination, "icao_code");
         return new(Text(Child(response, "aircraft"), "registered_owner"), Text(Child(route, "airline"), "name"),
-            string.Join(" · ", new[] { code, Text(destination, "municipality") }.Where(s => s.Length > 0)));
+            string.Join(" · ", new[] { code, Text(destination, "municipality") }.Where(s => s.Length > 0)), Text(Child(response, "aircraft"), "type"));
     }
 }

@@ -92,6 +92,7 @@ public static class WeatherConfiguration
         {
             WeatherOverlays = [],
             AircraftOverlays = [],
+            Plugins = settings.Plugins with { Weather = true, Aircraft = true },
             Layouts = settings.Layouts.Select(layout => layout with
             {
                 Tiles = layout.Tiles.Select(tile => tile with { Weather = null, Aircraft = null }).ToArray()

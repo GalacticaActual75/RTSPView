@@ -13,6 +13,7 @@ public sealed record AppSettings
     public string ActiveLayoutId { get; init; } = "default";
     public IReadOnlyList<WeatherOverlay> WeatherOverlays { get; init; } = [];
     public IReadOnlyList<AircraftOverlay> AircraftOverlays { get; init; } = [];
+    public Plugins Plugins { get; init; } = new();
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     // Retained for automatic migration from the Phase 1 settings file.
     public CameraSettings Camera { get; init; } = new();
@@ -109,6 +110,7 @@ public sealed record AppSettings
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
+            Plugins = Plugins ?? new(),
             DeletedCameraSlots = (DeletedCameraSlots ?? []).Where(MainCameraSlots.Contains).Distinct().ToArray(),
             DeletedOverlaySlots = (DeletedOverlaySlots ?? []).Where(s => s >= 10 && s < 12 + Math.Min((AdditionalOverlays ?? []).Count, MaximumAdditionalOverlays)).Distinct().ToArray(),
             DiagnosticsAutoOpenExcludedSlots = (DiagnosticsAutoOpenExcludedSlots ?? []).Where(slot => slot >= 1 && slot <= StreamCatalog.MaximumSlot).Distinct().Order().ToArray(),

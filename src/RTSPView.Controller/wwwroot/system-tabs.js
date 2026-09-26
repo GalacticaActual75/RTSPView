@@ -36,6 +36,7 @@ const systemTabs = (() => {
       ['viewer', 'Display', [document.querySelector('#displayForm'), document.querySelector('#startupPanel'), document.querySelector('#snapshotForm')]],
       ['network', 'Network & security', [document.querySelector('#networkForm'), document.querySelector('#connectorPanel'), document.querySelector('#passwordForm')]],
       ['updates', 'Updates', [document.querySelector('#updatePanel')]],
+      ['plugins', 'Plugins', [pluginsUi.panel()]],
       ['backups', 'Backups', [document.querySelector('#configPanel')]],
       ['maintenance', 'Maintenance', [document.querySelector('#restartScheduleForm'), document.querySelector('.viewer-display-panel')]],
       ['logs', 'Diagnostics', [document.querySelector('#stats'),document.querySelector('.performance'),document.querySelector('#temperatureForm'),document.querySelector('#logView').closest('section')]],

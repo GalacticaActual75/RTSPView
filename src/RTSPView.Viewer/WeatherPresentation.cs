@@ -15,6 +15,15 @@ public partial class MainWindow
     private bool _readingWeather;
     private void SyncWeather()
     {
+        if (!_settings.Plugins.Weather)
+        {
+            _weatherTimer?.Stop(); _weatherTimer = null;
+            foreach (var view in _weatherTiles.Values) WallGrid.Children.Remove(view);
+            _weatherTiles.Clear();
+            foreach (var entry in _weatherOverlays.Values) (entry.Host.Parent as System.Windows.Controls.Panel)?.Children.Remove(entry.Host);
+            _weatherOverlays.Clear(); _weatherSnapshots = [];
+            return;
+        }
         if (_weatherTimer is null)
         {
             _weatherTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };

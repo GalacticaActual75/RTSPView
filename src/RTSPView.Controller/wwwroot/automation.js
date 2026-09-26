@@ -234,7 +234,7 @@ const automationUi = (() => {
     rules.replaceChildren(); settings.rules.forEach(rule => addRule(rule, true)); dirty = false; form.dataset.dirty = 'false'; loaded = true; refreshOverlayLinks(); automationPresentation.pending(form, false, savedEnabled);
     form.querySelector('.rules-intro').textContent = settings.rules.length ? settings.rules.length + ' saved rule(s). Expand a rule to edit.' : 'No rules yet. Configure MQTT, add a stream in Streams, then connect its person events to a rule.';
   }
-  async function load(config) {
+  async function load(config) {if(!pluginsUi.enabled('automations'))return;
     await tapoUi.load(config);
     try {
       if (config) { viewLayouts = config.automationViewLayouts || []; overlays = [config.doorbellOverlay, config.garageOverlay, ...(config.additionalOverlays || [])].map(o => o.camera).filter(c => c.rtspUrl);
@@ -261,7 +261,7 @@ const automationUi = (() => {
     } catch (e) { message.textContent = e.message; }
     finally { busy = false; form.inert = false; for (const button of form.querySelectorAll('button')) button.disabled = false; for (const fieldset of form.querySelectorAll('fieldset')) fieldset.disabled = false; }
   }
-  async function refresh() {
+  async function refresh() {if(!pluginsUi.enabled('automations'))return;
     tapoUi.refresh();
     if (!loaded || refreshing) return; refreshing = true;
     try {
@@ -340,7 +340,7 @@ const automationUi = (() => {
     } catch(e) { status.textContent = e.message; }
     finally { diagnosticBusy = false; }
   }
-  async function refreshDiagnostics() {
+  async function refreshDiagnostics() {if(!pluginsUi.enabled('automations'))return;
     if (diagnosticBusy) return;
     diagnosticState = await api('/api/automation/diagnostics'); applyDiagnostics();
   }

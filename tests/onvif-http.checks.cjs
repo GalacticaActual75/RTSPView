@@ -59,8 +59,8 @@ const camera=http.createServer(async(req,res)=>{
   const assembly=fs.readFileSync(path.join(root,'src/RTSPView.Controller/RTSPView.Controller.csproj'),'utf8').match(/<AssemblyName>([^<]+)<\/AssemblyName>/)[1];
   const child=spawn(dotnet,[path.join(root,'src/RTSPView.Controller/bin/Release/net8.0-windows/win-x64',assembly+'.dll')],{cwd:root,windowsHide:true,stdio:'ignore',env:{...process.env,RTSPVIEW_DATA_DIR:directory,ASPNETCORE_ENVIRONMENT:'Testing',ASPNETCORE_URLS:base,AllowedHosts:'127.0.0.1'}});
   let csrf='',cookies=new Map();
-  async function request(route,body,csrfOverride){
-    const response=await fetch(base+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','Cookie':[...cookies].map(([k,v])=>k+'='+v).join('; '),'X-CSRF-Token':csrfOverride??csrf},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(40000)});
+  async function request(route,body,csrfOverride,method){
+    const response=await fetch(base+route,{method:method||(body===undefined?'GET':'POST'),headers:{'Content-Type':'application/json','Cookie':[...cookies].map(([k,v])=>k+'='+v).join('; '),'X-CSRF-Token':csrfOverride??csrf},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(40000)});
     for(const cookie of response.headers.getSetCookie()){const first=cookie.split(';')[0],i=first.indexOf('=');cookies.set(first.slice(0,i),first.slice(i+1));}
     const text=await response.text();return{status:response.status,data:text?JSON.parse(text):null,headers:response.headers};
   }
@@ -72,6 +72,18 @@ const camera=http.createServer(async(req,res)=>{
     assert.equal((await request('/api/onvif/profiles',connection('media1'))).status,403);
     await request('/api/auth/password',{currentPassword:'admin',newPassword:'onvif-test-admin'});await request('/api/auth/login',{password:'onvif-test-admin'});
     for(const route of ['profiles','stream','discover'])assert.equal((await request('/api/onvif/'+route,connection('media1'),'')).status,400);
+    const savedConfig=(await request('/api/config')).data;
+    const disabled=Object.fromEntries(['weather','aircraft','ytDlp','streamlink','onvif','pictureInPicture','automations'].map(k=>[k,false]));
+    assert.equal((await request('/api/plugins',disabled,undefined,'PUT')).status,200);
+    const disabledConfig=(await request('/api/config')).data;
+    for(const key of ['layouts','weatherOverlays','aircraftOverlays','doorbellOverlay','garageOverlay','cameras','automationViewLayouts'])assert.deepEqual(disabledConfig[key],savedConfig[key],key+' retained while disabled');
+    const priorRequests=requests;
+    assert.equal((await request('/api/onvif/profiles',connection('media1'))).status,404);
+    assert.equal(requests,priorRequests,'disabled ONVIF must not contact camera');
+    for(const route of ['/api/automation','/api/tapo','/api/doorbell'])assert.equal((await request(route)).status,404);
+    for(const route of ['/api/weather','/api/aircraft'])assert.deepEqual((await request(route)).data,[]);
+    assert.equal((await request('/api/plugins',Object.fromEntries(Object.keys(disabled).map(k=>[k,true])),undefined,'PUT')).status,200);
+    console.log('PASS plugin switches preserve configuration, block disabled endpoints and permit re-enabling.');
     for(const family of ['media1','legacy','media2','digest']){
       const result=await request('/api/onvif/profiles',connection(family));assert.equal(result.status,200,JSON.stringify(result.data));
       const profile=result.data.profiles[0];assert.equal(profile.token,'sub&1');assert.equal(profile.width,640);assert.equal(profile.encoding,'H264');assert.equal(profile.mediaVersion,family==='media2'?2:1);

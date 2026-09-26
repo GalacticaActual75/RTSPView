@@ -6,7 +6,7 @@ Aircraft views show airborne traffic around a configured location using ADSB.lol
 
 In **Layouts**, select a camera tile and choose **Aircraft Widget**. Search for a city, enter coordinates, or choose **Use weather location**. Set the radius and optional altitude limits, then choose the position and size. **Save & apply** saves the widget for that camera across standard and automation layouts. The camera keeps playing behind it. Weather and aircraft widgets have independent positions; aircraft defaults to bottom right, weather to bottom left.
 
-Aircraft widgets stay visible like weather widgets. An empty feed shows **No aircraft nearby**; unavailable or failed data remains visibly labelled, with the feed error when available. Enable **Hide when no aircraft nearby** to hide a widget after a successful empty update; it reappears when matching aircraft arrive. Feed errors remain visible. Uncheck **Enable Aircraft Widget** to remove it from the camera. Conditional tile replacement still returns to the camera when no fresh aircraft match.
+Aircraft widgets stay visible like weather widgets. An empty feed shows **No aircraft nearby**; unavailable or failed data remains visibly labelled, with the feed error when available. Enable **Hide when no aircraft nearby** to show the widget only when fresh aircraft positions match the radius and altitude filters. Waiting, empty, stale and unavailable states remain hidden while this option is enabled. Uncheck **Enable Aircraft Widget** to remove it from the camera. Conditional tile replacement still returns to the camera when no fresh aircraft match.
 
 ## Replace a tile
 
@@ -46,3 +46,9 @@ Beta.2 uses schema 18 and saves settings.json.before-aircraft-details.json befor
 Aircraft supports three displays: a persistent corner widget, an aircraft card over the camera only while matching traffic is nearby, and a permanent aircraft tile. The camera-backed card honors background opacity: 0% keeps the video visible behind the text; 100% covers it. The selected-tile panel groups these choices below the camera selector.
 
 Live View now remeasures after hiding optional details, preserving the flight callsign on smaller tiles. Unchanged feed refreshes retain the rendered card. Feed failures include a diagnostic reason, and widgets stay visible when traffic is empty. Conditional cards still return to the camera when traffic is empty, expired, or unavailable.
+
+## Pending beta updates
+
+Flight boards use the full card width for one aircraft and two equal columns for multiple aircraft. The registered owner is the heading, followed by aircraft model/type and tail number. Full model names are used when available; photos remain dependent on Planespotters coverage.
+
+An in-progress request retains the previous fresh aircraft result. Unchanged native polls preserve the visual tree, and browser updates reuse loaded aircraft images. A completed empty result removes departed aircraft. This does not extend freshness limits: with hide-when-empty enabled, expired positions and stale or failed feeds remain hidden.

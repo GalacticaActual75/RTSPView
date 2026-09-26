@@ -178,7 +178,9 @@ public sealed class AutomationService : BackgroundService
 
     public override void Dispose() { Diagnostics.Dispose(); base.Dispose(); }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        PluginRunner.RunAsync(DirectoryPath, p => p.Automations, RunEnabledAsync, stoppingToken);
+    private async Task RunEnabledAsync(CancellationToken stoppingToken)
     {
         var engine = new PersonOverlayEngine();
         var channel = Channel.CreateBounded<(string Topic, byte[] Payload, bool Retain, DateTimeOffset Received)>(new BoundedChannelOptions(128) { FullMode = BoundedChannelFullMode.DropOldest }, _ => Interlocked.Increment(ref _droppedEvents));

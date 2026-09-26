@@ -25,8 +25,11 @@ assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'fresh',0,true,false)
 assert.equal(ui.shouldHide({...options,hideWhenEmpty:false},'fresh',0,true,false),false);
 assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'fresh',1,true,false),false);
 assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'fresh',0,false,false),false);
-assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'unavailable',0,true,false),false);
-console.log('PASS camera return, optional widget hiding, traffic reappearance, permanent tiles and visible feed errors.');
+for(const state of ['fresh','stale','unavailable'])for(const count of [0,1]){
+ assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},state,count,true,false),state!=='fresh'||count===0);
+ assert.equal(ui.shouldHide({...options,hideWhenEmpty:false},state,count,true,false),false);
+}
+console.log('PASS camera return, strict fresh-traffic widget visibility, permanent tiles and persistent default widgets.');
 assert.match(ui.replacementState(options,null).text,/Apply this layout/);
 assert.equal(ui.replacementState(options,snapshot).active,true);
 assert.match(ui.replacementState({...options,minimumAltitudeFeet:13000},snapshot).text,/altitude filters/);

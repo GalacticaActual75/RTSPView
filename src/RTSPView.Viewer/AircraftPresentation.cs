@@ -16,6 +16,17 @@ public partial class MainWindow
     private bool _readingAircraft;
     private void SyncAircraft()
     {
+        if (!_settings.Plugins.Aircraft)
+        {
+            _aircraftTimer?.Stop(); _aircraftTimer = null;
+            foreach (var view in _aircraftTiles.Values) WallGrid.Children.Remove(view);
+            _aircraftTiles.Clear();
+            foreach (var entry in _aircraftOverlays.Values) (entry.Host.Parent as System.Windows.Controls.Panel)?.Children.Remove(entry.Host);
+            _aircraftOverlays.Clear();
+            foreach (var view in _aircraftReplacements.Values) (view.Parent as System.Windows.Controls.Panel)?.Children.Remove(view);
+            _aircraftReplacements.Clear(); _aircraftSnapshots = [];
+            return;
+        }
         if (_aircraftTimer is null)
         {
             _aircraftTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };

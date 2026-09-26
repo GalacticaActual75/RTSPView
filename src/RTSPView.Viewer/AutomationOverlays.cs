@@ -28,11 +28,12 @@ public partial class MainWindow
             : AutomationLayouts.Resolve(_settings, template, _automationPresentation.FocusSlots(DateTimeOffset.UtcNow, template.Id));
     }
 
-    private bool OverlayEnabled(DoorbellOverlaySettings overlay) => _sensorOverlays.TryGetValue(overlay.Camera.Slot, out var enabled)
-        ? enabled : overlay.Camera.Enabled || _automatedSlots.Contains(overlay.Camera.Slot);
+    private bool OverlayEnabled(DoorbellOverlaySettings overlay) => _settings.Plugins.PictureInPicture && (_sensorOverlays.TryGetValue(overlay.Camera.Slot, out var enabled)
+        ? enabled : overlay.Camera.Enabled || _automatedSlots.Contains(overlay.Camera.Slot));
 
     private ViewerCommandResult ApplySensorAutomation(ViewerCommand command)
     {
+        if (!_settings.Plugins.Automations) return new(command.Id, false, "Plugin disabled.");
         var p = command.Sensors;
         var now = DateTimeOffset.UtcNow;
         if (p is null || p.Effects is null || p.Effects.Length > 32 || p.ConfigurationHash != AutomationConfiguration.Hash(_settings) ||
@@ -51,6 +52,7 @@ public partial class MainWindow
 
     private ViewerCommandResult ApplyAutomation(ViewerCommand command)
     {
+        if (!_settings.Plugins.Automations) return new(command.Id, false, "Plugin disabled.");
         var presentation = command.Automation;
         if (presentation is null || presentation.Leases is null || presentation.Leases.Length > 1024 ||
             presentation.ConfigurationHash != AutomationConfiguration.Hash(_settings))

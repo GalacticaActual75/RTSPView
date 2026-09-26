@@ -52,6 +52,11 @@ internal static class AircraftReplacementChecks
             snapshotsField.SetValue(viewer, new[] { snapshot with { RefreshFailed = true } }); sync.Invoke(viewer, null);
             if (view.Visibility != Visibility.Collapsed) throw new Exception("Real viewer did not restore camera #27 for failed feed");
             Console.WriteLine("PASS real MainWindow aircraft replacement on slot 27: visible with size, empty return, fresh reactivation and failed-feed return.");
+            settingsField.SetValue(viewer, ((AppSettings)settingsField.GetValue(viewer)!) with { Plugins = new() { Aircraft = false } });
+            sync.Invoke(viewer, null);
+            if (camera.ContentOverlayRoot.Children.OfType<AircraftView>().Any()) throw new Exception("Disabled aircraft plugin left a native replacement visible");
+            if (((AppSettings)settingsField.GetValue(viewer)!).Layouts[0].Tiles[0].Aircraft is null) throw new Exception("Disabling aircraft deleted its settings");
+            Console.WriteLine("PASS disabled aircraft removes native presentation while preserving tile configuration.");
         }
         finally
         {
@@ -62,7 +67,7 @@ internal static class AircraftReplacementChecks
     }
     private static void AssertCallsign(AircraftView view)
     {
-        var label = Descendants(view).OfType<TextBlock>().SingleOrDefault(t => t.Text == "TEST27");
+        var label = Descendants(view).OfType<TextBlock>().SingleOrDefault(t => t.Text == "Example Airlines" && t.FontWeight == FontWeights.SemiBold);
         if (label is null || !label.IsVisible || label.ActualWidth < 10 || label.ActualHeight < 10)
             throw new Exception("Aircraft replacement has no visibly laid-out callsign");
         var bounds = label.TransformToAncestor(view).TransformBounds(new Rect(label.RenderSize));

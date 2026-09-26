@@ -16,7 +16,9 @@ public sealed class WeatherService(string directory, IWeatherProvider? provider 
     private DateTimeOffset _lastSearch;
     public WeatherSnapshot[] Snapshots => _cache.Values.ToArray();
 
-    protected override async Task ExecuteAsync(CancellationToken token)
+    protected override Task ExecuteAsync(CancellationToken token) =>
+        PluginRunner.RunAsync(directory, f => f.Weather, RunEnabledAsync, token);
+    private async Task RunEnabledAsync(CancellationToken token)
     {
         foreach (var item in await WeatherCache.ReadAsync(directory, token)) _cache[item.Key] = item;
         var source = provider ?? new OpenMeteoProvider(_http);
@@ -83,9 +85,10 @@ public static class WeatherEndpoints
 {
     public static void MapWeather(this WebApplication app, JsonSettingsStore store, SemaphoreSlim gate)
     {
-        app.MapGet("/api/weather", (WeatherService weather) => Results.Ok(weather.Snapshots)).RequireAuthorization();
+        app.MapGet("/api/weather", async (WeatherService weather) => Results.Ok((await store.LoadAsync()).Plugins.Weather ? weather.Snapshots : [])).RequireAuthorization();
         app.MapGet("/api/weather/search", async (string q, WeatherService weather, CancellationToken token) =>
         {
+            if (!(await store.LoadAsync(token)).Plugins.Weather) return Results.NotFound();
             try { return Results.Ok(await weather.SearchAsync(q, token)); }
             catch (InvalidDataException e) { return Results.BadRequest(new { error = e.Message }); }
             catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException) { return Results.Json(new { error = "Location search is unavailable. Try again or enter coordinates." }, statusCode: 503); }
@@ -97,6 +100,7 @@ public static class WeatherEndpoints
             {
                 overlay = overlay with { HostCameraSlot = slot }; overlay.Validate();
                 var settings = await store.LoadAsync();
+                if (!settings.Plugins.Weather) return Results.NotFound();
                 await store.SaveAsync(settings with { WeatherOverlays = settings.WeatherOverlays.Where(o => o.HostCameraSlot != slot).Append(overlay).ToArray() });
                 return Results.Ok(overlay);
             }

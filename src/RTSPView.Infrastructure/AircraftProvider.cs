@@ -78,7 +78,7 @@ public static class AircraftCache
             return (await JsonSerializer.DeserializeAsync<AircraftSnapshot[]>(stream, cancellationToken: token) ?? [])
                 .Where(s => s is not null && s.Key is { Length: <= 80 } && s.Aircraft is not null).Take(4)
                 .Select(s => s with { Aircraft = s.Aircraft.Where(a => a is not null && a.Hex is { Length: > 0 and <= 7 } &&
-                    a.Callsign is { Length: <= 16 } && a.Registration is { Length: <= 20 } && a.Type is { Length: <= 20 } &&
+                    a.Callsign is { Length: <= 16 } && a.Registration is { Length: <= 20 } && a.Type is { Length: <= 160 } &&
                     double.IsFinite(a.Latitude) && double.IsFinite(a.Longitude) && a.Latitude is >= -90 and <= 90 && a.Longitude is >= -180 and <= 180 &&
                     a.AltitudeFeet is null or (>= -2000 and <= 100000) && a.SpeedKnots is null or (>= 0 and <= 3000) &&
                     a.TrackDegrees is null or (>= 0 and < 360) && a.VerticalRate is null or (>= -30000 and <= 30000)).Take(2000).ToArray() }).ToArray();

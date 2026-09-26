@@ -120,7 +120,7 @@ const workspace = (() => {
       board.style.setProperty('--monitor-ratio',outputWidth/outputHeight);
       const proportions=active?wallProportions(active):null;
       const tiles=monitorMode==='wall'?(active?.tiles||[]):cameraInventory.map(c=>({cameraSlot:c.slot}));
-      for(const tile of tiles){
+      for(const tile of tiles){if(['weather','aircraft'].includes(tile.kind)&&!pluginsUi.enabled(tile.kind))continue;
         if(tile.kind==='aircraft'){
           const card=node('div',undefined,'monitor-tile');const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});card.append(aircraftUi.preview(tile.aircraft));board.append(card);continue;
         }
@@ -134,7 +134,7 @@ const workspace = (() => {
         if(monitorMode==='wall'){const bounds=proportions.bounds(tile);Object.assign(card.style,{left:bounds.left*100+'%',top:bounds.top*100+'%',width:bounds.width*100+'%',height:bounds.height*100+'%'});}
         const image=node('img');image.alt='';image.className='feed-thumbnail';
         const name=node('span',camera.name,'monitor-name'),health=node('span',undefined,'status-label');health.dataset.streamStatus=camera.slot;
-        health.id='monitor-state-'+camera.slot;card.setAttribute('aria-describedby',health.id);card.append(image,name,health);if(monitorMode==='wall'&&tile.aircraft){const replacement=aircraftUi.preview(tile.aircraft,false,false,true);replacement.classList.add('aircraft-replacement');card.append(replacement);}board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
+        health.id='monitor-state-'+camera.slot;card.setAttribute('aria-describedby',health.id);card.append(image,name,health);if(monitorMode==='wall'&&pluginsUi.enabled('aircraft')&&tile.aircraft){const replacement=aircraftUi.preview(tile.aircraft,false,false,true);replacement.classList.add('aircraft-replacement');card.append(replacement);}board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
       }
       if(!tiles.length)board.append(node('p',config?cameraInventory.some(c=>c.rtspUrl)?'Streams configured but unassigned. Open Layouts to place them, then Apply to wall.':'No source configured. Open Streams and add an RTSP address, then assign the stream in Layouts.':'Loading snapshot previews…','empty-state'));
     }
