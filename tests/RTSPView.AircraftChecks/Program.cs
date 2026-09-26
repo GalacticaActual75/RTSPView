@@ -13,8 +13,13 @@ internal static class Program
 {
     private static void Check(bool pass, string message) { if (!pass) throw new Exception(message); Console.WriteLine("PASS " + message); }
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        // Explicit opt-in diagnostic; normal regression tests never contact flight services.
+        if (args.Length == 4 && args[0] == "--provider-smoke")
+        {
+            ProviderSmoke(args).GetAwaiter().GetResult(); return;
+        }
         Backend().GetAwaiter().GetResult();
         var now = DateTimeOffset.UtcNow;
         var options = new AircraftOptions { Location = "Seattle", Latitude = 47.6062, Longitude = -122.3321 };
@@ -30,7 +35,8 @@ internal static class Program
         Directory.CreateDirectory("artifacts/aircraft");
         var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
         using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
-        aircraft.Update(options, snapshot with { Aircraft = [] }, true); Check(aircraft.Visibility == Visibility.Hidden, "empty overlay hides");
+        aircraft.Update(options with { HideWhenEmpty = true }, snapshot with { Aircraft = [] }, true);
+        Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("No aircraft nearby"), "empty overlay stays visible even with an older hide preference");
         aircraft.Update(options, snapshot with { FetchedAt = now.AddMinutes(-2) }, true); Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("Aircraft data unavailable"), "outage remains visible and hides stale aircraft");
         aircraft.Update(options, snapshot with { Aircraft = [] }); Check(Texts(aircraft).Contains("No aircraft nearby"), "empty tile stays visible");
         foreach (var font in new[] { 12,24,64 }) foreach (var width in new[] { 160d,640d,1920d })
@@ -45,6 +51,14 @@ internal static class Program
         if (parent is TextBlock text) output.Add(text.Text);
         for (var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++) output.AddRange(Texts(VisualTreeHelper.GetChild(parent,i)));
         return output.ToArray();
+    }
+    private static async Task ProviderSmoke(string[] args)
+    {
+        var options = new AircraftOptions { Latitude = double.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture), Longitude = double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), RadiusMiles = double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) };
+        options.Validate();
+        using var http = new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.All }) { Timeout = TimeSpan.FromSeconds(8), MaxResponseContentBufferSize = 2_000_000 };
+        var snapshot = await new AdsbLolProvider(http).FetchAsync(options, CancellationToken.None);
+        Console.WriteLine($"Provider fetch and parsing succeeded. Freshness: {snapshot.Freshness(DateTimeOffset.UtcNow)}; airborne positions: {snapshot.Aircraft.Length}; matching radius/filters: {AircraftSelection.Nearby(options, snapshot, DateTimeOffset.UtcNow).Length}.");
     }
     private static AircraftTrack Track(DateTimeOffset now) => new() { Hex = "a12345", Callsign = "UAL123", Type = "B738", Registration = "N123EX", Latitude = 47.62, Longitude = -122.32, AltitudeFeet = 12400, SpeedKnots = 285, TrackDegrees = 245, VerticalRate = 640, PositionAt = now };
     private static async Task Backend()
@@ -62,6 +76,8 @@ internal static class Program
         Check(AircraftDetails.Parse("""{"response":"unknown callsign"}""") == new AircraftDetail(), "unknown route remains unavailable");
         var json = "{\"now\":" + now.ToUnixTimeMilliseconds() + ",\"ac\":[{\"hex\":\"a12345\",\"flight\":\"UAL123  \",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":2,\"alt_baro\":12400,\"gs\":285},{\"hex\":\"b12345\",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":2,\"alt_baro\":\"ground\"},{\"hex\":\"c12345\",\"lat\":47.62,\"lon\":-122.32,\"seen_pos\":120}]}";
         var parsed = AdsbLolProvider.Parse(json, o.CacheKey, now);
+        var empty = AdsbLolProvider.Parse("{\"now\":" + now.ToUnixTimeMilliseconds() + ",\"ac\":[],\"msg\":\"No error\",\"total\":0}", o.CacheKey, now);
+        Check(empty.Freshness(now) == "fresh" && !empty.RefreshFailed && empty.Aircraft.Length == 0, "successful empty provider response remains fresh, never unavailable");
         foreach (var invalid in new[] { "[]", "null", "{}", "{\"now\":0,\"ac\":[]}" })
         {
             try { AdsbLolProvider.Parse(invalid,o.CacheKey,now); throw new Exception("invalid provider response accepted"); } catch (InvalidDataException) { }
@@ -110,6 +126,11 @@ internal static class Program
             var provider=new FakeProvider();using var service=new AircraftService(directory,provider);await service.StartAsync(CancellationToken.None);
             for(var i=0;i<40&&service.Snapshots.Length==0;i++)await Task.Delay(100);
             await service.StopAsync(CancellationToken.None);Check(provider.Calls==1,"tile and overlay share one provider request");
+            using var failing = new AircraftService(directory, new FailedProvider()); await failing.StartAsync(CancellationToken.None);
+            for (var i = 0; i < 40 && failing.Snapshots.Length == 0; i++) await Task.Delay(100);
+            await failing.StopAsync(CancellationToken.None);
+            Check(failing.Snapshots.Single().LastError?.Contains("HTTP 503") == true && failing.Snapshots.Single().NextRetryAt > DateTimeOffset.UtcNow, "provider failures expose safe reason and retry time");
+            Check((await AircraftCache.ReadAsync(directory)).Single().LastError?.Contains("HTTP 503") == true, "viewer receives the provider failure reason through its cache");
             Check((await store.LoadAsync()).Cameras.SequenceEqual(settings.Cameras),"aircraft updates leave cameras untouched");
         }
         finally { Directory.Delete(directory,true); }
@@ -118,5 +139,9 @@ internal static class Program
     {
         public int Calls;
         public Task<AircraftSnapshot> FetchAsync(AircraftOptions options,CancellationToken token) { Calls++;return Task.FromResult(new AircraftSnapshot {Key=options.CacheKey,FetchedAt=DateTimeOffset.UtcNow,Aircraft=[Track(DateTimeOffset.UtcNow)]}); }
+    }
+    private sealed class FailedProvider : IAircraftProvider
+    {
+        public Task<AircraftSnapshot> FetchAsync(AircraftOptions options, CancellationToken token) => Task.FromException<AircraftSnapshot>(new System.Net.Http.HttpRequestException("Internal transport detail", null, System.Net.HttpStatusCode.ServiceUnavailable));
     }
 }

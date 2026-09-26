@@ -15,20 +15,19 @@ public sealed class AircraftView : Border
     private AircraftSnapshot? _snapshot;
     private string? _featured;
     private DateTimeOffset _selectedAt;
-    private bool _overlay;
     public AircraftView() { ClipToBounds = true; IsHitTestVisible = false; SizeChanged += (_, _) => Render(); }
     public void Update(AircraftOptions options, AircraftSnapshot? snapshot, bool overlay = false)
     {
         if (_options.CacheKey != options.CacheKey) _featured = null;
-        _options = options; _snapshot = snapshot; _overlay = overlay; Render();
+        _options = options; _snapshot = snapshot; Render();
     }
     private void Render()
     {
         var o = _options; var now = DateTimeOffset.UtcNow;
-        WidgetAppearance.Apply(this, o.Appearance);
         var nearby = AircraftSelection.Nearby(o, _snapshot, now);
         var freshness = _snapshot?.Freshness(now) ?? "unavailable";
-        Visibility = _overlay && o.HideWhenEmpty && freshness == "fresh" && nearby.Length == 0 ? Visibility.Hidden : Visibility.Visible;
+        Visibility = Visibility.Visible;
+        WidgetAppearance.Apply(this, o.Appearance);
         var foreground = o.Theme == "light" ? Brushes.Black : Brushes.White;
         var muted = new SolidColorBrush(o.Theme == "light" ? Color.FromRgb(70, 80, 95) : Color.FromRgb(160, 174, 190));
         var accent = new SolidColorBrush((Color)ColorConverter.ConvertFromString(o.Accent));
@@ -44,7 +43,14 @@ public sealed class AircraftView : Border
             Foreground = secondary ? muted : foreground, TextTrimming = TextTrimming.CharacterEllipsis,
             ToolTip = text, TextAlignment = o.Alignment switch { "center" => TextAlignment.Center, "right" => TextAlignment.Right, _ => TextAlignment.Left }, Margin = new(0, 1, 0, 1) };
         stack.Children.Add(Text(o.Location + " · Nearby aircraft", Math.Max(12, size * .6), true));
-        if (freshness == "unavailable") stack.Children.Add(Text("Aircraft data unavailable", Math.Max(12, size * .65)));
+        if (freshness == "unavailable")
+        {
+            stack.Children.Add(Text("Aircraft data unavailable", Math.Max(12, size * .65)));
+            if (!string.IsNullOrWhiteSpace(_snapshot?.LastError))
+            {
+                var error = Text(_snapshot.LastError, Math.Max(12, size * .5), true); error.TextWrapping = TextWrapping.Wrap; stack.Children.Add(error);
+            }
+        }
         else if (nearby.Length == 0) stack.Children.Add(Text(freshness == "stale" ? "Waiting for fresh positions" : "No aircraft nearby", Math.Max(12, size * .65)));
         else
         {
@@ -85,6 +91,11 @@ public sealed class AircraftView : Border
             if (stack.Children.OfType<StackPanel>().SelectMany(g => g.Children.OfType<StackPanel>().Where(p => Equals(p.Tag, "photo")).Select(p => (Group: g, Photo: p))).FirstOrDefault() is var photoRow && photoRow.Photo is not null) photoRow.Group.Children.Remove(photoRow.Photo);
             else if (stack.Children.Count == 2 && stack.Children[1] is StackPanel group && group.Children.Count > 1) group.Children.RemoveAt(group.Children.Count - 1);
             else stack.Children.RemoveAt(stack.Children.Count - 1);
+            // Removing a nested detail invalidates its group immediately, but WPF
+            // propagates that invalidation to this stack on a later layout pass.
+            // Remeasure now so fitting does not discard the entire flight using
+            // the previous (oversized) measurement.
+            stack.InvalidateMeasure();
             stack.Measure(new System.Windows.Size(width, double.PositiveInfinity));
         }
         if (omitted) credit.Text = "Details hidden · " + credit.Text;

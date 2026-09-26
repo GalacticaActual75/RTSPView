@@ -51,9 +51,25 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
                     catch (Exception e) when (e is HttpRequestException or JsonException or InvalidDataException or OperationCanceledException)
                     {
                         if (token.IsCancellationRequested) return;
-                        _cache[area.CacheKey] = (_cache.GetValueOrDefault(area.CacheKey) ?? new() { Key = area.CacheKey }) with { RefreshFailed = true };
                         var delay = e is AircraftRateLimitException rate ? rate.RetryAfter : TimeSpan.FromSeconds(30);
                         _providerRetryAt = DateTimeOffset.UtcNow.AddSeconds(Math.Clamp(delay.TotalSeconds, 30, 86400));
+                        var reason = e switch
+                        {
+                            AircraftRateLimitException => "Aircraft provider rate limit reached.",
+                            OperationCanceledException => "Aircraft provider request timed out.",
+                            HttpRequestException http when http.StatusCode.HasValue => $"Aircraft provider returned HTTP {(int)http.StatusCode.Value}.",
+                            HttpRequestException http => http.HttpRequestError switch
+                            {
+                                HttpRequestError.NameResolutionError => "The host could not resolve the aircraft provider's address (DNS).",
+                                HttpRequestError.SecureConnectionError => "The host could not establish a secure connection to the aircraft provider (TLS).",
+                                HttpRequestError.ProxyTunnelError => "The host's proxy could not connect to the aircraft provider.",
+                                _ => "Could not connect to the aircraft provider."
+                            },
+                            InvalidDataException invalid => invalid.Message,
+                            _ => "Aircraft provider returned invalid or outdated data."
+                        };
+                        _cache[area.CacheKey] = (_cache.GetValueOrDefault(area.CacheKey) ?? new() { Key = area.CacheKey }) with
+                            { RefreshFailed = true, LastError = reason, NextRetryAt = _providerRetryAt };
                     }
                 }
                 foreach (var options in settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)).Where(o => o.ShowPhoto || o.Fields.Any(f => f is "owner" or "airline" or "destination")))

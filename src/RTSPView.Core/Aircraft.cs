@@ -13,7 +13,8 @@ public sealed record AircraftOptions
     public string Preset { get; init; } = "featured";
     public string Units { get; init; } = "imperial";
     public int MaximumAircraft { get; init; } = 5;
-    public bool HideWhenEmpty { get; init; } = true;
+    // Retained for older settings files. Aircraft overlays always remain visible.
+    public bool HideWhenEmpty { get; init; }
     public bool ShowPhoto { get; init; } = true;
     public string Theme { get; init; } = "auto";
     public string Accent { get; init; } = "#F2C75C";
@@ -84,6 +85,8 @@ public sealed record AircraftSnapshot
     public string Key { get; init; } = "";
     public DateTimeOffset FetchedAt { get; init; }
     public bool RefreshFailed { get; init; }
+    public string? LastError { get; init; }
+    public DateTimeOffset? NextRetryAt { get; init; }
     public AircraftTrack[] Aircraft { get; init; } = [];
     public string Freshness(DateTimeOffset now) => FetchedAt == default || now - FetchedAt > TimeSpan.FromSeconds(90) ? "unavailable" :
         RefreshFailed || now - FetchedAt > TimeSpan.FromSeconds(30) ? "stale" : "fresh";

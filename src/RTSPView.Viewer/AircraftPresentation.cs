@@ -45,7 +45,7 @@ public partial class MainWindow
                     System.Windows.Controls.Panel.SetZIndex(view, 10); camera.ContentOverlayRoot.Children.Add(view);
                 }
                 var snapshot = _aircraftSnapshots.FirstOrDefault(s => s.Key == replacement.CacheKey);
-                view.Update(replacement with { BackgroundOpacity = 100 }, snapshot);
+                view.Update(replacement, snapshot);
                 view.Visibility = AircraftSelection.ShouldReplaceCamera(replacement, snapshot, DateTimeOffset.UtcNow) ? Visibility.Visible : Visibility.Collapsed;
             }
             var setting = _settings.AircraftOverlays.FirstOrDefault(o => o.Enabled && o.HostCameraSlot == camera.Slot);

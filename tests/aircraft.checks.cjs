@@ -21,6 +21,12 @@ for(const width of [120,320,640,1920])for(const fontSize of [12,24,64]){
 }
 console.log('PASS aircraft browser selection: radius, altitude, missing values, old/future positions, outage expiry, units and bounded placement.');
 for(const state of ['fresh','stale','unavailable'])for(const count of [0,1])assert.equal(ui.shouldHide(options,state,count,false,true),state!=='fresh'||count===0,'camera takeover visibility follows fresh matching traffic');
-assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'fresh',0,true,false),true);
+assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'fresh',0,true,false),false);
 assert.equal(ui.shouldHide({...options,hideWhenEmpty:true},'unavailable',0,true,false),false);
-console.log('PASS camera replacement restores camera on empty, stale and unavailable traffic; overlay outage remains visible.');
+console.log('PASS camera replacement restores camera on empty, stale and unavailable traffic; overlays remain visible even with older hide preferences.');
+assert.match(ui.replacementState(options,null).text,/Apply this layout/);
+assert.equal(ui.replacementState(options,snapshot).active,true);
+assert.match(ui.replacementState({...options,minimumAltitudeFeet:13000},snapshot).text,/altitude filters/);
+assert.match(ui.replacementState(options,{...snapshot,aircraft:[]}).text,/No aircraft reported/);
+assert.match(ui.replacementState(options,{...snapshot,refreshFailed:true,lastError:'Aircraft provider returned HTTP 503.'}).text,/HTTP 503/);
+console.log('PASS replacement status distinguishes waiting, matching traffic, altitude exclusions, empty coverage and provider failure.');

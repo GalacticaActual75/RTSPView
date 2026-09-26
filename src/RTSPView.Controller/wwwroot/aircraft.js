@@ -1,6 +1,6 @@
 const aircraftUi = (() => {
   const labels = {owner:'Registered owner',airline:'Operating airline (lookup)',destination:'Destination (callsign lookup)',type:'Aircraft type / registration',altitude:'Altitude',speed:'Ground speed',distance:'Distance / direction',track:'Track',verticalRate:'Climb / descent'};
-  const defaults = () => ({location:'',latitude:null,longitude:null,radiusMiles:10,minimumAltitudeFeet:null,maximumAltitudeFeet:null,preset:'featured',units:'imperial',maximumAircraft:5,hideWhenEmpty:true,showPhoto:true,
+  const defaults = () => ({location:'',latitude:null,longitude:null,radiusMiles:10,minimumAltitudeFeet:null,maximumAltitudeFeet:null,preset:'featured',units:'imperial',maximumAircraft:5,hideWhenEmpty:false,showPhoto:true,
     ...Object.fromEntries(['theme','accent','backgroundOpacity','fontSize','iconSize','padding','cornerRadius','alignment'].map(k=>[k,weatherUi.defaults()[k]])),fields:Object.keys(labels)});
   const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const key=o=>`${Number(o.latitude).toFixed(4)},${Number(o.longitude).toFixed(4)},${Number(o.radiusMiles).toFixed(1)}`;
@@ -24,20 +24,31 @@ const aircraftUi = (() => {
   }}
   function validPhoto(p){try{const u=new URL(p.url),l=new URL(p.link);return u.protocol==='https:'&&u.hostname==='t.plnspttrs.net'&&!u.port&&!u.username&&l.protocol==='https:'&&l.hostname==='www.planespotters.net'&&!l.port&&!l.username&&typeof p.photographer==='string'&&p.photographer.length>0;}catch{return false;}}
   function sample(o){return {fetchedAt:new Date().toISOString(),aircraft:[['UAL123','B738','N123EX',12400,285],['ASA456','B39M','N456EX',18200,340],['N789EX','C172','N789EX',2200,95]].map((a,i)=>({registeredOwner:'Example owner',airline:'Example airline',destination:'SEA · Seattle (sample)',hex:'sample'+i,callsign:a[0],type:a[1],registration:a[2],altitudeFeet:a[3],speedKnots:a[4],trackDegrees:245,verticalRate:640,latitude:Number(o.latitude||0)+.005*(i+1),longitude:Number(o.longitude||0)+.005*(i+1),positionAt:new Date().toISOString()}))};}
-  let snapshots=[],polling=false,fetching=false;const views=new Map();
+  let snapshots=[],polling=false,fetching=false;const views=new Map(),statuses=new Map();
+  function replacementState(o,s){
+    if(!s)return {active:false,text:'Waiting for aircraft data. Apply this layout to start its feed.'};
+    const state=freshness(s),matches=nearby(o,s).length;
+    if(state!=='fresh')return {active:false,text:'Camera shown · '+(s.lastError||'Aircraft data is '+state+'.')+(s.nextRetryAt?' Retrying after '+new Date(s.nextRetryAt).toLocaleTimeString()+'.':'')};
+    if(matches)return {active:true,text:`Live feed · ${matches} matching aircraft within ${o.radiusMiles} miles.`};
+    const unfiltered=nearby({...o,minimumAltitudeFeet:null,maximumAltitudeFeet:null},s).length;
+    return {active:false,text:unfiltered?`Camera shown · ${unfiltered} nearby aircraft excluded by your altitude filters.`:`Camera shown · No aircraft reported within ${o.radiusMiles} miles by ADSB.lol.`};
+  }
+  function status(options){const node=el('p',undefined,'aircraft-live-status');node.setAttribute('role','status');statuses.set(node,structuredClone(options));paintStatus(node,options);refresh();return node;}
+  function paintStatus(node,o){const result=replacementState(o,snapshots.find(s=>s.key===key(o)));node.textContent=result.text;node.dataset.active=result.active;}
   function fit(node){if(!node.isConnected)return;const rows=[...node.querySelectorAll('.aircraft-flight')];for(const n of node.querySelectorAll('[data-aircraft-hidden]')){n.hidden=false;delete n.dataset.aircraftHidden;}const footer=node.querySelector('.weather-credit');if(!footer)return;footer.textContent=footer.dataset.label;
     let omitted=false;while(node.scrollHeight>node.clientHeight+1&&rows.length>1){const n=rows.pop();n.hidden=true;n.dataset.aircraftHidden='';omitted=true;}
     if(rows.length){const details=[...rows[0].querySelectorAll('.aircraft-metric:not(.aircraft-photo)'),...rows[0].querySelectorAll('.aircraft-photo')];while(node.scrollHeight>node.clientHeight+1&&details.length){const n=details.pop();n.hidden=true;n.dataset.aircraftHidden='';omitted=true;}}
     if(omitted)footer.textContent='Details hidden · '+footer.dataset.label;node.title=omitted?'Enlarge the aircraft tile or widget to show more details.':'';
   }
   const resize=new ResizeObserver(entries=>entries.forEach(e=>fit(e.target)));
-  const shouldHide=(o,state,count,overlay,takeover)=>takeover?(state!=='fresh'||count===0):(overlay&&o.hideWhenEmpty&&state==='fresh'&&count===0);
+  const shouldHide=(o,state,count,overlay,takeover)=>!!takeover&&(state!=='fresh'||count===0);
   function paint(node,entry){const o=entry.options,actual=snapshots.find(s=>s.key===key(o)),s=actual||(entry.sampleAllowed?sample(o):null),state=freshness(s),all=nearby(o,s);
+    const renderKey=JSON.stringify([o,state,all,s?.lastError,!!actual,Math.floor(Date.now()/20000)]);if(entry.renderKey===renderKey)return;entry.renderKey=renderKey;
     node.replaceChildren();node.dataset.theme=o.theme;node.dataset.preset=o.preset;
-    weatherUi.applyAppearance(node,entry.takeover?{...o,backgroundOpacity:100}:o);
+    weatherUi.applyAppearance(node,o);
     node.style.visibility=shouldHide(o,state,all.length,entry.overlay,entry.takeover)?'hidden':'visible';
     node.append(el('div',(o.location||'Your location')+' · Nearby aircraft','weather-location'));
-    if(state==='unavailable')node.append(el('div','Aircraft data unavailable','weather-condition'));
+    if(state==='unavailable'){node.append(el('div','Aircraft data unavailable','weather-condition'));if(s?.lastError)node.append(el('div',s.lastError,'aircraft-feed-error'));}
     else if(!all.length)node.append(el('div',state==='stale'?'Waiting for fresh positions':'No aircraft nearby','weather-condition'));
     else {
       if(!all.some(a=>a.hex===entry.featured)||Date.now()-entry.selectedAt>=20000){entry.featured=all[0].hex;entry.selectedAt=Date.now();}
@@ -48,16 +59,16 @@ const aircraftUi = (() => {
     const credit=el('a',(entry.sampleAllowed&&!actual?'Sample aircraft · ':'')+(state==='stale'?'Outdated · ':state==='unavailable'?'Unavailable · ':'')+(all.length>shown?`+${all.length-shown} nearby · `:'')+'ADSB.lol · ODbL 1.0'+(o.fields.some(f=>['owner','airline','destination'].includes(f))?' · adsbdb':''),'weather-credit');credit.href='https://www.adsb.lol/docs/open-data/api/';credit.target='_blank';credit.rel='noopener noreferrer';credit.dataset.label=credit.textContent;node.append(credit);requestAnimationFrame(()=>fit(node));
   }
   function preview(options,sampleAllowed=false,overlay=false,takeover=false){const node=el('div',undefined,'weather-card aircraft-card'),entry={options:structuredClone(options),sampleAllowed,overlay,takeover,featured:null,selectedAt:0};views.set(node,entry);paint(node,entry);resize.observe(node);return node;}
-  async function refresh(){polling=true;if(fetching)return;fetching=true;try{snapshots=await api('/api/aircraft');}catch{/* Per-position age continues to expire even on an outage. */}finally{fetching=false;for(const [node,entry] of views){if(!node.isConnected){resize.unobserve(node);views.delete(node);}else paint(node,entry);}}}
+  async function refresh(){polling=true;if(fetching)return;fetching=true;try{snapshots=await api('/api/aircraft');}catch{/* Per-position age continues to expire even on an outage. */}finally{fetching=false;for(const [node,entry] of views){if(!node.isConnected){resize.unobserve(node);views.delete(node);}else paint(node,entry);}for(const [node,o] of statuses){if(!node.isConnected)statuses.delete(node);else paintStatus(node,o);}}}
   setInterval(()=>{if(polling&&document.visibilityState==='visible')refresh();},5000);
   function overlayBounds(overlay,width,height){const o=overlay.aircraft,margin=Math.min(overlay.margin,width/2,height/2),available=Math.max(0,width-margin*2),availableHeight=Math.max(0,height-margin*2),w=available*overlay.widthPercent/100,size=Math.min(o.fontSize,Math.max(12,(w-o.padding*2)/5)),rows=o.preset==='board'?o.maximumAircraft:1,columns=w-o.padding*2>=400?3:w-o.padding*2>=220?2:1,lines=o.fields.filter(f=>['type','owner','airline','destination'].includes(f)).length+Math.ceil(o.fields.filter(f=>!['type','owner','airline','destination'].includes(f)).length/columns),h=Math.min(availableHeight,Math.ceil(o.padding*2+42+(o.showPhoto&&w-o.padding*2>=180?150:0)+rows*(Math.max(size*1.7,Math.min(o.iconSize,(w-o.padding*2)*.2))+8+lines*(Math.max(12,size*.6)*1.4+2))));return {width:w,height:h,left:margin+(available-w)*overlay.x/100,top:margin+(availableHeight-h)*overlay.y/100};}
   function editor(initial,onSave,overlay=null,backgroundSlot=null){
-    const opener=document.activeElement,o={...defaults(),...structuredClone(initial)},placement=overlay?structuredClone(overlay):null;
+    const opener=document.activeElement,o={...defaults(),...structuredClone(initial),hideWhenEmpty:false},placement=overlay?structuredClone(overlay):null;
     const dialog=el('dialog',undefined,'weather-editor aircraft-editor'),form=el('form'),body=el('div',undefined,'weather-editor-body'),left=el('section'),controls=el('section');
     form.append(el('h2',overlay?'Aircraft Widget':'Aircraft tile'),el('p',overlay?'Save & apply updates this camera’s aircraft widget in every layout that shows the camera.':'Use in layout draft changes this draft. Save or apply the layout to persist it.','weather-note'),body);body.append(left,controls);dialog.append(form);
     const stage=el('div',undefined,'weather-editor-preview'),host=el('div',undefined,'weather-preview-host');left.append(stage);if(placement)stage.style.aspectRatio='16/9';
     if(backgroundSlot){const image=el('img');image.alt='Camera snapshot';dashboardUX.snapshot(image,backgroundSlot);stage.append(image);}stage.append(host);
-    left.append(el('p','Sample aircraft are labelled. Small cards omit details that do not fit.','weather-note'));
+    left.append(el('p','Sample aircraft only demonstrate the design and never trigger camera replacement. Live traffic comes from ADSB.lol; its coverage may differ from Flightradar24. Small cards omit details that do not fit.','weather-note'));
     const status=el('p','','weather-editor-state');status.setAttribute('role','status');
     function paintPreview(){host.replaceChildren(preview(o,true));if(placement){const scale=stage.clientWidth/640,b=overlayBounds({...placement,aircraft:o},640,360);Object.assign(host.style,{position:'absolute',left:b.left*scale+'px',top:b.top*scale+'px',width:b.width*scale+'px',height:b.height*scale+'px',visibility:placement.enabled?'visible':'hidden'});Object.assign(host.firstElementChild.style,{width:b.width+'px',height:b.height+'px',transformOrigin:'top left',transform:`scale(${scale})`});}}
     function field(label,control,parent=controls){const n=el('label',label);control.setAttribute('aria-label',label);if(control.type==='checkbox'){n.className='weather-toggle';const track=el('span',undefined,'switch');control.setAttribute('role','switch');track.append(control,el('span'));n.append(track);}else n.append(control);parent.append(n);return control;}
@@ -77,7 +88,7 @@ const aircraftUi = (() => {
     input('Minimum altitude (ft, optional)','minimumAltitudeFeet','number',controls,-2000,100000,true);input('Maximum altitude (ft, optional)','maximumAltitudeFeet','number',controls,-2000,100000,true);
     select('Display style','preset',[['featured','Featured flight'],['board','Flight board']]);select('Units','units',[['imperial','Feet · knots · miles'],['metric','Meters · km/h · kilometers']]);input('Maximum flights on board','maximumAircraft','number',controls,1,5);
     toggle('Show aircraft photo when available','showPhoto');
-    if(placement)toggle('Hide when no aircraft are nearby','hideWhenEmpty');
+    if(placement)controls.append(el('p','This widget stays visible when no aircraft are nearby and displays feed errors if data is unavailable.','weather-note'));
     const fields=el('details');fields.append(el('summary','Choose aircraft information'));controls.append(fields);for(const [id,label] of Object.entries(labels)){const n=el('input');n.type='checkbox';n.checked=o.fields.includes(id);n.onchange=()=>{o.fields=n.checked?[...o.fields,id]:o.fields.filter(f=>f!==id);paintPreview();};field(label,n,fields);}
     const appearance=el('details');appearance.append(el('summary','Advanced appearance'));controls.append(appearance);
     select('Theme','theme',[['auto','Automatic (RTSPView dark)'],['dark','Dark'],['light','Light']],appearance);select('Text alignment','alignment',[['left','Left'],['center','Center'],['right','Right']],appearance);input('Accent color','accent','color',appearance);
@@ -89,5 +100,5 @@ const aircraftUi = (() => {
     const observer=new ResizeObserver(paintPreview);observer.observe(stage);dialog.onclose=()=>{observer.disconnect();dialog.remove();if(opener?.isConnected)opener.focus();};document.body.append(dialog);dialog.showModal();paintPreview();inputs.location.focus();refresh();
   }
   async function overlayEditor(slot){try{const config=await api('/api/config'),existing=(config.aircraftOverlays||[]).find(o=>o.hostCameraSlot===slot)||{hostCameraSlot:slot,enabled:true,widthPercent:40,x:100,y:100,margin:12,aircraft:{...defaults(),fields:["type","altitude","speed","distance"]}};editor(existing.aircraft,async(_,overlay)=>{const saved=await api('/api/aircraft/overlays/'+slot,{method:'PUT',body:JSON.stringify(overlay)});window.dispatchEvent(new CustomEvent('aircraft-overlay-saved',{detail:saved}));},existing,slot);}catch(e){uiDialogs.toast(e.message,'error');}}
-  return {defaults,preview,editor,overlayEditor,overlayBounds,refresh,nearby,metric,shouldHide};
+  return {defaults,preview,editor,overlayEditor,overlayBounds,refresh,nearby,metric,shouldHide,status,replacementState};
 })();

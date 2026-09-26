@@ -38,6 +38,7 @@ internal static class Program
             {
                 // Create the real viewer HWND without starting camera playback.
                 new WindowInteropHelper(viewer).EnsureHandle();
+                AircraftReplacementChecks.Run(viewer);
             SensorViewerChecks.Run(viewer);
             HostOverlayChecks.Run();
                 CheckWindowIcon(viewer);

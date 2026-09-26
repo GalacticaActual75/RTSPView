@@ -39,7 +39,7 @@ public sealed class AdsbLolProvider(HttpClient http) : IAircraftProvider
             throw new InvalidDataException("Aircraft response is missing its observation time.");
         var observed = DateTimeOffset.FromUnixTimeMilliseconds((long)milliseconds.Value);
         if (observed > fetched.AddSeconds(30) || fetched - observed > TimeSpan.FromSeconds(90))
-            throw new InvalidDataException("Aircraft response is outdated.");
+            throw new InvalidDataException($"Aircraft timestamp is {Math.Abs((observed - fetched).TotalSeconds):0} seconds {(observed > fetched ? "ahead of" : "behind")} the host clock. Check Windows time synchronization; the provider may also be serving old data.");
         var tracks = new List<AircraftTrack>();
         foreach (var a in aircraft.EnumerateArray().Take(2000))
         {
