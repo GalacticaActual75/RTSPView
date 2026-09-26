@@ -67,6 +67,11 @@ internal static class AircraftReplacementChecks
                 sync.Invoke(viewer, null);
                 var floating = widgetLayer.Children.OfType<AircraftView>().Single();
                 if (floating.Width <= 0 || Canvas.GetLeft(floating) + floating.Width * 800 / widgetLayout.EffectiveWidth > 800.01 || Canvas.GetTop(floating) + floating.Height * 800 / widgetLayout.EffectiveWidth > 450.01 || !widgetLayer.Children.OfType<WeatherView>().Any()) throw new Exception("Native free and anchored widgets did not fit layout");
+                var resizedWidget = widgetLayout.Widgets[0] with { ContentScale = 1.5, WidthPercent = 60, HeightPercent = 50 };
+                settingsField.SetValue(viewer, original with { Layouts = [widgetLayout with { Widgets = [resizedWidget] }], ActiveLayoutId = widgetLayout.Id }); sync.Invoke(viewer, null);
+                var expectedBounds = resizedWidget.Bounds(widgetLayout.EffectiveWidth,widgetLayout.EffectiveHeight);
+                if (Math.Abs(floating.Width * resizedWidget.ContentScaleFor(expectedBounds.Width,expectedBounds.Height) - expectedBounds.Width) > .01 || floating.LayoutTransform is not ScaleTransform transform || Math.Abs(transform.ScaleX - 800d/widgetLayout.EffectiveWidth*resizedWidget.ContentScaleFor(expectedBounds.Width,expectedBounds.Height)) > .001) throw new Exception("Native widget resize did not scale content and typography together");
+                Console.WriteLine("PASS native widget resize scales content without rewriting text sizes.");
                 settingsField.SetValue(viewer, original with { Layouts = [layout with { Id = "other" }], ActiveLayoutId = "other" }); sync.Invoke(viewer, null);
                 if (widgetLayer.Children.Count != 0) throw new Exception("Layout widgets leaked into another layout");
                 settingsField.SetValue(viewer, original with { Layouts = [widgetLayout], ActiveLayoutId = widgetLayout.Id, Plugins = new() { Aircraft = false, Weather = false } }); sync.Invoke(viewer, null);

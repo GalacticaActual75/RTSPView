@@ -24,3 +24,22 @@ for(const full of [true,false])for(const kind of ['weather','aircraft']){
  assert.equal(context.changes,1);
 }
 console.log('PASS LAN HTTP: independent weather/aircraft creation on full and empty layouts; unique IDs.');
+
+context.widget={margin:0,contentScale:1};context.box={left:100,top:100,width:400,height:200};
+const resized=vm.runInContext("layoutWidgetsUi.resized(widget,box,1920,1080,200,100,'se')",context);
+assert.equal(resized.contentScale,1);assert.equal(resized.widthPercent,600/1920*100);assert.equal(resized.heightPercent,300/1080*100);
+assert(Math.abs((1920-600)*resized.x/100-100)<.0001);
+const bounded=vm.runInContext("layoutWidgetsUi.resized(widget,box,1920,1080,9999,9999,'nw')",context);
+assert(bounded.x>=0&&bounded.y>=0&&bounded.widthPercent<=100&&bounded.heightPercent<=100);
+console.log('PASS widget resizing: proportional content scaling, opposite anchor and layout bounds.');
+
+const wide=vm.runInContext("layoutWidgetsUi.resized(widget,box,1920,1080,200,0,'se')",context);
+assert.equal(wide.widthPercent,600/1920*100);assert.equal(wide.heightPercent,200/1080*100);
+const tall=vm.runInContext("layoutWidgetsUi.resized(widget,box,1920,1080,200,100,'s')",context);
+assert.equal(tall.widthPercent,400/1920*100);assert.equal(tall.heightPercent,300/1080*100);
+console.log('PASS unlocked corner resize and independent edge resizing.');
+
+context.weatherUi.overlayBounds=()=>({height:200});context.scaled={kind:'weather',heightPercent:50,contentScale:.05};
+assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),2);
+context.scaled.contentScale=10;assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),2);
+console.log('PASS content fitting depends on current dimensions, never resize history.');

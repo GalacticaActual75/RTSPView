@@ -342,7 +342,7 @@ function createWallDesigner(isAutomation = false) {
         field((axis==='rows'?'Row ':'Column ')+(index+1)+' (%)',input,details);
       });
     }
-    const widgetPanel=el('section',undefined,'designer-widget-panel');widgetPanel.hidden=drawer!=='widgets';side.append(widgetPanel);widgetPanel.append(el('h3','Layout widgets'),el('p','Drag widgets anywhere on the canvas. Click to edit. Changes apply only to this layout.','designer-help'));
+    const widgetPanel=el('section',undefined,'designer-widget-panel');widgetPanel.hidden=drawer!=='widgets';side.append(widgetPanel);widgetPanel.append(el('h3','Layout widgets'),el('p','Drag to move. Drag edges or corners to resize freely; text scales to fit. Click to edit. Changes apply only to this layout.','designer-help'));
     const visibleWidgets=(layout.widgets||[]).filter(w=>pluginsUi.enabled(w.kind));
     if(!visibleWidgets.length)widgetPanel.append(el('p',pluginsUi.enabled('weather')||pluginsUi.enabled('aircraft')?'Use Add widget to add a widget.':'Enable a widget plugin in Plugins to get started.','designer-empty'));
     for(const widget of visibleWidgets){const pick=button((widget.kind==='weather'?'Weather':'Aircraft')+' · '+(widget[widget.kind].location||'Your location')+(widget.enabled?'':' (hidden)'),()=>{selectedWidget=widget.id;selectedTile=-1;render();},widgetPanel);pick.setAttribute('aria-pressed',String(selectedWidget===widget.id));}

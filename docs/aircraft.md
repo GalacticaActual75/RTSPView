@@ -78,3 +78,5 @@ Photo lookup tries Planespotters by aircraft identifier/registration, then the [
 Photo-enabled cards reserve image and credit space before lookup/download completes. Missing or failed images retain this space to avoid moving flight data. Photo lookups are ordered by request age, with provider-specific error cooldowns so another provider can continue.
 
 If no airline-matched model photo is found, lookup may use a labelled representative photo of the same model in another livery. This improves coverage without presenting a different aircraft type as a match. Photo coverage remains provider-dependent; 99% is a target, not a verified result.
+
+Layout widgets show edge and corner resize handles on hover or selection. Drag an edge to change width or height independently, or a corner to change both freely. Text and images scale uniformly to fit without stretching. The opposite edge/corner stays fixed; resizing stays inside the layout. Saved individual text sizes remain unchanged, and Undo/Redo covers each drag. This applies to weather and aircraft widgets in both Monitor and Live View.

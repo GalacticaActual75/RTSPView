@@ -17,3 +17,6 @@
 .weather-editor input,.weather-editor select{min-height:44px}.weather-editor .switch input{width:44px;left:-3px}
 
 .weather-editor summary::after{content:'▸';margin-left:auto}.weather-editor details[open]>summary::after{content:'▾'}.weather-icon{font-family:'Segoe UI Symbol',sans-serif;font-variant-emoji:text}
+
+/* Tall widgets use a vertical reading and distribute selected information through the height. */
+.weather-card:not(.aircraft-card)[data-widget-shape=portrait]{justify-content:space-between;gap:6px}.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-current{flex-direction:column;align-items:inherit;gap:6px}.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-metrics{flex-direction:column;gap:6px}.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-metrics:empty{display:none}

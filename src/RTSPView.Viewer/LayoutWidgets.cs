@@ -20,8 +20,9 @@ public partial class MainWindow
             if (!_layoutWidgets.TryGetValue(id, out var view)) { view = widget.Kind == "weather" ? new WeatherView() : new AircraftView(); _layoutWidgets[id] = view; LayoutWidgetLayer.Children.Add(view); }
             var scale = LayoutWidgetLayer.ActualWidth / EffectiveLayout.EffectiveWidth;
             var bounds = widget.Bounds(EffectiveLayout.EffectiveWidth, EffectiveLayout.EffectiveHeight);
-            view.Width = bounds.Width; view.Height = bounds.Height;
-            view.LayoutTransform = new System.Windows.Media.ScaleTransform(scale,scale);
+            var contentScale = widget.ContentScaleFor(bounds.Width,bounds.Height);
+            view.Width = bounds.Width / contentScale; view.Height = bounds.Height / contentScale;
+            view.LayoutTransform = new System.Windows.Media.ScaleTransform(scale * contentScale,scale * contentScale);
             Canvas.SetLeft(view, bounds.Left * scale); Canvas.SetTop(view, bounds.Top * scale);
             if (view is WeatherView weather) weather.Update(widget.Weather!, _weatherSnapshots.FirstOrDefault(s => s.Key == widget.Weather!.CacheKey));
             else if (view is AircraftView aircraft) aircraft.Update(widget.Aircraft!, _aircraftSnapshots.FirstOrDefault(s => s.Key == widget.Aircraft!.CacheKey), overlay: true);

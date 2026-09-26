@@ -31,6 +31,7 @@ public sealed class WeatherView : Border
         WidgetAppearance.Apply(this, o);
         var foreground = light ? Brushes.Black : Brushes.White;
         var muted = new SolidColorBrush(light ? Color.FromRgb(70, 80, 95) : Color.FromRgb(160, 174, 190));
+        var portrait = ActualHeight > ActualWidth * 1.25;
         var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition());
@@ -57,7 +58,7 @@ public sealed class WeatherView : Border
             var today = s!.Daily.FirstOrDefault(d => d.Date == WeatherFormatting.LocalTime(now, s.TimeZone).ToString("yyyy-MM-dd"));
             if (Has("temperature") || Has("condition"))
             {
-                var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = o.Alignment switch { "center" => HorizontalAlignment.Center, "right" => HorizontalAlignment.Right, _ => HorizontalAlignment.Left } };
+                var row = new StackPanel { Orientation = portrait ? Orientation.Vertical : Orientation.Horizontal, HorizontalAlignment = o.Alignment switch { "center" => HorizontalAlignment.Center, "right" => HorizontalAlignment.Right, _ => HorizontalAlignment.Left } };
                 if (Has("condition")) row.Children.Add(new TextBlock { Text = WeatherFormatting.Icon(s.Code, s.IsDay), FontSize = Math.Min(o.IconSize, Math.Max(14, width * .2)), Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(o.Accent)), Margin = new(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
                 if (Has("temperature")) row.Children.Add(new TextBlock { Text = WeatherFormatting.Temperature(s.Temperature, o.Units) + (o.Units == "imperial" ? "F" : "C"), FontSize = size * 1.5, FontWeight = FontWeights.SemiBold, Foreground = foreground });
                 stack.Children.Add(row);
@@ -98,6 +99,17 @@ public sealed class WeatherView : Border
             omitted = true;
             stack.Children.RemoveAt(stack.Children.Count - 1);
             stack.Measure(new System.Windows.Size(width, double.PositiveInfinity));
+        }
+        if (portrait && stack.Children.Count > 1)
+        {
+            var distributed = new Grid(); var children = stack.Children.Cast<UIElement>().ToArray(); stack.Children.Clear();
+            for (var i = 0; i < children.Length; i++)
+            {
+                if (i > 0) distributed.RowDefinitions.Add(new RowDefinition());
+                distributed.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                Grid.SetRow(children[i],distributed.RowDefinitions.Count-1); distributed.Children.Add(children[i]);
+            }
+            content.Children.Remove(stack); content.Children.Add(distributed);
         }
         if (omitted) credit.Text = "Details hidden · " + credit.Text;
         System.Windows.Automation.AutomationProperties.SetHelpText(this, omitted ? "Some selected weather details do not fit. Enlarge the tile or widget." : "");

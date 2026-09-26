@@ -10,6 +10,7 @@ public sealed record WallWidget
     public double X { get; init; } = 50;
     public double Y { get; init; } = 50;
     public double? HeightPercent { get; init; }
+    public double ContentScale { get; init; } = 1;
     public int Margin { get; init; } = 12;
     public WeatherOptions? Weather { get; init; }
     public AircraftOptions? Aircraft { get; init; }
@@ -24,9 +25,18 @@ public sealed record WallWidget
         var h = HeightPercent is { } percent ? availableHeight * percent / 100 : natural;
         return (w, h, margin + (availableWidth - w) * X / 100, margin + (availableHeight - h) * Y / 100);
     }
+    public double ContentScaleFor(double width, double height)
+    {
+        if (HeightPercent is null) return 1;
+        var referenceWidth = Kind == "weather" ? Math.Clamp(320 * width / Math.Max(1,height),180,320) : Aircraft!.CardDesign == "board" || Aircraft.Preset == "board" ? 480 : 320;
+        var referenceHeight = Kind == "weather"
+            ? WeatherGeometry.Bounds(new WeatherOverlay { Weather = Weather!, WidthPercent = 100, Margin = 0 }, referenceWidth, 10000).Height
+            : AircraftGeometry.Bounds(new AircraftOverlay { Aircraft = Aircraft!, WidthPercent = 100, Margin = 0 }, referenceWidth, 10000).Height;
+        return Math.Clamp(Math.Min(width / referenceWidth, height / Math.Max(1,referenceHeight)), .05, 20);
+    }
     public void Validate(WallLayout layout)
     {
-        if (string.IsNullOrWhiteSpace(Id) || Id.Length > 64 || (!double.IsFinite(WidthPercent) || WidthPercent is < 1 or > 100) || (!double.IsFinite(X) || X is < 0 or > 100) || (!double.IsFinite(Y) || Y is < 0 or > 100) || (HeightPercent is { } h && (!double.IsFinite(h) || h is <= 0 or > 100)) || Margin is < 0 or > 80 ||
+        if (!double.IsFinite(ContentScale) || ContentScale is < .05 or > 20 || string.IsNullOrWhiteSpace(Id) || Id.Length > 64 || (!double.IsFinite(WidthPercent) || WidthPercent is < 1 or > 100) || (!double.IsFinite(X) || X is < 0 or > 100) || (!double.IsFinite(Y) || Y is < 0 or > 100) || (HeightPercent is { } h && (!double.IsFinite(h) || h is <= 0 or > 100)) || Margin is < 0 or > 80 ||
             (HostCameraSlot != 0 && !layout.Tiles.Any(t => t.Kind == "camera" && t.CameraSlot == HostCameraSlot)))
             throw new InvalidDataException("Widget placement must fit its layout and reference an existing tile or the whole layout.");
         if (Kind == "weather" && Weather is not null && Aircraft is null) Weather.Validate();
