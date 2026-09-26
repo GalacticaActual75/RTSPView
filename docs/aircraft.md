@@ -56,3 +56,21 @@ An in-progress request retains the previous fresh aircraft result. Unchanged nat
 Aircraft cards show at most two aircraft, including layouts saved with a larger limit. Flight boards rotate through nearby aircraft in nearest-first pairs every 20 seconds; Featured flight rotates one at a time. Ordinary refreshes keep the current selection while updating its data. Departed or expired aircraft are removed immediately, and empty traffic resets the rotation.
 
 Photo lookup checks the transponder ID, then the exact registration when the provider reports no match. If no exact photo is available, Wikimedia Commons supplies a representative model photo; known airlines must also match the image metadata. Unknown short model codes and unmatched airlines keep the airplane icon. Representative images are labelled and retain source, photographer and license credits. Photos sit below the full-width owner heading beside flight details in Monitor and Live View.
+
+The aircraft editor provides independent 8–64 px text-size sliders for owner, model/type, tail, callsign, each flight metric, location, status and credits. Existing configurations retain their previous sizes until edited. Balanced text sizes uses owner 20 px, type 18 px, tail 14 px and altitude/speed 16 px. Compact cards reduce photo height before hiding flight data that would otherwise fit.
+
+Owner headings wrap to at most two lines, with the full name retained in the tooltip. Empty, unknown, or unavailable airline and destination rows are omitted automatically; enabled rows reappear when lookup data becomes available.
+
+Live View image downloads identify the app, follow only validated provider redirects, and retry failed image loads after a one-minute cooldown rather than caching failures for the whole session.
+
+Optional fade transitions provide separate entrance and exit durations (0–5000 ms), defaulting to 200 ms in and 800 ms out when enabled. The last populated card remains during fade-out; polling does not restart an active transition.
+
+### Layout widgets and appearance
+
+Layouts can contain up to 16 weather/aircraft widgets independently of the camera grid. Add a widget from the layout toolbar, choose a camera anchor or free placement, drag it to position it, and click (or press Enter) to edit it. These widgets belong only to their saved layout; save/apply commits the draft. Removing an anchor camera preserves its widget as free-positioned. Existing per-camera overlays remain supported. Plugin toggles hide widgets and suspend their feed without deleting configuration. Schema 19 retains a before-layout-widgets backup for rollback.
+
+Aircraft cards offer Compact horizontal, Photo-led, Data-first, and Two-aircraft board arrangements. The board caps display at two aircraft and retains the existing rotation. Photos have slightly rounded corners. Weather and aircraft backgrounds accept a custom color with independent opacity; Use theme background restores the theme default.
+
+Fade transitions have independent 0–5000 ms entrance and exit durations (defaults 200/800 ms). An opaque full-tile aircraft overlay crossfades over the continuously playing camera; translucent backgrounds retain the chosen amount of camera visibility. Refreshes do not restart the transition.
+
+Photo lookup tries Planespotters by aircraft identifier/registration, then the [Airport-Data thumbnail API](https://airport-data.com/api/doc/), then attributed model/airline photos from Wikimedia Commons. Representative images are labelled; availability varies by provider. The shared model mapping expands known codes such as SR22 to Cirrus SR22, and adsbdb manufacturer metadata supplements model names when available.

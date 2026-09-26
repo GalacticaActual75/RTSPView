@@ -58,7 +58,12 @@ public sealed class AircraftDetails(HttpClient http)
         static string Text(JsonElement e, string key) { var v = Child(e, key); return v.ValueKind == JsonValueKind.String ? new string((v.GetString() ?? "").Where(c => !char.IsControl(c)).Take(160).ToArray()) : ""; }
         var response = Child(doc.RootElement, "response"); var route = Child(response, "flightroute"); var destination = Child(route, "destination");
         var code = Text(destination, "iata_code"); if (code.Length == 0) code = Text(destination, "icao_code");
-        return new(Text(Child(response, "aircraft"), "registered_owner"), Text(Child(route, "airline"), "name"),
-            string.Join(" · ", new[] { code, Text(destination, "municipality") }.Where(s => s.Length > 0)), Text(Child(response, "aircraft"), "type"));
+        var aircraft = Child(response, "aircraft");
+        var rawModel = Text(aircraft, "type");
+        var model = AircraftModels.Name(rawModel);
+        var manufacturer = Text(aircraft, "manufacturer");
+        if (model == rawModel && model.Length > 0 && manufacturer.Length > 0 && !model.Contains(manufacturer, StringComparison.OrdinalIgnoreCase)) model = manufacturer + " " + model;
+        return new(Text(aircraft, "registered_owner"), Text(Child(route, "airline"), "name"),
+            string.Join(" · ", new[] { code, Text(destination, "municipality") }.Where(s => s.Length > 0)), model);
     }
 }

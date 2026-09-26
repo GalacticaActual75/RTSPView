@@ -59,6 +59,7 @@ function createWallDesigner(isAutomation = false) {
   }
   function message(text) { status.textContent = text; }
   function changed() {
+    for(const l of draft.layouts)for(const w of l.widgets||[])if(w.hostCameraSlot&&!l.tiles.some(t=>t.cameraSlot===w.hostCameraSlot))w.hostCameraSlot=0;
     const layout=current(),small=layout.tiles.filter(t=>t.rowSpan===1&&t.columnSpan===1);
     for(const [key,position] of [['rowWeights','row'],['columnWeights','column']])if(layout[key]?.length){
       const linked=[...new Set(small.map(t=>t[position]))];
@@ -274,6 +275,7 @@ function createWallDesigner(isAutomation = false) {
     board.style.setProperty('--canvas-border',layout.borderColor||'#24272b');
     board.style.setProperty('--canvas-border-width',(layout.showTileBorders??config.showTileBorders??true)?'1px':'0px');
     board.classList.toggle('pan-images',panImage);board.style.backgroundImage='none';board.style.setProperty('--aspect',outputWidth+'/'+outputHeight);board.style.setProperty('--ratio',outputWidth/outputHeight);board.style.setProperty('--rows',layout.rows);board.style.setProperty('--columns',layout.columns);stage.append(board);
+    if(!isAutomation)layoutWidgetsUi.render(board,layout,config.cameras,changed);
     board.ondragover=e=>e.preventDefault();board.ondrop=e=>{e.preventDefault();const slot=Number(e.dataTransfer.getData('text/plain'));if(!config.cameras.some(c=>c.slot===slot))return;const bounds=board.getBoundingClientRect();addCamera(slot,proportions.cell(proportions.rows,(e.clientY-bounds.top)/bounds.height),proportions.cell(proportions.columns,(e.clientX-bounds.left)/bounds.width));};
     const cellAt=e=>{const b=board.getBoundingClientRect();return {row:Math.max(0,Math.min(layout.rows-1,proportions.cell(proportions.rows,(e.clientY-b.top)/b.height))),column:Math.max(0,Math.min(layout.columns-1,proportions.cell(proportions.columns,(e.clientX-b.left)/b.width)))};};
     board.onpointerdown=e=>{
@@ -343,6 +345,7 @@ function createWallDesigner(isAutomation = false) {
     const previewFoot=el('div',undefined,'designer-preview-foot');preview.append(previewFoot);
     const scaleLabel=el('span');previewFoot.append(el('span','Drag to move or swap · Edges resize · Arrows move · Shift + arrows resize'),scaleLabel);
     observer=new ResizeObserver(()=>{fitPreview();scaleLabel.textContent=outputWidth+' × '+outputHeight+' · '+Math.round(board.clientWidth/outputWidth*100)+'% preview';sizeImages();});observer.observe(board);observer.observe(root);requestAnimationFrame(fitPreview);
+    if(!isAutomation)for(const kind of ['weather','aircraft'])if(pluginsUi.enabled(kind))button('Add '+kind+' widget',()=>layoutWidgetsUi.add(kind,layout,config.cameras,changed),actions);
     const side=el('aside',undefined,'designer-inspector');side.hidden=!drawer;workspace.append(side);
     button('Close panel',()=>{drawer='';render();},side).classList.add('designer-close');
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
@@ -393,14 +396,14 @@ function createWallDesigner(isAutomation = false) {
       if(isAutomation&&tile.cameraSlot>0){const focusActions=el('div',undefined,'designer-focus-actions');tilePanel.append(focusActions);for(const focusSlot of layout.focusSlots)button('Use as Focus '+(-focusSlot),()=>{const old=layout.tiles.find(t=>t.cameraSlot===focusSlot);old.cameraSlot=tile.cameraSlot;tile.cameraSlot=focusSlot;changed();},focusActions);}
       if(!isAutomation){
         if(pluginsUi.enabled('aircraft')){const aircraftSection=el('section',undefined,'designer-aircraft-controls');aircraftSection.append(el('h4','Aircraft display'));tilePanel.append(aircraftSection);
-        aircraftSection.append(el('p','Widget stays visible in a corner. Appear over camera fills this tile while aircraft are nearby. Permanent tile always shows aircraft information.','designer-help'));
-        if(tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25))button('Aircraft widget',()=>aircraftUi.overlayEditor(tile.cameraSlot),aircraftSection);
+        aircraftSection.append(el('p','Widgets can be anchored to this tile or placed freely on this layout. Appear over camera fills this tile while aircraft are nearby. Permanent tile always shows aircraft information.','designer-help'));
+        if(tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25))button('Aircraft widget',()=>layoutWidgetsUi.add('aircraft',layout,config.cameras,changed,tile.cameraSlot),aircraftSection);
         if(tile.aircraft){aircraftSection.append(aircraftUi.status(tile.aircraft));button('Edit appear-over-camera display',()=>aircraftUi.editor(tile.aircraft,aircraft=>updateTile({...tile,aircraft},selectedTile)),aircraftSection);button('Remove appear-over-camera display',()=>updateTile({...tile,aircraft:null},selectedTile),aircraftSection);}
         else button('Appear over camera when nearby',()=>aircraftUi.editor(aircraftUi.defaults(),aircraft=>updateTile({...tile,aircraft},selectedTile)),aircraftSection);
         button('Permanent aircraft tile',()=>aircraftUi.editor(tile.aircraft||aircraftUi.defaults(),aircraft=>updateTile({...tile,kind:'aircraft',itemId:layoutItemId(),cameraSlot:0,weather:null,aircraft},selectedTile)),aircraftSection);
         if(tile.aircraft){const opacity=el('input');opacity.type='number';opacity.min=0;opacity.max=100;opacity.step=1;opacity.value=tile.aircraft.backgroundOpacity;opacity.onchange=()=>{if(opacity.reportValidity())updateTile({...tile,aircraft:{...tile.aircraft,backgroundOpacity:Number(opacity.value)}},selectedTile);};field('Aircraft background opacity (%)',opacity,aircraftSection);aircraftSection.append(el('p','0% shows the camera behind the text; 100% hides the camera.','designer-help'));}
         } if(pluginsUi.enabled('weather')){const content=el('details');content.append(el('summary','Widgets and tile content'));tilePanel.append(content);const actions=el('div',undefined,'designer-content-actions');content.append(actions);
-        if(tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25)){button('Weather Widget',()=>weatherUi.overlayEditor(tile.cameraSlot),actions);if(pluginsUi.enabled('aircraft'))button('Aircraft Widget',()=>aircraftUi.overlayEditor(tile.cameraSlot),actions);}
+        if(tile.cameraSlot>0&&tile.cameraSlot<=32&&!(tile.cameraSlot>=10&&tile.cameraSlot<=25)){button('Weather Widget',()=>layoutWidgetsUi.add('weather',layout,config.cameras,changed,tile.cameraSlot),actions);if(pluginsUi.enabled('aircraft'))button('Aircraft Widget',()=>layoutWidgetsUi.add('aircraft',layout,config.cameras,changed,tile.cameraSlot),actions);}
         button('Replace with weather',()=>weatherUi.editor(weatherUi.defaults(),weather=>updateTile({...tile,kind:'weather',itemId:layoutItemId(),cameraSlot:0,aircraft:null,weather},selectedTile)),actions);
       }
       } const sizing=el('select');for(const [value,label] of [['fit','Fit · entire image (default)'],['original','Original size'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'fit';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);

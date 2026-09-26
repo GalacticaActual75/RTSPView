@@ -43,6 +43,7 @@ public sealed record WallLayout
         var width = Math.Min(Math.Max(0, availableWidth), Math.Max(0, availableHeight) * ratio);
         return (width, width / ratio);
     }
+    public IReadOnlyList<WallWidget> Widgets { get; init; } = [];
     public IReadOnlyList<WallTile> Tiles { get; init; } = Enumerable.Range(0, 9)
         .Select(i => new WallTile { CameraSlot = i + 1, Row = i / 3, Column = i % 3 }).ToArray();
 
@@ -70,6 +71,9 @@ public sealed record WallLayout
                     throw new InvalidDataException("Custom row and column sizes must be positive proportions totaling 100%.");
             if ((layout.RowWeights.Length == 0) != (layout.ColumnWeights.Length == 0))
                 throw new InvalidDataException("Custom sizing needs both row and column proportions.");
+            if (layout.Widgets is null || (allowFocusTiles && layout.Widgets.Count > 0) || layout.Widgets.Count > 16 || layout.Widgets.Any(w => w is null) || layout.Widgets.Select(w => w.Id).Distinct().Count() != layout.Widgets.Count)
+                throw new InvalidDataException("Keep up to 16 uniquely identified widgets per layout.");
+            foreach (var widget in layout.Widgets) widget.Validate(layout);
             var occupied = new HashSet<(int, int)>();
             var cameras = new HashSet<int>();
             var widgets = new HashSet<string>();

@@ -11,7 +11,7 @@ public static class WidgetAppearance
 {
     public static void Apply(Border view, WeatherOptions options)
     {
-        var bg = options.Theme == "light" ? Color.FromRgb(240, 244, 249) : Color.FromRgb(18, 22, 29);
+        var bg = options.BackgroundColor is { } custom ? (Color)System.Windows.Media.ColorConverter.ConvertFromString(custom) : options.Theme == "light" ? Color.FromRgb(240, 244, 249) : Color.FromRgb(18, 22, 29);
         bg.A = (byte)(options.BackgroundOpacity * 255 / 100);
         view.Background = new SolidColorBrush(bg);
         view.CornerRadius = new(options.CornerRadius);

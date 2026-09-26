@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const context=vm.createContext({Date,Math,Number,Map,structuredClone,setInterval(){},ResizeObserver:class{observe(){}},weatherUi:{defaults:()=>({fontSize:24})}});
+const context=vm.createContext({getComputedStyle:n=>({opacity:n.style.opacity||1}),Date,Math,Number,Map,structuredClone,setInterval(){},ResizeObserver:class{observe(){}},weatherUi:{defaults:()=>({fontSize:24})}});
 vm.runInContext(fs.readFileSync('src/RTSPView.Controller/wwwroot/aircraft.js','utf8'),context);
 const ui=vm.runInContext('aircraftUi',context),now=Date.now(),options={...ui.defaults(),latitude:0,longitude:0,radiusMiles:10,minimumAltitudeFeet:null,maximumAltitudeFeet:null,units:'imperial'};
 const track={hex:'a12345',latitude:.01,longitude:.01,positionAt:new Date(now).toISOString(),altitudeFeet:12000,speedKnots:100,trackDegrees:0,verticalRate:null};
@@ -48,3 +48,20 @@ assert.equal(ids(ui.selectFlights(rotation,ranked.slice(1),5,62000)),'1,2');
 assert.equal(ui.selectFlights(rotation,[],5,63000).length,0);
 assert.equal(ids(ui.selectFlights(rotation,ranked,5,64000)),'0,1');
 console.log('PASS maximum two, stable refresh, ranked rotation, departure and reset.');
+
+const typography={...options,textSizes:{owner:18,type:26,altitude:22}};
+assert.equal(ui.textSize(typography,'owner'),18);assert.equal(ui.textSize(typography,'type'),26);assert.equal(ui.textSize(typography,'altitude'),22);assert.equal(ui.textSize(typography,'speed'),ui.textSize(options,'speed'));
+assert.equal(ui.balancedTextSizes().owner,20);assert.equal(ui.balancedTextSizes().type,18);
+console.log('PASS independent aircraft typography and balanced preset.');
+
+for(const value of [null,undefined,'','  ','Unavailable',' unknown ','N/A','—','-'])assert.equal(ui.hasDetailValue(value),false);
+assert.equal(ui.hasDetailValue('Japan Airlines'),true);assert.equal(ui.hasDetailValue('SEA · Seattle'),true);
+console.log('PASS empty aircraft detail rows omitted; known details retained.');
+
+const fadeAnimations=[],fadeNode={style:{},animate(frames,settings){const animation={frames,settings,cancel(){this.cancelled=true}};fadeAnimations.push(animation);return animation;}},fadeEntry={options:{fadeEnabled:true,fadeInMilliseconds:200,fadeOutMilliseconds:800}};
+ui.setVisible(fadeNode,fadeEntry,true);assert.equal(fadeAnimations[0].settings.duration,200);
+ui.setVisible(fadeNode,fadeEntry,true);assert.equal(fadeAnimations.length,1);
+ui.setVisible(fadeNode,fadeEntry,false);assert.equal(fadeAnimations[1].settings.duration,800);assert.equal(fadeNode.style.visibility,'visible');
+fadeAnimations[1].onfinish();assert.equal(fadeNode.style.visibility,'hidden');
+ui.setVisible(fadeNode,fadeEntry,true);assert.equal(fadeNode.style.visibility,'visible');
+console.log('PASS quick entrance, slower exit, and no animation restart on refresh.');

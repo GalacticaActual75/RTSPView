@@ -21,6 +21,9 @@ internal static class Program
             ProviderSmoke(args).GetAwaiter().GetResult(); return;
         }
         Backend().GetAwaiter().GetResult();
+        var colored = new AircraftOptions { BackgroundColor = "#123456", BackgroundOpacity = 50 };
+        var surface = new Border(); WidgetAppearance.Apply(surface, colored.Appearance);
+        Check(((SolidColorBrush)surface.Background).Color == Color.FromArgb(127,18,52,86), "custom widget background retains opacity in Live View");
         var now = DateTimeOffset.UtcNow;
         var rotation = new AircraftRotation();
         var ranked = Enumerable.Range(0,5).Select(i => new AircraftTrack { Hex = i.ToString() }).ToArray();
@@ -43,26 +46,56 @@ internal static class Program
         aircraft.Width = 420; aircraft.Height = 300;
         aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() });
         root.UpdateLayout();
-        Check(Texts(aircraft).Contains("Owner 0") && Texts(aircraft).Contains("Owner 1") && Texts(aircraft).Contains("B738") && Texts(aircraft).Contains("N123EX"), "compact native board preserves two owners, aircraft type and tail number");
+        Check(Texts(aircraft).Contains("Owner 0") && Texts(aircraft).Contains("Owner 1") && Texts(aircraft).Contains("Boeing 737-800") && Texts(aircraft).Contains("N123EX"), "compact native board preserves two owners, aircraft type and tail number");
         Check(!Texts(aircraft).Any(t => t.StartsWith("Registered owner:")), "owner heading has no registered-owner prefix");
         var owners = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ")).ToArray();
         var first = owners[0].TranslatePoint(new Point(), aircraft); var second = owners[1].TranslatePoint(new Point(), aircraft);
         Check(Math.Abs(first.Y-second.Y)<1 && second.X>first.X+100, "two aircraft occupy separate columns on the same row");
+        var customText = options with { Preset = "board", ShowPhoto = false, TextSizes = new() { ["owner"] = 18, ["type"] = 26, ["registration"] = 17, ["altitude"] = 21 } };
+        customText.Validate();
+        var textRoundTrip = JsonSerializer.Deserialize<AircraftOptions>(JsonSerializer.Serialize(customText))!;
+        Check(textRoundTrip.TextSize("type") == 26 && textRoundTrip.TextSize("owner") == 18, "individual text sizes survive serialization");
+        try { (options with { TextSizes = new() { ["type"] = 200 } }).Validate(); throw new Exception("oversized text accepted"); } catch (InvalidDataException) { }
+        aircraft.Update(customText, snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() }); root.UpdateLayout();
+        Check(VisualTexts(aircraft).First(t => t.Text == "Owner 0").FontSize == 18 && VisualTexts(aircraft).First(t => t.Text == "Boeing 737-800").FontSize == 26 && VisualTexts(aircraft).First(t => t.Text == "N123EX").FontSize == 17, "native owner, aircraft type and tail use independent sizes");
+        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() });
         var stableTree = aircraft.Child;
         var boardSnapshot = snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() };
         aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, boardSnapshot);
         Check(ReferenceEquals(stableTree, aircraft.Child), "unchanged polling retains the native aircraft visual tree");
         // Seed an in-memory image so layout tests never contact photo services.
         var testPhoto = new AircraftPhoto("https://t.plnspttrs.net/layout-test.jpg", "https://www.planespotters.net/photo/1", "Layout fixture");
-        var imageCache = (Dictionary<string,Task<BitmapSource?>>)typeof(AircraftView).Assembly.GetType("RTSPView.Viewer.AircraftPhotoImages")!.GetField("Cache", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+        var imageCache = AircraftPhotoImages.Cache.Tasks;
         var testImage = BitmapSource.Create(3,2,96,96,PixelFormats.Bgr32,null,new byte[24],12); testImage.Freeze();
         imageCache[testPhoto.Url] = Task.FromResult<BitmapSource?>(testImage);
+        var cacheTime = now; var attempts = 0;
+        var retryCache = new AircraftImageCache(_ => Task.FromResult<BitmapSource?>(++attempts == 1 ? null : testImage), () => cacheTime);
+        Check(retryCache.Get(testPhoto).GetAwaiter().GetResult() is null && retryCache.Get(testPhoto).GetAwaiter().GetResult() is null && attempts == 1, "failed native image uses retry cooldown");
+        cacheTime = cacheTime.AddSeconds(61);
+        Check(retryCache.Get(testPhoto).GetAwaiter().GetResult() == testImage && attempts == 2, "native image recovers after transient failure without restart");
+        Check(retryCache.Get(testPhoto).GetAwaiter().GetResult() == testImage && attempts == 2, "successful native image stays cached");
         aircraft.Width = 510; aircraft.Height = 300;
         aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = true }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
         var imageCredits = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Photo ©")).ToArray();
         var photoOwners = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ")).ToArray();
         Check(imageCredits.Length == 2 && imageCredits.Zip(photoOwners).All(pair => pair.First.TranslatePoint(new Point(),aircraft).Y > pair.Second.TranslatePoint(new Point(),aircraft).Y + pair.Second.ActualHeight), "both native photo credits sit below owner headings");
         Check(photoOwners.All(owner => owner.ActualWidth > 150), "photos do not consume owner heading width");
+        foreach (var design in new[] { "compact", "photo", "data", "board" })
+        {
+            aircraft.Height = 420;
+            aircraft.Update(options with { CardDesign = design, Preset = "board", ShowPhoto = true, Fields = ["type", "altitude"] }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
+            Check(Texts(aircraft).Contains("Owner 0") && Texts(aircraft).Contains("Owner 1") && VisualTexts(aircraft).Any(t => t.Text.StartsWith("ALT ")), "native " + design + " design preserves both identities and metrics");
+        }
+        aircraft.Height = 215;
+        var compactOptions = options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = true, Fields = ["type", "airline", "altitude"] };
+        aircraft.Update(compactOptions, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto, Airline = "Japan Airlines", Callsign = a.Registration }).ToArray() }); root.UpdateLayout();
+        Check(Texts(aircraft).Contains("Airline: Japan Airlines") && Texts(aircraft).Contains("ALT 12,400 ft") && !Texts(aircraft).Any(t => t.StartsWith("Details hidden")), "compact native photos shrink before airline and altitude are removed");
+        aircraft.Height = 300;
+        const string longOwner = "Northwoods Aviation Services LLC";
+        aircraft.Update(options with { Preset = "board", ShowPhoto = false, Fields = ["type", "airline", "destination", "altitude"] }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = longOwner, Airline = i == 0 ? " Unavailable " : "Japan Airlines", Destination = i == 0 ? "N/A" : "SEA · Seattle" }).ToArray() }); root.UpdateLayout();
+        var wrappedOwner = VisualTexts(aircraft).First(t => t.Text == longOwner);
+        Check(wrappedOwner.ActualHeight > wrappedOwner.LineHeight && wrappedOwner.ActualHeight <= wrappedOwner.LineHeight * 2 + 1, "owner names wrap within two lines");
+        Check(!Texts(aircraft).Any(t => t.Contains("Unavailable") || t.Contains("N/A")) && Texts(aircraft).Contains("Airline: Japan Airlines") && Texts(aircraft).Contains("Destination (lookup): SEA · Seattle"), "unavailable details are omitted while known airline and destination remain");
         Directory.CreateDirectory("artifacts/aircraft");
         var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
         using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
@@ -83,6 +116,13 @@ internal static class Program
         Check(aircraft.Visibility == Visibility.Visible, "permanent tile stays visible regardless of widget hiding preference");
         aircraft.Update(options, snapshot with { FetchedAt = now.AddMinutes(-2) }, true); Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("Aircraft data unavailable"), "outage remains visible and hides stale aircraft");
         aircraft.Update(options, snapshot with { Aircraft = [] }); Check(Texts(aircraft).Contains("No aircraft nearby"), "empty tile stays visible");
+        var fadeOptions = options with { HideWhenEmpty = true, ShowPhoto = false, FadeEnabled = true, FadeInMilliseconds = 100, FadeOutMilliseconds = 200 };
+        aircraft.Update(fadeOptions, snapshot, true); root.UpdateLayout(); Pump(150);
+        var fadingContent = aircraft.Child;
+        aircraft.Update(fadeOptions, snapshot with { Aircraft = [] }, true);
+        Check(aircraft.Visibility == Visibility.Visible && ReferenceEquals(fadingContent,aircraft.Child), "native fade-out retains populated card until completion");
+        Pump(300); Check(aircraft.Visibility == Visibility.Hidden, "native fade-out completes by hiding card");
+        aircraft.Update(fadeOptions,snapshot,true); Pump(150); Check(aircraft.Visibility == Visibility.Visible && aircraft.Opacity > .99, "native fade-in restores the populated card");
         foreach (var font in new[] { 12,24,64 }) foreach (var width in new[] { 160d,640d,1920d })
         {
             var b = AircraftGeometry.Bounds(new() { Aircraft = options with { FontSize = font }, HostCameraSlot = 1 }, width, width / 1.777);
@@ -110,10 +150,25 @@ internal static class Program
         var snapshot = await new AdsbLolProvider(http).FetchAsync(options, CancellationToken.None);
         Console.WriteLine($"Provider fetch and parsing succeeded. Freshness: {snapshot.Freshness(DateTimeOffset.UtcNow)}; airborne positions: {snapshot.Aircraft.Length}; matching radius/filters: {AircraftSelection.Nearby(options, snapshot, DateTimeOffset.UtcNow).Length}.");
     }
+    private static void Pump(int milliseconds)
+    {
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+        timer.Tick += (_,_) => { timer.Stop(); frame.Continue = false; }; timer.Start();
+        System.Windows.Threading.Dispatcher.PushFrame(frame);
+    }
     private static AircraftTrack Track(DateTimeOffset now) => new() { Hex = "a12345", Callsign = "UAL123", Type = "B738", Registration = "N123EX", Latitude = 47.62, Longitude = -122.32, AltitudeFeet = 12400, SpeedKnots = 285, TrackDegrees = 245, VerticalRate = 640, PositionAt = now };
     private static async Task Backend()
     {
         await PhotoFallback();
+        await NativePhotoDownload();
+        Check(new AircraftTrack { Type = "SR22" }.ModelName == "Cirrus SR22", "short type expands to full model name");
+        Check(RepresentativeAircraftPhotos.Identity(RepresentativeAircraftPhotos.Key(new AircraftTrack { Type = "SR22" })!).Model == "Cirrus SR22", "private SR22 receives representative photo lookup");
+        Check(AircraftDetails.Parse("""{"response":{"aircraft":{"type":"PA-32R-301T","manufacturer":"Piper"}}}""").Model == "Piper PA-32R-301T", "manufacturer retained without duplication");
+        Check(AircraftModels.Name("Unknown model") == "Unknown model", "unknown aircraft model is not guessed");
+        var airportPhoto = AirportAircraftPhotos.Parse("""{"status":200,"data":[{"image":"https://airport-data.com/images/aircraft/thumbnails/1.jpg","link":"https://airport-data.com/aircraft/photo/1","photographer":"Test"}]}""");
+        Check(airportPhoto is { IsValid: true, Representative: false, Source: "Airport-Data.com" }, "second source parses attributed exact aircraft thumbnail");
+        Check((airportPhoto! with { Url = "https://example.com/photo.jpg" }).IsValid == false, "second source rejects unrelated image hosts");
         var representativeKey = RepresentativeAircraftPhotos.Key(new AircraftTrack { Type = "B738", Airline = "Alaska Airlines" })!;
         var representativeJson = """{"query":{"pages":{"1":{"title":"File:Alaska Airlines Boeing 737-800.jpg","imageinfo":[{"thumburl":"https://upload.wikimedia.org/example.jpg","descriptionurl":"https://commons.wikimedia.org/wiki/File:Example.jpg","extmetadata":{"Artist":{"value":"<b>Photographer</b>"},"LicenseShortName":{"value":"CC BY-SA 4.0"}}}]}}}}""";
         var representative = RepresentativeAircraftPhotos.Parse(representativeJson,representativeKey);
@@ -170,14 +225,22 @@ internal static class Program
             var betaPath = Path.Combine(directory, "beta-settings.json");
             await File.WriteAllTextAsync(betaPath, JsonSerializer.Serialize(settings with { SchemaVersion = 17 }));
             var betaStore = new JsonSettingsStore(betaPath); await betaStore.SaveAsync(await betaStore.LoadAsync());
-            Check((await betaStore.LoadAsync()).SchemaVersion == 18 && File.Exists(betaPath + ".before-aircraft-details.json"), "beta.1 upgrade keeps schema-17 rollback backup");
+            Check((await betaStore.LoadAsync()).SchemaVersion == AppSettings.CurrentSchemaVersion && File.Exists(betaPath + ".before-aircraft-details.json"), "beta.1 upgrade keeps schema-17 rollback backup");
             Check(JsonSettingsStore.ParseImport(JsonSerializer.Serialize(loaded)).AircraftOverlays.Count==1,"aircraft export/import round trip");
             Check(StreamCatalog.DeleteCamera(loaded,1).AircraftOverlays.Count==0,"host deletion removes aircraft overlay");
             Check(WeatherConfiguration.OnlyPresentationChanged(loaded,loaded with { AircraftOverlays=[] }),"aircraft appearance uses isolated viewer update");
             var conditional = loaded with { Layouts = [loaded.Layouts[0] with { Tiles = loaded.Layouts[0].Tiles.Select(t => t.CameraSlot == 1 ? t with { Aircraft = o } : t).ToArray() }] };
+            var widget = new WallWidget { Id = "layout-aircraft", Kind = "aircraft", Aircraft = o, X = 25, Y = 70 };
+            var widgetSettings = loaded with { Layouts = [loaded.Layouts[0] with { Widgets = [widget] }] };
+            widgetSettings.Normalize(); await store.SaveAsync(widgetSettings);
+            Check((await store.LoadAsync()).Layouts[0].Widgets.Single().X == 25, "layout-specific widget placement survives save and reload");
+            Check(WeatherConfiguration.OnlyPresentationChanged(loaded, widgetSettings), "moving a layout widget leaves camera playback signature unchanged");
+            var anchored = widgetSettings with { Layouts = [widgetSettings.Layouts[0] with { Widgets = [widget with { HostCameraSlot = 1 }] }] };
+            Check(StreamCatalog.DeleteCamera(anchored, 1).Layouts[0].Widgets.Single().HostCameraSlot == 0, "deleting anchor retains widget as freeform");
+            try { WallLayout.Validate([loaded.Layouts[0] with { Widgets = [widget with { X = 101 }] }], loaded.ActiveLayoutId); throw new Exception("invalid position accepted"); } catch (InvalidDataException) { }
             conditional.Normalize();
             Check(WeatherConfiguration.OnlyPresentationChanged(loaded, conditional), "conditional replacement preserves camera layout and playback signature");
-            await store.SaveAsync(conditional);
+            await store.SaveAsync(conditional with { StorageRevision = (await store.LoadAsync()).StorageRevision });
             Check((await store.LoadAsync()).Layouts[0].Tiles.First().Aircraft is not null, "conditional camera configuration persists");
             try { WallLayout.Validate([loaded.Layouts[0] with { Tiles=[tile,tile] }],loaded.ActiveLayoutId); throw new Exception("duplicate accepted"); } catch(InvalidDataException) { }
             await AircraftCache.WriteAsync(directory,[parsed],CancellationToken.None);Check((await AircraftCache.ReadAsync(directory)).Single().Aircraft.Length==1,"cache round trip");
@@ -187,6 +250,9 @@ internal static class Program
             var provider=new FakeProvider();using var service=new AircraftService(directory,provider);await service.StartAsync(CancellationToken.None);
             for(var i=0;i<40&&service.Snapshots.Length==0;i++)await Task.Delay(100);
             await service.StopAsync(CancellationToken.None);Check(provider.Calls==1,"tile and overlay share one provider request");
+            var widgetsOnly = await store.LoadAsync();
+            widgetsOnly = widgetsOnly with { AircraftOverlays = [], Layouts = [widgetsOnly.Layouts[0] with { Tiles = widgetsOnly.Layouts[0].Tiles.Where(t => t.Kind == "camera").Select(t => t with { Aircraft = null }).ToArray(), Widgets = [widget] }] };
+            await store.SaveAsync(widgetsOnly);
             var beforeDisable = await store.LoadAsync();
             await store.SaveAsync(beforeDisable with { Plugins = new() { Aircraft = false, Weather = false } });
             var disabledProvider = new FakeProvider(); using var disabledService = new AircraftService(directory, disabledProvider);
@@ -215,6 +281,30 @@ internal static class Program
         }
         finally { Directory.Delete(directory,true); }
     }
+    private static async Task NativePhotoDownload()
+    {
+        var photo = new AircraftPhoto("https://t.plnspttrs.net/first.jpg", "https://www.planespotters.net/photo/1", "Test");
+        using var handler = new ImageDownloadHandler(); using var http = new System.Net.Http.HttpClient(handler);
+        var bytes = await AircraftPhotoImages.Download(http,photo,CancellationToken.None);
+        Check(bytes.SequenceEqual(new byte[] {1,2,3}) && handler.Calls == 2 && handler.Identified, "native image identifies app and follows trusted CDN redirect");
+        using var blockedHandler = new ImageDownloadHandler { Redirect = "https://example.com/image.jpg" }; using var blockedHttp = new System.Net.Http.HttpClient(blockedHandler);
+        try { await AircraftPhotoImages.Download(blockedHttp,photo,CancellationToken.None); throw new Exception("untrusted redirect accepted"); } catch (System.Net.Http.HttpRequestException) { }
+        Check(blockedHandler.Calls == 1, "native image rejects redirects outside its provider");
+        using var deniedHandler = new ImageDownloadHandler { Denied = true }; using var deniedHttp = new System.Net.Http.HttpClient(deniedHandler);
+        try { await AircraftPhotoImages.Download(deniedHttp,photo,CancellationToken.None); throw new Exception("denied image accepted"); } catch (System.Net.Http.HttpRequestException) { }
+        Check(deniedHandler.Calls == 1, "native image denial remains a recoverable failure");
+    }
+    private sealed class ImageDownloadHandler : System.Net.Http.HttpMessageHandler
+    {
+        public int Calls; public bool Identified; public string Redirect = "/actual.jpg"; public bool Denied;
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken token)
+        {
+            Calls++; Identified = request.Headers.UserAgent.ToString().Contains("RTSPView/") && request.Headers.Accept.ToString().Contains("image/jpeg");
+            var response = new System.Net.Http.HttpResponseMessage(Denied ? System.Net.HttpStatusCode.Forbidden : Calls == 1 ? System.Net.HttpStatusCode.Redirect : System.Net.HttpStatusCode.OK);
+            if (Calls == 1 && !Denied) response.Headers.Location = new Uri(Redirect,UriKind.RelativeOrAbsolute);
+            response.Content = new System.Net.Http.ByteArrayContent([1,2,3]); return Task.FromResult(response);
+        }
+    }
     private static async Task PhotoFallback()
     {
         using var handler = new PhotoHandler(); using var http = new System.Net.Http.HttpClient(handler);
@@ -236,6 +326,8 @@ internal static class Program
             while(photos.Revision < 3) await Task.Delay(25,stop.Token);
             photos.Request(other);
             while(photos.Revision < 4) await Task.Delay(25,stop.Token);
+            photos.Request(other);
+            while(photos.Revision < 5) await Task.Delay(25,stop.Token);
             Check(photos.Find(other) is { Representative: true, Source: "Wikimedia Commons" }, "empty exact lookup falls back to model and airline photo");
             Check(photos.Find(other with { Hex = "a12345", Registration = "N2660Q" }) is { Representative: false }, "exact registration photo takes priority over representative photo");
         }

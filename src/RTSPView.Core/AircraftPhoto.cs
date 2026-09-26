@@ -7,6 +7,7 @@ public sealed record AircraftPhoto(string Url, string Link, string Photographer)
     public string License { get; init; } = "";
     public string Credit => "Photo © " + Photographer + " · " + Source + (License.Length > 0 ? " · " + License : "");
     public bool IsValid => ((Source == "Planespotters.net" && IsUrl(Url, "t.plnspttrs.net") && IsUrl(Link, "www.planespotters.net")) ||
+        (Source == "Airport-Data.com" && (IsUrl(Url, "airport-data.com") || IsUrl(Url, "www.airport-data.com")) && (IsUrl(Link, "airport-data.com") || IsUrl(Link, "www.airport-data.com"))) ||
         (Source == "Wikimedia Commons" && Representative && (IsUrl(Url,"upload.wikimedia.org") || IsUrl(Url,"thumb.wikimedia.org")) && IsUrl(Link,"commons.wikimedia.org") && License is { Length: > 0 and <= 80 })) &&
         Photographer is { Length: > 0 and <= 160 } && !Photographer.Any(char.IsControl);
     private static bool IsUrl(string value, string host) => value is { Length: <= 2048 } &&

@@ -35,7 +35,7 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
             try
             {
                 var settings = await store.LoadAsync(token);
-                var areas = settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!)
+                var areas = settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.Layouts.SelectMany(l => l.Widgets).Where(w => w.Enabled && w.Aircraft is not null).Select(w => w.Aircraft!))
                     .Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)).DistinctBy(o => o.CacheKey).Take(4).ToArray();
                 var keys = areas.Select(o => o.CacheKey).ToHashSet();
                 var changed = photoRevision != _photos!.Revision || detailRevision != _details!.Revision;
@@ -75,7 +75,7 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
                             { RefreshFailed = true, LastError = reason, NextRetryAt = _providerRetryAt };
                     }
                 }
-                foreach (var options in settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)))
+                foreach (var options in settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.Layouts.SelectMany(l => l.Widgets).Where(w => w.Enabled && w.Aircraft is not null).Select(w => w.Aircraft!)).Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)))
                     foreach (var track in AircraftSelection.Nearby(options, _cache.GetValueOrDefault(options.CacheKey), DateTimeOffset.UtcNow).Take(32)) { if (options.ShowPhoto) _photos.Request(_details.Enrich(track)); _details.Request(track); }
                 if (changed) await AircraftCache.WriteAsync(directory, Snapshots, token);
             }

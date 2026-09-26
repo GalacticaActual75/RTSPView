@@ -5,7 +5,7 @@ public sealed record AppSettings
     // In-memory freshness token; never exported or included in automation hashes.
     [System.Text.Json.Serialization.JsonIgnore]
     public string? StorageRevision { get; set; }
-    public const int CurrentSchemaVersion = 18;
+    public const int CurrentSchemaVersion = 19;
     // IDs 10–25 remain reserved for existing overlay streams.
     public static readonly int[] MainCameraSlots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
     public IReadOnlyList<WallLayout> Layouts { get; init; } = [new()];
@@ -94,9 +94,9 @@ public sealed record AppSettings
         var layouts = SchemaVersion < 15 ? new WallLayout[] { new() } : Layouts;
         var activeId = SchemaVersion < 15 ? "default" : ActiveLayoutId;
         WallLayout.Validate(layouts, activeId);
-        if (layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!.CacheKey).Concat(AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft.CacheKey)).Distinct().Count() > 4)
+        if (layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!.CacheKey).Concat(layouts.SelectMany(l => l.Widgets).Where(w => w.Enabled && w.Aircraft is not null).Select(w => w.Aircraft!.CacheKey)).Concat(AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft.CacheKey)).Distinct().Count() > 4)
             throw new InvalidDataException("Keep at most four aircraft search areas across saved layouts and overlays.");
-        if (layouts.SelectMany(l => l.Tiles).Where(t => t.Kind == "weather").Select(t => t.Weather!.CacheKey).Concat(WeatherOverlays.Where(o => o.Enabled).Select(o => o.Weather.CacheKey)).Distinct().Count() > 32)
+        if (layouts.SelectMany(l => l.Tiles).Where(t => t.Kind == "weather").Select(t => t.Weather!.CacheKey).Concat(layouts.SelectMany(l => l.Widgets).Where(w => w.Enabled && w.Weather is not null).Select(w => w.Weather!.CacheKey)).Concat(WeatherOverlays.Where(o => o.Enabled).Select(o => o.Weather.CacheKey)).Distinct().Count() > 32)
             throw new InvalidDataException("Keep at most 32 different weather locations across saved layouts and overlays.");
         var automationLayouts = AutomationLayouts.Normalize(AutomationViewLayouts);
         var cameraCount = Math.Clamp(CameraCount, 9, MainCameraSlots.Length);

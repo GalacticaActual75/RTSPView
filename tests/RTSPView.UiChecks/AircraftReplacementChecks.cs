@@ -56,6 +56,24 @@ internal static class AircraftReplacementChecks
             sync.Invoke(viewer, null);
             if (camera.ContentOverlayRoot.Children.OfType<AircraftView>().Any()) throw new Exception("Disabled aircraft plugin left a native replacement visible");
             if (((AppSettings)settingsField.GetValue(viewer)!).Layouts[0].Tiles[0].Aircraft is null) throw new Exception("Disabling aircraft deleted its settings");
+            var widgetLayer = (Canvas)viewer.FindName("LayoutWidgetLayer");
+            var widthBinding = System.Windows.Data.BindingOperations.GetBindingBase(widgetLayer, FrameworkElement.WidthProperty)!;
+            var heightBinding = System.Windows.Data.BindingOperations.GetBindingBase(widgetLayer, FrameworkElement.HeightProperty)!;
+            try
+            {
+                widgetLayer.Width = 800; widgetLayer.Height = 450; widgetLayer.Measure(new Size(800,450)); widgetLayer.Arrange(new Rect(0,0,800,450));
+                var widgetLayout = layout with { Widgets = [new WallWidget { Id = "free-aircraft", Kind = "aircraft", Aircraft = options, X = 100, Y = 100 }, new WallWidget { Id = "tile-weather", Kind = "weather", HostCameraSlot = 27, Weather = new() { Location = "Test", Latitude = 45, Longitude = -120 }, X = 0, Y = 0 }] };
+                settingsField.SetValue(viewer, original with { Layouts = [widgetLayout], ActiveLayoutId = widgetLayout.Id }); snapshotsField.SetValue(viewer, new[] { snapshot });
+                sync.Invoke(viewer, null);
+                var floating = widgetLayer.Children.OfType<AircraftView>().Single();
+                if (floating.Width <= 0 || Canvas.GetLeft(floating) + floating.Width > 800.01 || Canvas.GetTop(floating) + floating.Height > 450.01 || !widgetLayer.Children.OfType<WeatherView>().Any()) throw new Exception("Native free and anchored widgets did not fit layout");
+                settingsField.SetValue(viewer, original with { Layouts = [layout with { Id = "other" }], ActiveLayoutId = "other" }); sync.Invoke(viewer, null);
+                if (widgetLayer.Children.Count != 0) throw new Exception("Layout widgets leaked into another layout");
+                settingsField.SetValue(viewer, original with { Layouts = [widgetLayout], ActiveLayoutId = widgetLayout.Id, Plugins = new() { Aircraft = false, Weather = false } }); sync.Invoke(viewer, null);
+                if (widgetLayer.Children.Count != 0) throw new Exception("Disabled plugins left free widgets visible");
+                Console.WriteLine("PASS native free/anchored widgets: bounded geometry, layout isolation and plugin gating.");
+            }
+            finally { widgetLayer.SetBinding(FrameworkElement.WidthProperty, widthBinding); widgetLayer.SetBinding(FrameworkElement.HeightProperty, heightBinding); }
             Console.WriteLine("PASS disabled aircraft removes native presentation while preserving tile configuration.");
         }
         finally

@@ -36,8 +36,8 @@ public static class StreamCatalog
             AircraftOverlays = settings.AircraftOverlays.Where(o => o.HostCameraSlot != slot).ToArray(),
             Camera = slot == 1 ? new CameraSettings() : settings.Camera,
             Cameras = settings.Cameras.Select(c => c.Slot == slot ? new CameraSettings { Slot = slot, Name = "Camera " + (Array.IndexOf(AppSettings.MainCameraSlots, slot) + 1), Enabled = false } : c).ToArray(),
-            Layouts = settings.Layouts.Select(l => l with { Tiles = l.Tiles.Where(t => t.CameraSlot != slot).ToArray() }).ToArray(),
-            AutomationViewLayouts = settings.AutomationViewLayouts.Select(l => l with { Tiles = l.Tiles.Where(t => t.CameraSlot != slot).ToArray() }).ToArray(),
+            Layouts = settings.Layouts.Select(l => l with { Tiles = l.Tiles.Where(t => t.CameraSlot != slot).ToArray(), Widgets = l.Widgets.Select(w => w.HostCameraSlot == slot ? w with { HostCameraSlot = 0 } : w).ToArray() }).ToArray(),
+            AutomationViewLayouts = settings.AutomationViewLayouts.Select(l => l with { Tiles = l.Tiles.Where(t => t.CameraSlot != slot).ToArray(), Widgets = l.Widgets.Select(w => w.HostCameraSlot == slot ? w with { HostCameraSlot = 0 } : w).ToArray() }).ToArray(),
             DiagnosticsAutoOpenExcludedSlots = settings.DiagnosticsAutoOpenExcludedSlots.Where(s => s != slot).ToArray()
         };
     }

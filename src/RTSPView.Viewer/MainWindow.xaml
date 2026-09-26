@@ -6,6 +6,7 @@
     <Grid x:Name="WallViewport" Background="Black">
     <Grid x:Name="WallGrid" Background="Black" UseLayoutRounding="True" SnapsToDevicePixels="True" HorizontalAlignment="Center" VerticalAlignment="Center">
     </Grid>
+    <Canvas x:Name="LayoutWidgetLayer" IsHitTestVisible="False" ClipToBounds="True" HorizontalAlignment="Center" VerticalAlignment="Center" Width="{Binding ActualWidth, ElementName=WallGrid}" Height="{Binding ActualHeight, ElementName=WallGrid}" SizeChanged="LayoutWidgets_SizeChanged"/>
     </Grid>
     <local:WallDiagnosticsPanel x:Name="DiagnosticsPanel" Grid.Column="1"/>
     </Grid>

@@ -18,11 +18,19 @@ public sealed class AircraftPhotos(HttpClient http)
     }
     private AircraftPhoto? Cached(string key) => _cache.TryGetValue(key, out var entry) && entry.Until > DateTimeOffset.UtcNow ? entry.Photo : null;
     public AircraftPhoto? Find(string hex, string? registration = null) => Cached("hex/" + hex.ToLowerInvariant()) ?? (RegistrationKey(registration) is { } key ? Cached(key) : null);
-    public AircraftPhoto? Find(AircraftTrack track) => Find(track.Hex,track.Registration) ?? (RepresentativeAircraftPhotos.Key(track) is { } key ? Cached(key) : null);
+    private static string AirportKey(AircraftTrack track) => "airport/" + track.Hex.ToLowerInvariant() + "/" + (RegistrationKey(track.Registration)?[4..] ?? "");
+    public AircraftPhoto? Find(AircraftTrack track) => Find(track.Hex,track.Registration) ?? Cached(AirportKey(track)) ?? (RepresentativeAircraftPhotos.Key(track) is { } key ? Cached(key) : null);
     public void Request(AircraftTrack track)
     {
         Request(track.Hex,track.Registration);
         if(Find(track.Hex,track.Registration) is not null || !_cache.ContainsKey("hex/" + track.Hex.ToLowerInvariant())) return;
+        if (track.Hex.Length != 6 || track.Hex.Any(c => !Uri.IsHexDigit(c))) return;
+        // Let the registration lookup finish before trying a second exact-aircraft source.
+        if (RegistrationKey(track.Registration) is { } reg && _pending.ContainsKey(reg)) return;
+        var airportKey = AirportKey(track);
+        if (!_cache.TryGetValue(airportKey, out var airport) || airport.Until <= DateTimeOffset.UtcNow)
+        { if (_pending.Count < 32) _pending.TryAdd(airportKey, 0); return; }
+        if (airport.Photo is not null) return;
         if(RepresentativeAircraftPhotos.Key(track) is { } key && _pending.Count < 32 && (!_cache.TryGetValue(key,out var entry) || entry.Until <= DateTimeOffset.UtcNow)) _pending.TryAdd(key,0);
     }
     public void Request(string hex, string? registration = null)
@@ -46,12 +54,12 @@ public sealed class AircraftPhotos(HttpClient http)
                 var retry = TimeSpan.FromHours(24);
                 try
                 {
-                    using var request = new HttpRequestMessage(HttpMethod.Get, hex.StartsWith("model/") ? RepresentativeAircraftPhotos.Url(hex) : "https://api.planespotters.net/pub/photos/" + hex);
+                    using var request = new HttpRequestMessage(HttpMethod.Get, hex.StartsWith("airport/") ? AirportAircraftPhotos.Url(hex) : hex.StartsWith("model/") ? RepresentativeAircraftPhotos.Url(hex) : "https://api.planespotters.net/pub/photos/" + hex);
                     request.Headers.UserAgent.ParseAdd("RTSPView/1.0.47 (+https://github.com/GalacticaActual75/RTSPView/issues)");
                     using var response = await http.SendAsync(request, token);
                     response.EnsureSuccessStatusCode();
                     var json = await response.Content.ReadAsStringAsync(token);
-                    photo = hex.StartsWith("model/") ? RepresentativeAircraftPhotos.Parse(json,hex) : Parse(json);
+                    photo = hex.StartsWith("airport/") ? AirportAircraftPhotos.Parse(json) : hex.StartsWith("model/") ? RepresentativeAircraftPhotos.Parse(json,hex) : Parse(json);
                     empty = photo is null;
                 }
                 catch (Exception e) when (e is HttpRequestException or JsonException or OperationCanceledException)

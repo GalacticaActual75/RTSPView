@@ -12,6 +12,7 @@ public sealed record WeatherOptions
     public string Units { get; init; } = "imperial";
     public string Theme { get; init; } = "auto";
     public string Accent { get; init; } = "#F2C75C";
+    public string? BackgroundColor { get; init; }
     public int BackgroundOpacity { get; init; } = 80;
     public int FontSize { get; init; } = 24;
     public int IconSize { get; init; } = 36;
@@ -27,6 +28,7 @@ public sealed record WeatherOptions
             TimeZone is null || TimeZone.Length > 100 || Preset is not ("minimal" or "compact" or "overlay" or "detailed" or "forecast" or "dashboard") || Units is not ("metric" or "imperial") ||
             Theme is not ("auto" or "dark" or "light") || Alignment is not ("left" or "center" or "right") ||
             Accent is not { Length: 7 } || Accent[0] != '#' || Accent.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") >= 0 ||
+            (BackgroundColor is not null && (BackgroundColor.Length != 7 || BackgroundColor[0] != '#' || BackgroundColor.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") >= 0)) ||
             BackgroundOpacity is < 0 or > 100 || FontSize is < 12 or > 64 || IconSize is < 16 or > 96 || Padding is < 0 or > 48 || CornerRadius is < 0 or > 48 ||
             Fields is null || Fields.Length > AllowedFields.Length || Fields.Any(f => !AllowedFields.Contains(f)) || Fields.Distinct().Count() != Fields.Length)
             throw new InvalidDataException("Weather settings contain an invalid location, appearance, or field selection.");
@@ -95,6 +97,7 @@ public static class WeatherConfiguration
             Plugins = settings.Plugins with { Weather = true, Aircraft = true },
             Layouts = settings.Layouts.Select(layout => layout with
             {
+                Widgets = [],
                 Tiles = layout.Tiles.Select(tile => tile with { Weather = null, Aircraft = null }).ToArray()
             }).ToArray()
         });

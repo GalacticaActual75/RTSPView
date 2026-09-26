@@ -15,6 +15,7 @@ public partial class MainWindow
     private bool _readingWeather;
     private void SyncWeather()
     {
+        SyncLayoutWidgets();
         if (!_settings.Plugins.Weather)
         {
             _weatherTimer?.Stop(); _weatherTimer = null;

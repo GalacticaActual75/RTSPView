@@ -15,11 +15,25 @@ public sealed record AircraftOptions
     public int MaximumAircraft { get; init; } = 2;
     // Optional for widgets; permanent tiles remain visible and camera cards use traffic eligibility.
     public bool HideWhenEmpty { get; init; }
+    public bool FadeEnabled { get; init; }
+    public int FadeInMilliseconds { get; init; } = 200;
+    public int FadeOutMilliseconds { get; init; } = 800;
     public bool ShowPhoto { get; init; } = true;
+    public string CardDesign { get; init; } = "compact";
     public string Theme { get; init; } = "auto";
     public string Accent { get; init; } = "#F2C75C";
+    public string? BackgroundColor { get; init; }
     public int BackgroundOpacity { get; init; } = 80;
     public int FontSize { get; init; } = 24;
+    public Dictionary<string, int> TextSizes { get; init; } = [];
+    public static readonly string[] TextSizeFields = ["location", "owner", "type", "registration", "callsign", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate", "photoCredit", "footer", "status"];
+    public double TextSize(string field) => TextSizes is not null && TextSizes.TryGetValue(field, out var size) ? size : field switch
+    {
+        "owner" => FontSize * (Preset == "board" ? 1 : 1.5),
+        "photoCredit" or "footer" => 10,
+        "status" => Math.Max(12, FontSize * .65),
+        _ => Math.Max(12, FontSize * .6)
+    };
     public int IconSize { get; init; } = 36;
     public int Padding { get; init; } = 14;
     public int CornerRadius { get; init; } = 10;
@@ -29,11 +43,15 @@ public sealed record AircraftOptions
     // Filters and presentation share one query for the same area.
     public string CacheKey => FormattableString.Invariant($"{Latitude:F4},{Longitude:F4},{RadiusMiles:F1}");
     [System.Text.Json.Serialization.JsonIgnore]
-    public WeatherOptions Appearance => new() { Theme = Theme, Accent = Accent, BackgroundOpacity = BackgroundOpacity,
+    public WeatherOptions Appearance => new() { Theme = Theme, Accent = Accent, BackgroundColor = BackgroundColor, BackgroundOpacity = BackgroundOpacity,
         FontSize = FontSize, IconSize = IconSize, Padding = Padding, CornerRadius = CornerRadius, Alignment = Alignment };
     public void Validate()
     {
         Appearance.Validate();
+        if (CardDesign is not ("compact" or "photo" or "data" or "board")) throw new InvalidDataException("Choose a supported aircraft card design.");
+        if (FadeInMilliseconds is < 0 or > 5000 || FadeOutMilliseconds is < 0 or > 5000) throw new InvalidDataException("Aircraft fades must be between 0 and 5000 milliseconds.");
+        if (TextSizes is null || TextSizes.Count > TextSizeFields.Length || TextSizes.Any(p => !TextSizeFields.Contains(p.Key) || p.Value is < 8 or > 64))
+            throw new InvalidDataException("Aircraft text sizes must be between 8 and 64 pixels for supported fields.");
         if (string.IsNullOrWhiteSpace(Location) || Location.Length > 80 || !double.IsFinite(Latitude) || !double.IsFinite(Longitude) ||
             Latitude is < -90 or > 90 || Longitude is < -180 or > 180 || !double.IsFinite(RadiusMiles) || RadiusMiles is < 1 or > 100 ||
             MinimumAltitudeFeet is < -2000 or > 100000 || MaximumAltitudeFeet is < -2000 or > 100000 || MinimumAltitudeFeet > MaximumAltitudeFeet ||
@@ -70,6 +88,7 @@ public sealed record AircraftTrack
     public string Callsign { get; init; } = "";
     public string Registration { get; init; } = "";
     public string Type { get; init; } = "";
+    public string ModelName => AircraftModels.Name(Type);
     public double Latitude { get; init; }
     public double Longitude { get; init; }
     public double? AltitudeFeet { get; init; }
@@ -94,6 +113,7 @@ public sealed record AircraftSnapshot
 
 public static class AircraftSelection
 {
+    public static bool HasDetailValue(string? value) => !string.IsNullOrWhiteSpace(value) && value.Trim().ToLowerInvariant() is not ("unavailable" or "unknown" or "n/a" or "-" or "—");
     public static bool ShouldReplaceCamera(AircraftOptions options, AircraftSnapshot? snapshot, DateTimeOffset now) =>
         snapshot?.Freshness(now) == "fresh" && Nearby(options, snapshot, now).Length > 0;
     public static double DistanceMiles(double lat, double lon, double targetLat, double targetLon)
@@ -129,7 +149,7 @@ public static class AircraftSelection
             "track" => "TRK " + Number(a.TrackDegrees) + (a.TrackDegrees.HasValue ? "° " + Cardinal(a.TrackDegrees.Value) : ""),
             "verticalRate" => "V/S " + Number(a.VerticalRate * (o.Units == "metric" ? .00508 : 1), o.Units == "metric" ? "+0.0;-0.0;0" : "+0;-0;0") + (o.Units == "metric" ? " m/s" : " ft/min"),
             "distance" => Number(DistanceMiles(o.Latitude, o.Longitude, a.Latitude, a.Longitude) * (o.Units == "metric" ? 1.609344 : 1), "0.0") + (o.Units == "metric" ? " km " : " mi ") + Cardinal(Bearing(o.Latitude, o.Longitude, a.Latitude, a.Longitude)),
-            "type" => string.Join(" · ", new[] { a.Type, a.Registration }.Where(s => !string.IsNullOrWhiteSpace(s))),
+            "type" => string.Join(" · ", new[] { a.ModelName, a.Registration }.Where(s => !string.IsNullOrWhiteSpace(s))),
             _ => ""
         };
     }
@@ -144,10 +164,12 @@ public static class AircraftGeometry
         var w = Math.Max(0, width - margin * 2) * overlay.WidthPercent / 100;
         var size = Math.Min(o.FontSize, Math.Max(12, (w - o.Padding * 2) / 5));
         var rows = 1;
-        var flightWidth = (w - o.Padding * 2) / (o.Preset == "board" ? Math.Min(2, o.MaximumAircraft) : 1);
+        var flightWidth = (w - o.Padding * 2) / (o.CardDesign == "board" ? 2 : o.Preset == "board" ? Math.Min(2, o.MaximumAircraft) : 1);
         var columns = flightWidth >= 400 ? 3 : flightWidth >= 220 ? 2 : 1;
         var lines = o.Fields.Count(f => f is "type" or "owner" or "airline" or "destination") + Math.Ceiling(o.Fields.Count(f => f is not ("type" or "owner" or "airline" or "destination")) / (double)columns);
         var h = Math.Min(Math.Max(0, height - margin * 2), Math.Ceiling(o.Padding * 2 + 42 + (o.ShowPhoto && flightWidth >= 150 ? 24 : 0) + rows * (Math.Max(size * 1.7, Math.Min(o.IconSize, (w - o.Padding * 2) * .2)) + 8 + lines * (Math.Max(12, size * .6) * 1.4 + 2))));
+        if (o.TextSizes.Count > 0) h = Math.Min(Math.Max(0, height - margin * 2), Math.Ceiling(o.Padding * 2 + o.TextSize("location") * 1.25 + o.TextSize("footer") * 1.25 + Math.Max(o.IconSize, o.TextSize("owner") * 2.5) + 18 + o.TextSize("registration") * 1.25 + o.Fields.Where(f => f != "owner").Sum(f => o.TextSize(f) * 1.25 + 2)));
+        if (o.ShowPhoto && o.CardDesign is "photo" or "board") h = Math.Min(Math.Max(0, height - margin * 2), h + 144);
         return (w, h, margin + (Math.Max(0, width - margin * 2) - w) * overlay.X / 100, margin + (Math.Max(0, height - margin * 2) - h) * overlay.Y / 100);
     }
 }
