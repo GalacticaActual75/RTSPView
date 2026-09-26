@@ -106,7 +106,12 @@
 .designer-aspect-guide{display:none}
 
 /* Contextual controls keep their spacing at narrow inspector widths. */
-.designer-tile-panel{display:grid;gap:16px}.designer-tile-panel[hidden]{display:none}
+.designer-tile-panel{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:16px}.designer-tile-panel[hidden]{display:none}
+.designer-inspector{box-sizing:border-box;scrollbar-gutter:stable}
+.designer-inspector>*{min-width:0;max-width:100%}
+.designer-tile-panel>*{min-width:0;max-width:100%;box-sizing:border-box}
+.designer-tile-panel .designer-properties{grid-template-columns:repeat(2,minmax(0,1fr))}
+.designer-tile-panel button{white-space:normal;overflow-wrap:anywhere}
 .designer-tile-panel .designer-selected,.designer-tile-panel .designer-framing{margin:0}
 .designer-focus-actions{display:flex;flex-wrap:wrap;gap:8px}
 .designer-focus-actions button{flex:1 1 100px}

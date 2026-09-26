@@ -6,7 +6,7 @@ Aircraft views show airborne traffic around a configured location using ADSB.lol
 
 In **Layouts**, select a camera tile and choose **Aircraft Widget**. Search for a city, enter coordinates, or choose **Use weather location**. Set the radius and optional altitude limits, then choose the position and size. **Save & apply** saves the widget for that camera across standard and automation layouts. The camera keeps playing behind it. Weather and aircraft widgets have independent positions; aircraft defaults to bottom right, weather to bottom left.
 
-Aircraft widgets stay visible like weather widgets. An empty feed shows **No aircraft nearby**; unavailable or failed data remains visibly labelled, with the feed error when available. Older hide-when-empty preferences no longer hide the widget. Uncheck **Enable Aircraft Widget** to remove it from the camera. Conditional tile replacement still returns to the camera when no fresh aircraft match.
+Aircraft widgets stay visible like weather widgets. An empty feed shows **No aircraft nearby**; unavailable or failed data remains visibly labelled, with the feed error when available. Enable **Hide when no aircraft nearby** to hide a widget after a successful empty update; it reappears when matching aircraft arrive. Feed errors remain visible. Uncheck **Enable Aircraft Widget** to remove it from the camera. Conditional tile replacement still returns to the camera when no fresh aircraft match.
 
 ## Replace a tile
 

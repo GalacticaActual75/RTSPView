@@ -15,18 +15,19 @@ public sealed class AircraftView : Border
     private AircraftSnapshot? _snapshot;
     private string? _featured;
     private DateTimeOffset _selectedAt;
+    private bool _overlay;
     public AircraftView() { ClipToBounds = true; IsHitTestVisible = false; SizeChanged += (_, _) => Render(); }
     public void Update(AircraftOptions options, AircraftSnapshot? snapshot, bool overlay = false)
     {
         if (_options.CacheKey != options.CacheKey) _featured = null;
-        _options = options; _snapshot = snapshot; Render();
+        _options = options; _snapshot = snapshot; _overlay = overlay; Render();
     }
     private void Render()
     {
         var o = _options; var now = DateTimeOffset.UtcNow;
         var nearby = AircraftSelection.Nearby(o, _snapshot, now);
         var freshness = _snapshot?.Freshness(now) ?? "unavailable";
-        Visibility = Visibility.Visible;
+        Visibility = _overlay && o.HideWhenEmpty && freshness == "fresh" && nearby.Length == 0 ? Visibility.Hidden : Visibility.Visible;
         WidgetAppearance.Apply(this, o.Appearance);
         var foreground = o.Theme == "light" ? Brushes.Black : Brushes.White;
         var muted = new SolidColorBrush(o.Theme == "light" ? Color.FromRgb(70, 80, 95) : Color.FromRgb(160, 174, 190));

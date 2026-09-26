@@ -36,7 +36,13 @@ internal static class Program
         var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
         using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
         aircraft.Update(options with { HideWhenEmpty = true }, snapshot with { Aircraft = [] }, true);
-        Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("No aircraft nearby"), "empty overlay stays visible even with an older hide preference");
+        Check(aircraft.Visibility == Visibility.Hidden, "empty widget honors hide-when-empty preference");
+        aircraft.Update(options with { HideWhenEmpty = false }, snapshot with { Aircraft = [] }, true);
+        Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("No aircraft nearby"), "empty widget stays visible by default");
+        aircraft.Update(options with { HideWhenEmpty = true }, snapshot, true);
+        Check(aircraft.Visibility == Visibility.Visible, "hidden widget returns when aircraft arrive");
+        aircraft.Update(options with { HideWhenEmpty = true }, snapshot with { Aircraft = [] });
+        Check(aircraft.Visibility == Visibility.Visible, "permanent tile stays visible regardless of widget hiding preference");
         aircraft.Update(options, snapshot with { FetchedAt = now.AddMinutes(-2) }, true); Check(aircraft.Visibility == Visibility.Visible && Texts(aircraft).Contains("Aircraft data unavailable"), "outage remains visible and hides stale aircraft");
         aircraft.Update(options, snapshot with { Aircraft = [] }); Check(Texts(aircraft).Contains("No aircraft nearby"), "empty tile stays visible");
         foreach (var font in new[] { 12,24,64 }) foreach (var width in new[] { 160d,640d,1920d })

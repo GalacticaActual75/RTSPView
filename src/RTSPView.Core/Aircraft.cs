@@ -13,7 +13,7 @@ public sealed record AircraftOptions
     public string Preset { get; init; } = "featured";
     public string Units { get; init; } = "imperial";
     public int MaximumAircraft { get; init; } = 5;
-    // Retained for older settings files. Aircraft overlays always remain visible.
+    // Optional for widgets; permanent tiles remain visible and camera cards use traffic eligibility.
     public bool HideWhenEmpty { get; init; }
     public bool ShowPhoto { get; init; } = true;
     public string Theme { get; init; } = "auto";
