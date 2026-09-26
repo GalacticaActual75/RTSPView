@@ -14,6 +14,7 @@ namespace RTSPView.Viewer;
 // Pure WPF content: no browser, video callbacks, network calls or animations.
 public sealed class WeatherView : Border
 {
+    public bool IndependentWidget { get; set; }
     private WeatherOptions _options = new();
     private WeatherSnapshot? _snapshot;
     private string _signature = "";
@@ -61,7 +62,20 @@ public sealed class WeatherView : Border
                 var row = new StackPanel { Orientation = portrait ? Orientation.Vertical : Orientation.Horizontal, HorizontalAlignment = o.Alignment switch { "center" => HorizontalAlignment.Center, "right" => HorizontalAlignment.Right, _ => HorizontalAlignment.Left } };
                 if (Has("condition")) row.Children.Add(new TextBlock { Text = WeatherFormatting.Icon(s.Code, s.IsDay), FontSize = Math.Min(o.IconSize, Math.Max(14, width * .2)), Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(o.Accent)), Margin = new(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
                 if (Has("temperature")) row.Children.Add(new TextBlock { Text = WeatherFormatting.Temperature(s.Temperature, o.Units) + (o.Units == "imperial" ? "F" : "C"), FontSize = size * 1.5, FontWeight = FontWeights.SemiBold, Foreground = foreground });
-                stack.Children.Add(row);
+                if (IndependentWidget && !portrait && row.Children.Count > 0)
+                {
+                    var reading = new Grid(); reading.ColumnDefinitions.Add(new ColumnDefinition()); reading.ColumnDefinitions.Add(new ColumnDefinition());
+                    var parts = row.Children.Cast<TextBlock>().ToArray(); row.Children.Clear();
+                    for (var i = 0; i < parts.Length; i++)
+                    {
+                        var temperature = parts[i].FontWeight == FontWeights.SemiBold;
+                        parts[i].FontSize = temperature ? Math.Min(o.FontSize * 2.5, Math.Min(ActualWidth * .44, ActualHeight * .42)) : Math.Min(o.IconSize * 1.5, Math.Min(ActualWidth * .2, ActualHeight * .3));
+                        parts[i].HorizontalAlignment = temperature ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+                        Grid.SetColumn(parts[i], temperature ? 1 : 0); reading.Children.Add(parts[i]);
+                    }
+                    stack.Children.Add(reading);
+                }
+                else stack.Children.Add(row);
             }
             if (Has("condition") && o.Preset != "minimal") Text(WeatherFormatting.Condition(s.Code), Math.Max(12, size * .65));
             if (Has("highLow")) Text("H " + WeatherFormatting.Temperature(today?.High, o.Units) + "  L " + WeatherFormatting.Temperature(today?.Low, o.Units), Math.Max(12, size * .6), true);

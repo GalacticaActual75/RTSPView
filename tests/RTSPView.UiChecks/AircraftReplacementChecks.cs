@@ -80,6 +80,30 @@ internal static class AircraftReplacementChecks
             }
             finally { widgetLayer.SetBinding(FrameworkElement.WidthProperty, widthBinding); widgetLayer.SetBinding(FrameworkElement.HeightProperty, heightBinding); }
             Console.WriteLine("PASS disabled aircraft removes native presentation while preserving tile configuration.");
+            // Exercise an actual owned HWND, not just a Canvas in the WPF visual tree.
+            var loaded = (RoutedEventHandler)Delegate.CreateDelegate(typeof(RoutedEventHandler), viewer, type.GetMethod("OnLoaded", flags, null, [typeof(object), typeof(RoutedEventArgs)], null)!);
+            viewer.Loaded -= loaded;
+            try
+            {
+                var freeLayout = layout with { Widgets = [new WallWidget { Id = "native-overlay", Kind = "aircraft", Aircraft = options }] };
+                settingsField.SetValue(viewer, original with { Layouts = [freeLayout], ActiveLayoutId = freeLayout.Id });
+                snapshotsField.SetValue(viewer, new[] { snapshot });
+                viewer.Show(); viewer.UpdateLayout(); sync.Invoke(viewer, null);
+                var overlay = (Window?)type.GetField("_layoutWidgetWindow", flags)!.GetValue(viewer);
+                if (overlay is null || !overlay.IsVisible || overlay.Owner != viewer || !overlay.AllowsTransparency || overlay.ShowActivated || overlay.IsHitTestVisible)
+                    throw new Exception("Independent widgets lack a visible non-activating owned overlay window");
+                if (System.Windows.PresentationSource.FromVisual(widgetLayer) != System.Windows.PresentationSource.FromVisual(overlay))
+                    throw new Exception("Widget Canvas remained behind native camera windows");
+                viewer.WindowState = WindowState.Minimized;
+                if (overlay.IsVisible) throw new Exception("Widget overlay remained visible after minimizing Live View");
+                viewer.WindowState = WindowState.Normal; viewer.UpdateLayout(); sync.Invoke(viewer, null);
+                if (!overlay.IsVisible) throw new Exception("Widget overlay did not return after restoring Live View");
+                settingsField.SetValue(viewer, original with { Layouts = [layout with { Widgets = [] }], ActiveLayoutId = layout.Id });
+                sync.Invoke(viewer, null);
+                if (overlay.IsVisible) throw new Exception("Empty layout left the widget overlay window visible");
+                Console.WriteLine("PASS native widget HWND, ownership, transparency, minimize/restore and empty-layout hiding.");
+            }
+            finally { viewer.Hide(); viewer.Loaded += loaded; }
         }
         finally
         {

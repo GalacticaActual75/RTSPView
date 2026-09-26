@@ -73,7 +73,7 @@ const aircraftUi = (() => {
     animation.onfinish=()=>{if(entry.animation!==animation)return;entry.animation=null;node.style.visibility=show?'visible':'hidden';};
   }
   function paint(node,entry){const o=entry.options,actual=snapshots.find(s=>s.key===key(o)),s=actual||(entry.sampleAllowed?sample(o):null),state=freshness(s),all=nearby(o,s);
-    const show=!shouldHide(o,state,all.length,entry.overlay,entry.takeover);setVisible(node,entry,show);if(!show)return;
+    const show=entry.sampleAllowed||!shouldHide(o,state,all.length,entry.overlay,entry.takeover);setVisible(node,entry,show);if(!show)return;
     const selected=selectFlights(entry,all,o.cardDesign==='board'?2:o.preset==='board'?o.maximumAircraft:1);
     const renderKey=JSON.stringify([o,state,all,s?.lastError,!!actual,selected.map(a=>a.hex)]);if(entry.renderKey===renderKey)return;entry.renderKey=renderKey;
     const oldImages=new Map();for(const img of node.querySelectorAll('.aircraft-photo img')){const url=img.getAttribute('src');if(!oldImages.has(url))oldImages.set(url,[]);oldImages.get(url).push(img);}

@@ -501,6 +501,7 @@ public partial class MainWindow : Window
     {
         _temperatureWarning?.SetStatus(null, DateTimeOffset.UtcNow);
         _updateBadge?.Hide();
+        _layoutWidgetWindow?.Hide();
         HideOverlayWindowHierarchy(_doorbellWindow, DoorbellTile);
         HideOverlayWindowHierarchy(_garageWindow, GarageTile);
         foreach (var entry in _additionalOverlays.Values) HideOverlayWindowHierarchy(entry.Window, entry.Tile);
@@ -534,6 +535,7 @@ public partial class MainWindow : Window
         foreach (var overlay in _settings.AdditionalOverlays)
             if (_additionalOverlays.TryGetValue(overlay.Camera.Slot, out var entry))
                 UpdateOverlayWindowLayout(entry.Window, entry.Tile, overlay);
+        PlaceLayoutWidgetWindow();
         PlaceHostRestartButtons();
         RaiseWarningWindows();
     }
@@ -1171,6 +1173,7 @@ public partial class MainWindow : Window
         _updateBadge?.Close();
         _hoverExitWindow?.Close();
         _temperatureWarning?.Close();
+        _layoutWidgetWindow?.Close();
         Mouse.OverrideCursor = null;
         foreach (var tile in _allTiles.OrderBy(tile => tile.OwnsDecoder)) tile.Dispose();
         foreach (var entry in _additionalOverlays.Values)

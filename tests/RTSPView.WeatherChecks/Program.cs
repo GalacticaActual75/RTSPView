@@ -58,6 +58,13 @@ internal static class Program
             detailed.Width=size.Width;detailed.Height=size.Height;detailed.Measure(size);detailed.Arrange(new Rect(size));detailed.UpdateLayout();
             Check(detailed.DesiredSize.Width<=size.Width+24,"native resize remains bounded "+size);
         }
+        compact.IndependentWidget = true; compact.Width = 530; compact.Height = 350;
+        compact.Update(new() { Preset = "minimal", Fields = ["temperature", "condition", "highLow"] }, data);
+        compact.Measure(new Size(530,350)); compact.Arrange(new Rect(0,0,530,350)); compact.UpdateLayout();
+        var reading = FindText(compact).Single(t => t.Text == "72°F");
+        var readingBounds = reading.TransformToAncestor(compact).TransformBounds(new Rect(reading.RenderSize));
+        Check(readingBounds.Right > 500 && readingBounds.Left > 265, "independent landscape weather uses the right side of the card");
+        Check(reading.FontSize > 36, "independent landscape weather enlarges its main reading");
         compact.Update(new() {Location="Not fetched"},null);
         Check(FindText(compact).Any(t=>t.Text=="No weather fetched yet"),"native no-fetch state is explicit");
         Check(WeatherFormatting.Icon(0,false)=="☾" && WeatherFormatting.Icon(0,true)=="☀","native day/night icons");
