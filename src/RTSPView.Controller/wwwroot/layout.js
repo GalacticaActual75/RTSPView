@@ -8,7 +8,7 @@ const adminLayout = (() => {
     banner.remove();
     document.querySelector('#app .tag').textContent = '…';
     const nav = document.createElement('nav'); nav.className = 'main-nav'; nav.setAttribute('aria-label', 'Administration');
-    for (const [id, title] of Object.entries({overview:'Monitor', cameras:'Streams', layouts:'Layouts',overlays:'Picture in picture', automation:'Automation', system:'Settings'})) {
+    for (const [id, title] of Object.entries({overview:'Monitor', cameras:'Streams', layouts:'Layouts',overlays:'Picture in picture', automation:'Automation', plugins:'Plugins', system:'Settings'})) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = title;
       button.dataset.page = id; button.onclick = () => select(id); nav.append(button);
       const page = document.createElement('section'); page.id = 'page-' + id; page.className = 'admin-page'; page.setAttribute('aria-label', title);
@@ -72,6 +72,8 @@ const adminLayout = (() => {
   function select(id) {
 
     current = id;
+    if(id==='plugins')pages.plugins.append(pluginsUi.panel());
+    if(id==='system'&&document.querySelector('#system-tab-plugins[aria-selected="true"]'))document.querySelector('#system-panel-plugins').append(pluginsUi.panel());
     document.querySelector('.mobile-nav').value = id;
     document.querySelector('main').dataset.page = id;
     for (const [name, page] of Object.entries(pages)) page.hidden = name !== id;
@@ -79,7 +81,7 @@ const adminLayout = (() => {
       button.setAttribute('aria-current', button.dataset.page === id ? 'page' : 'false');
     }
 
-    document.querySelector('.hero h1').textContent = {overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Picture in picture',automation:'Automation',system:'Settings'}[id];
+    document.querySelector('.hero h1').textContent = {overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Picture in picture',automation:'Automation',plugins:'Plugins',system:'Settings'}[id];
     adminUi.page(id);workspace.sync();
     window.dispatchEvent(new Event('resize'));
     window.scrollTo({top:0, behavior:'instant'});

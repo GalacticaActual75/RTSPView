@@ -36,3 +36,15 @@ assert.match(ui.replacementState({...options,minimumAltitudeFeet:13000},snapshot
 assert.match(ui.replacementState(options,{...snapshot,aircraft:[]}).text,/No aircraft reported/);
 assert.match(ui.replacementState(options,{...snapshot,refreshFailed:true,lastError:'Aircraft provider returned HTTP 503.'}).text,/HTTP 503/);
 console.log('PASS replacement status distinguishes waiting, matching traffic, altitude exclusions, empty coverage and provider failure.');
+
+const rotation={}, ranked=Array.from({length:5},(_,i)=>({...track,hex:String(i)}));
+const ids=(tracks)=>Array.from(tracks,a=>a.hex).join(',');
+assert.equal(ids(ui.selectFlights(rotation,ranked,5,1000)),'0,1');
+assert.equal(ids(ui.selectFlights(rotation,[...ranked].reverse(),5,19000)),'0,1');
+assert.equal(ids(ui.selectFlights(rotation,ranked,5,21000)),'2,3');
+assert.equal(ids(ui.selectFlights(rotation,ranked,5,41000)),'4,0');
+assert.equal(ids(ui.selectFlights(rotation,ranked,5,61000)),'0,1');
+assert.equal(ids(ui.selectFlights(rotation,ranked.slice(1),5,62000)),'1,2');
+assert.equal(ui.selectFlights(rotation,[],5,63000).length,0);
+assert.equal(ids(ui.selectFlights(rotation,ranked,5,64000)),'0,1');
+console.log('PASS maximum two, stable refresh, ranked rotation, departure and reset.');

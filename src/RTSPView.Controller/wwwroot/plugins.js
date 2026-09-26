@@ -1,5 +1,7 @@
 const pluginsUi = (() => {
   const names={weather:'Weather',aircraft:'Aircraft',ytDlp:'yt-dlp',onvif:'ONVIF',streamlink:'Streamlink',pictureInPicture:'Picture in picture',automations:'Automations'};
+  const descriptions={weather:'Adds local weather tiles and overlays to your camera wall. Turn off to stop weather updates and hide weather controls.',aircraft:'Shows nearby aircraft within your selected radius and altitude range, including available aircraft details and photos. Turn off to stop tracking and hide aircraft cards.',ytDlp:'Opens supported website video and live-stream links, including YouTube. Auto source mode can use it when enabled; direct camera streams do not need it.',onvif:'Finds compatible cameras on your network and retrieves their stream profiles and RTSP addresses. Turning it off does not stop camera streams you already saved.',streamlink:'Opens supported live-streaming websites. Auto source mode tries it first when enabled; you can also select it for an individual stream.',pictureInPicture:'Displays smaller camera feeds over your main camera tiles. Turn off to hide and stop these overlays while keeping their positions and source settings.',automations:'Runs MQTT detection rules and Tapo sensor rules that change views or show overlays. Turn off to stop automatic actions while keeping rules and credentials.'};
+  let sharedPanel;
   let flags = {};
   let loaded=false, checking=false;
   const enabled = name => flags[name] !== false;
@@ -38,7 +40,9 @@ const pluginsUi = (() => {
     if(!enabled('ytDlp')&&!enabled('streamlink'))form.elements.maximumHeight.closest('label').hidden=true;
   }
   function panel() {
+    if(sharedPanel)return sharedPanel;
     const form = document.createElement('form'); form.id='pluginsUiForm'; form.className='control-panel panel';
+    sharedPanel=form;
     form.innerHTML='<h2>Plugins</h2><p>Turn plugins on or off for this host. Disabled plugins stop running and their controls are hidden. Saved settings are kept for when you turn them back on.</p><div class="display-options">'+Object.entries(names).map(([id,label])=>'<label><span class="switch"><input type="checkbox" role="switch" name="'+id+'" aria-label="'+label+'"><span></span></span>'+label+'</label>').join('')+'</div><div class="actions"><span role="status"></span><button type="submit">Apply changes</button></div>';
     form.onsubmit=async event=>{
       event.preventDefault(); const status=form.querySelector('[role="status"]'),button=form.querySelector('button');button.disabled=true;
@@ -51,6 +55,10 @@ const pluginsUi = (() => {
       } catch(error) { status.textContent=error.message; }
       finally {button.disabled=false;}
     };
+    for(const [id,description] of Object.entries(descriptions)){
+      const input=form.elements[id],label=input.closest('label'),copy=document.createElement('span'),title=document.createElement('strong'),help=document.createElement('small');
+      label.lastChild.remove();title.textContent=names[id];help.textContent=description;help.id='plugin-help-'+id;input.setAttribute('aria-describedby',help.id);copy.className='plugin-copy';copy.append(title,help);label.append(copy);
+    }
     return form;
   }
   return {enabled,load,panel,sourceControls};

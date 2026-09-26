@@ -12,7 +12,7 @@ public sealed record AircraftOptions
     public int? MaximumAltitudeFeet { get; init; }
     public string Preset { get; init; } = "featured";
     public string Units { get; init; } = "imperial";
-    public int MaximumAircraft { get; init; } = 5;
+    public int MaximumAircraft { get; init; } = 2;
     // Optional for widgets; permanent tiles remain visible and camera cards use traffic eligibility.
     public bool HideWhenEmpty { get; init; }
     public bool ShowPhoto { get; init; } = true;
@@ -143,10 +143,11 @@ public static class AircraftGeometry
         var margin = Math.Min(overlay.Margin, Math.Min(width / 2, height / 2));
         var w = Math.Max(0, width - margin * 2) * overlay.WidthPercent / 100;
         var size = Math.Min(o.FontSize, Math.Max(12, (w - o.Padding * 2) / 5));
-        var rows = o.Preset == "board" ? o.MaximumAircraft : 1;
-        var columns = w - o.Padding * 2 >= 400 ? 3 : w - o.Padding * 2 >= 220 ? 2 : 1;
+        var rows = 1;
+        var flightWidth = (w - o.Padding * 2) / (o.Preset == "board" ? Math.Min(2, o.MaximumAircraft) : 1);
+        var columns = flightWidth >= 400 ? 3 : flightWidth >= 220 ? 2 : 1;
         var lines = o.Fields.Count(f => f is "type" or "owner" or "airline" or "destination") + Math.Ceiling(o.Fields.Count(f => f is not ("type" or "owner" or "airline" or "destination")) / (double)columns);
-        var h = Math.Min(Math.Max(0, height - margin * 2), Math.Ceiling(o.Padding * 2 + 42 + (o.ShowPhoto && w - o.Padding * 2 >= 180 ? 150 : 0) + rows * (Math.Max(size * 1.7, Math.Min(o.IconSize, (w - o.Padding * 2) * .2)) + 8 + lines * (Math.Max(12, size * .6) * 1.4 + 2))));
+        var h = Math.Min(Math.Max(0, height - margin * 2), Math.Ceiling(o.Padding * 2 + 42 + (o.ShowPhoto && flightWidth >= 150 ? 24 : 0) + rows * (Math.Max(size * 1.7, Math.Min(o.IconSize, (w - o.Padding * 2) * .2)) + 8 + lines * (Math.Max(12, size * .6) * 1.4 + 2))));
         return (w, h, margin + (Math.Max(0, width - margin * 2) - w) * overlay.X / 100, margin + (Math.Max(0, height - margin * 2) - h) * overlay.Y / 100);
     }
 }

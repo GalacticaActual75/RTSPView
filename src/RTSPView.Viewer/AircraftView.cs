@@ -13,18 +13,18 @@ public sealed class AircraftView : Border
 {
     private AircraftOptions _options = new();
     private AircraftSnapshot? _snapshot;
-    private string? _featured;
-    private DateTimeOffset _selectedAt;
+    private AircraftRotation _rotation = new();
+
     private bool _overlay;
     private string? _lastUpdate;
     public AircraftView() { ClipToBounds = true; IsHitTestVisible = false; SizeChanged += (_, _) => Render(); }
     public void Update(AircraftOptions options, AircraftSnapshot? snapshot, bool overlay = false)
     {
-        if (_options.CacheKey != options.CacheKey) _featured = null;
+        if (_options.CacheKey != options.CacheKey) _rotation = new();
         _options = options; _snapshot = snapshot; _overlay = overlay;
         var now = DateTimeOffset.UtcNow;
         var update = System.Text.Json.JsonSerializer.Serialize(new { options, snapshot, overlay,
-            Freshness = snapshot?.Freshness(now), Matching = AircraftSelection.Nearby(options, snapshot, now).Select(a => a.Hex), Rotation = now.ToUnixTimeSeconds() / 20 });
+            Freshness = snapshot?.Freshness(now), Matching = AircraftSelection.Nearby(options, snapshot, now).Select(a => a.Hex), Rotation = _rotation.Select(AircraftSelection.Nearby(options, snapshot, now), options.Preset == "board" ? options.MaximumAircraft : 1, now).Select(a => a.Hex) });
         if (update == _lastUpdate) return;
         _lastUpdate = update; Render();
     }
@@ -63,9 +63,7 @@ public sealed class AircraftView : Border
         else if (nearby.Length == 0) stack.Children.Add(Text(freshness == "stale" ? "Waiting for fresh positions" : "No aircraft nearby", Math.Max(12, size * .65)));
         else
         {
-            var selected = nearby.FirstOrDefault(a => a.Hex == _featured);
-            if (selected is null || now - _selectedAt >= TimeSpan.FromSeconds(20)) { selected = nearby[0]; _featured = selected.Hex; _selectedAt = now; }
-            var display = (o.Preset == "board" ? nearby.Take(o.MaximumAircraft) : [selected]).ToArray();
+            var display = _rotation.Select(nearby, o.Preset == "board" ? o.MaximumAircraft : 1, now);
             flights.Columns = display.Length > 1 ? 2 : 1;
             stack.Children.Add(flights);
             var columnWidth = Math.Max(0, width / flights.Columns - (flights.Columns > 1 ? 8 : 0));

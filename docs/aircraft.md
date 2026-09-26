@@ -52,3 +52,5 @@ Live View now remeasures after hiding optional details, preserving the flight ca
 Flight boards use the full card width for one aircraft and two equal columns for multiple aircraft. The registered owner is the heading, followed by aircraft model/type and tail number. Full model names are used when available; photos remain dependent on Planespotters coverage.
 
 An in-progress request retains the previous fresh aircraft result. Unchanged native polls preserve the visual tree, and browser updates reuse loaded aircraft images. A completed empty result removes departed aircraft. This does not extend freshness limits: with hide-when-empty enabled, expired positions and stale or failed feeds remain hidden.
+
+Aircraft cards show at most two aircraft, including layouts saved with a larger limit. Flight boards rotate through nearby aircraft in nearest-first pairs every 20 seconds; Featured flight rotates one at a time. Ordinary refreshes keep the current selection while updating its data. Departed or expired aircraft are removed immediately, and empty traffic resets the rotation.

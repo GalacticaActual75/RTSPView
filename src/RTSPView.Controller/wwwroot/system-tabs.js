@@ -52,6 +52,7 @@ const systemTabs = (() => {
         panels[i].hidden = i !== index;
       });
       if (focus) tabs[index].focus();
+      if(groups[index][0]==='plugins')panels[index].append(pluginsUi.panel());
     }
     for (const [id, label, cards] of groups) {
       const index = tabs.length;

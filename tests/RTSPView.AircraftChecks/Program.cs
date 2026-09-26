@@ -22,6 +22,14 @@ internal static class Program
         }
         Backend().GetAwaiter().GetResult();
         var now = DateTimeOffset.UtcNow;
+        var rotation = new AircraftRotation();
+        var ranked = Enumerable.Range(0,5).Select(i => new AircraftTrack { Hex = i.ToString() }).ToArray();
+        string Pair(AircraftTrack[] tracks, int seconds) => string.Join(",", rotation.Select(tracks, 5, now.AddSeconds(seconds)).Select(a => a.Hex));
+        Check(Pair(ranked,0)=="0,1", "legacy five-flight setting capped at two");
+        Check(Pair(ranked.Reverse().ToArray(),19)=="0,1", "refresh retains selected pair");
+        Check(Pair(ranked,20)=="2,3" && Pair(ranked,40)=="4,0" && Pair(ranked,60)=="0,1", "nearest ranked pairs rotate every 20 seconds");
+        Check(Pair(ranked.Skip(1).ToArray(),61)=="1,2", "departed aircraft replaced immediately");
+        Check(Pair([],62)=="" && Pair(ranked,63)=="0,1", "empty traffic resets rotation");
         var options = new AircraftOptions { Location = "Seattle", Latitude = 47.6062, Longitude = -122.3321 };
         var snapshot = new AircraftSnapshot { Key = options.CacheKey, FetchedAt = now, Aircraft = [Track(now), Track(now) with { Hex = "b12345", Callsign = "ASA456", Type = "B39M", AltitudeFeet = 18200 }] };
         var root = new Grid { Width = 1100, Height = 620, Background = System.Windows.Media.Brushes.Black };

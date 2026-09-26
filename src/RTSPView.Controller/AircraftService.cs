@@ -76,7 +76,7 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
                     }
                 }
                 foreach (var options in settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Aircraft is not null).Select(t => t.Aircraft!).Concat(settings.AircraftOverlays.Where(o => o.Enabled).Select(o => o.Aircraft)))
-                    foreach (var track in AircraftSelection.Nearby(options, _cache.GetValueOrDefault(options.CacheKey), DateTimeOffset.UtcNow).Take(options.Preset == "board" ? options.MaximumAircraft : 1)) { if (options.ShowPhoto) _photos.Request(track.Hex); _details.Request(track); }
+                    foreach (var track in AircraftSelection.Nearby(options, _cache.GetValueOrDefault(options.CacheKey), DateTimeOffset.UtcNow).Take(32)) { if (options.ShowPhoto) _photos.Request(track.Hex); _details.Request(track); }
                 if (changed) await AircraftCache.WriteAsync(directory, Snapshots, token);
             }
             catch (Exception e) when (e is IOException or JsonException or InvalidDataException or UnauthorizedAccessException) { /* Retry separately from cameras. */ }

@@ -14,4 +14,5 @@ html[data-weather-enabled="false"] [data-plugin="weather"],
 html[data-aircraft-enabled="false"] [data-plugin="aircraft"]{display:none!important}
 #pluginsUiForm .display-options{display:grid;gap:16px;max-width:540px}
 #pluginsUiForm .display-options label{display:flex;align-items:center;gap:12px}
+.plugin-copy{display:grid;gap:5px;min-width:0}.plugin-copy small{font-size:13px;line-height:1.5;color:var(--muted);font-weight:normal}.plugin-copy strong{font-size:14px}#pluginsUiForm .switch{flex-shrink:0}#page-plugins #pluginsUiForm{max-width:1000px}
 html[data-yt-dlp-enabled="false"][data-streamlink-enabled="false"] .streaming-plugins-status{display:none!important}

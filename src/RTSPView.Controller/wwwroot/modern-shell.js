@@ -6,6 +6,7 @@
     cameras:'m12 3 10 5-10 5L2 8z M2 12l10 5 10-5 M2 16l10 5 10-5',
     layouts:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
     overlays:'M3 3h18v18H3z M12 12h7v7h-7z',
+    plugins:'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z',
     automation:'m13 2-9 12h7l-1 8 10-13h-7z',
     system:'M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z M9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0',
     collapse:'M4 3h16v18H4z M9 3v18 m7-13-3 4 3 4',

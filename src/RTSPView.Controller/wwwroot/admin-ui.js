@@ -72,7 +72,7 @@ const adminUi = (() => {
       button.setAttribute('aria-describedby',description.id); group.append(button,description);
     }
   }
-  function page(id) { document.title = 'RTSPView · '+({overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Picture in picture',automation:'Automation',system:'Settings'})[id]; }
+  function page(id) { document.title = 'RTSPView · '+({overview:'Monitor',cameras:'Streams',layouts:'Layouts',overlays:'Picture in picture',automation:'Automation',plugins:'Plugins',system:'Settings'})[id]; }
   function host(status) {
     const target = document.querySelector('#host'); target.replaceChildren();
     for (const text of [status.hostname, 'v' + status.version]) {
