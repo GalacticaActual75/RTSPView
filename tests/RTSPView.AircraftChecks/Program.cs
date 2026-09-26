@@ -52,6 +52,17 @@ internal static class Program
         var boardSnapshot = snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() };
         aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, boardSnapshot);
         Check(ReferenceEquals(stableTree, aircraft.Child), "unchanged polling retains the native aircraft visual tree");
+        // Seed an in-memory image so layout tests never contact photo services.
+        var testPhoto = new AircraftPhoto("https://t.plnspttrs.net/layout-test.jpg", "https://www.planespotters.net/photo/1", "Layout fixture");
+        var imageCache = (Dictionary<string,Task<BitmapSource?>>)typeof(AircraftView).Assembly.GetType("RTSPView.Viewer.AircraftPhotoImages")!.GetField("Cache", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+        var testImage = BitmapSource.Create(3,2,96,96,PixelFormats.Bgr32,null,new byte[24],12); testImage.Freeze();
+        imageCache[testPhoto.Url] = Task.FromResult<BitmapSource?>(testImage);
+        aircraft.Width = 510; aircraft.Height = 300;
+        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = true }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
+        var imageCredits = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Photo ©")).ToArray();
+        var photoOwners = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ")).ToArray();
+        Check(imageCredits.Length == 2 && imageCredits.Zip(photoOwners).All(pair => pair.First.TranslatePoint(new Point(),aircraft).Y > pair.Second.TranslatePoint(new Point(),aircraft).Y + pair.Second.ActualHeight), "both native photo credits sit below owner headings");
+        Check(photoOwners.All(owner => owner.ActualWidth > 150), "photos do not consume owner heading width");
         Directory.CreateDirectory("artifacts/aircraft");
         var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
         using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
@@ -102,6 +113,15 @@ internal static class Program
     private static AircraftTrack Track(DateTimeOffset now) => new() { Hex = "a12345", Callsign = "UAL123", Type = "B738", Registration = "N123EX", Latitude = 47.62, Longitude = -122.32, AltitudeFeet = 12400, SpeedKnots = 285, TrackDegrees = 245, VerticalRate = 640, PositionAt = now };
     private static async Task Backend()
     {
+        await PhotoFallback();
+        var representativeKey = RepresentativeAircraftPhotos.Key(new AircraftTrack { Type = "B738", Airline = "Alaska Airlines" })!;
+        var representativeJson = """{"query":{"pages":{"1":{"title":"File:Alaska Airlines Boeing 737-800.jpg","imageinfo":[{"thumburl":"https://upload.wikimedia.org/example.jpg","descriptionurl":"https://commons.wikimedia.org/wiki/File:Example.jpg","extmetadata":{"Artist":{"value":"<b>Photographer</b>"},"LicenseShortName":{"value":"CC BY-SA 4.0"}}}]}}}}""";
+        var representative = RepresentativeAircraftPhotos.Parse(representativeJson,representativeKey);
+        Check(representative is { IsValid: true, Representative: true, Photographer: "Photographer" }, "representative photo matches model and airline with attribution");
+        Check(RepresentativeAircraftPhotos.Parse(representativeJson.Replace("Alaska Airlines Boeing", "United Airlines Boeing"),representativeKey) is null, "representative photo rejects another airline");
+        Check(RepresentativeAircraftPhotos.Parse(representativeJson.Replace("737-800.jpg", "747-400.jpg"),representativeKey) is null, "representative photo rejects another model");
+        Check(RepresentativeAircraftPhotos.Parse(representativeJson.Replace("CC BY-SA 4.0", "All rights reserved"),representativeKey) is null, "representative photo requires reusable license");
+        Check(RepresentativeAircraftPhotos.Parse(representativeJson.Replace("upload.wikimedia.org", "example.com"),representativeKey) is null, "representative photos restrict image hosts");
         var now = DateTimeOffset.UtcNow;
         var o = new AircraftOptions { Latitude = 47.6062, Longitude = -122.3321, ShowPhoto = false, Fields = ["type", "altitude", "speed", "distance", "track", "verticalRate"] };
         (o with { Latitude = 47.123456789012345, Longitude = -122.98765432109876 }).Validate();
@@ -194,6 +214,43 @@ internal static class Program
             Check((await store.LoadAsync()).Cameras.SequenceEqual(settings.Cameras),"aircraft updates leave cameras untouched");
         }
         finally { Directory.Delete(directory,true); }
+    }
+    private static async Task PhotoFallback()
+    {
+        using var handler = new PhotoHandler(); using var http = new System.Net.Http.HttpClient(handler);
+        var photos = new AircraftPhotos(http); using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        photos.Request("a12345"); var worker = photos.RunAsync(stop.Token);
+        try
+        {
+            while (photos.Revision < 1) await Task.Delay(25, stop.Token);
+            Check(photos.Find("a12345") is null, "empty hex photo result remains empty");
+            photos.Request("a12345", " n2660q ");
+            while (photos.Revision < 2) await Task.Delay(25, stop.Token);
+            Check(photos.Find("a12345", "N2660Q") is { IsValid: true }, "late registration recovers photo after cached hex miss");
+            Check(handler.Paths.SequenceEqual(new[] { "/pub/photos/hex/a12345", "/pub/photos/reg/N2660Q" }), "photo fallback uses normalized exact registration");
+            photos.Request("a12345", "N2660Q"); await Task.Delay(2100, stop.Token);
+            Check(handler.Paths.Count == 2, "photo lookup caches both hex miss and registration hit");
+            Check(photos.Find("a12345", "N756MM") is null, "registration photo does not leak to another tail number");
+            var other = new AircraftTrack { Hex = "b12345", Type = "C172", Airline = "Alaska Airlines" };
+            photos.Request(other);
+            while(photos.Revision < 3) await Task.Delay(25,stop.Token);
+            photos.Request(other);
+            while(photos.Revision < 4) await Task.Delay(25,stop.Token);
+            Check(photos.Find(other) is { Representative: true, Source: "Wikimedia Commons" }, "empty exact lookup falls back to model and airline photo");
+            Check(photos.Find(other with { Hex = "a12345", Registration = "N2660Q" }) is { Representative: false }, "exact registration photo takes priority over representative photo");
+        }
+        finally { stop.Cancel(); try { await worker; } catch (OperationCanceledException) { } }
+    }
+    private sealed class PhotoHandler : System.Net.Http.HttpMessageHandler
+    {
+        public List<string> Paths { get; } = [];
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken token)
+        {
+            Paths.Add(request.RequestUri!.AbsolutePath);
+            var body = request.RequestUri.AbsolutePath.Contains("/reg/") ? """{"photos":[{"thumbnail_large":{"src":"https://t.plnspttrs.net/test.jpg"},"link":"https://www.planespotters.net/photo/1","photographer":"Test Photographer"}]}""" : """{"photos":[]}""";
+            if(request.RequestUri.Host=="commons.wikimedia.org") body = """{"query":{"pages":{"1":{"title":"File:Alaska Airlines Cessna 172.jpg","imageinfo":[{"thumburl":"https://upload.wikimedia.org/example.jpg","descriptionurl":"https://commons.wikimedia.org/wiki/File:Example.jpg","extmetadata":{"Artist":{"value":"Photographer"},"LicenseShortName":{"value":"CC BY-SA 4.0"}}}]}}}}""";
+            return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new System.Net.Http.StringContent(body) });
+        }
     }
     private sealed class FakeProvider : IAircraftProvider
     {

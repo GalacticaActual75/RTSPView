@@ -73,28 +73,34 @@ public sealed class AircraftView : Border
                 var heading = new Grid(); heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); heading.ColumnDefinitions.Add(new());
                 heading.Children.Add(new TextBlock { Text = "✈", FontFamily = new("Segoe UI Symbol"), FontSize = Math.Min(o.IconSize, Math.Max(14, width * .2)), Foreground = accent, Margin = new(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
                 var label = Text(string.IsNullOrWhiteSpace(a.RegisteredOwner) ? a.Label : a.RegisteredOwner, size * (o.Preset == "board" ? 1 : 1.5)); label.FontWeight = FontWeights.SemiBold; Grid.SetColumn(label, 1); heading.Children.Add(label); group.Children.Add(heading);
+                var body = new Grid { Tag = "body" }; body.ColumnDefinitions.Add(new()); body.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+                var data = new StackPanel { Tag = "data" }; body.Children.Add(data); group.Children.Add(body);
+                var hasPhoto = o.ShowPhoto && a.Photo is { IsValid: true } && columnWidth >= 220;
+                var dataWidth = hasPhoto ? (columnWidth - 10) / 2 : columnWidth;
                 var identity = new System.Windows.Controls.Primitives.UniformGrid { Columns = 1 };
                 if (o.Fields.Contains("type")) identity.Children.Add(Text(string.IsNullOrWhiteSpace(a.Type) ? "Aircraft type unavailable" : a.Type, Math.Max(12, size * .6), true));
                 if (!string.IsNullOrWhiteSpace(a.Registration)) identity.Children.Add(Text(a.Registration, Math.Max(12, size * .6), true));
-                group.Children.Add(identity);
-                if (!string.IsNullOrWhiteSpace(a.Callsign) && a.Callsign != a.Registration && !string.IsNullOrWhiteSpace(a.RegisteredOwner)) { var callsign = Text(a.Callsign, Math.Max(12, size * .6), true); callsign.Tag = "optional"; group.Children.Add(callsign); }
-                var details = new System.Windows.Controls.Primitives.UniformGrid { Columns = columnWidth >= 300 ? 2 : 1, Tag = "optional" };
+                data.Children.Add(identity);
+                if (!string.IsNullOrWhiteSpace(a.Callsign) && a.Callsign != a.Registration && !string.IsNullOrWhiteSpace(a.RegisteredOwner)) { var callsign = Text(a.Callsign, Math.Max(12, size * .6), true); callsign.Tag = "optional"; data.Children.Add(callsign); }
+                var details = new System.Windows.Controls.Primitives.UniformGrid { Columns = dataWidth >= 300 ? 2 : 1, Tag = "optional" };
                 foreach (var field in o.Fields.Where(f => f is "airline" or "destination")) details.Children.Add(Text(AircraftSelection.Metric(field, a, o), Math.Max(12, size * .6), true));
-                if (details.Children.Count > 0) group.Children.Add(details);
-                var metrics = new System.Windows.Controls.Primitives.UniformGrid { Columns = columnWidth >= 400 ? 3 : columnWidth >= 180 ? 2 : 1 };
+                if (details.Children.Count > 0) data.Children.Add(details);
+                var metrics = new System.Windows.Controls.Primitives.UniformGrid { Columns = dataWidth >= 400 ? 3 : dataWidth >= 180 ? 2 : 1 };
                 foreach (var field in o.Fields.Where(f => f is not ("type" or "owner" or "airline" or "destination"))) metrics.Children.Add(Text(AircraftSelection.Metric(field, a, o), Math.Max(12, size * .6), true));
-                if (metrics.Children.Count > 0) { metrics.Tag = "optional"; group.Children.Add(metrics); }
+                if (metrics.Children.Count > 0) { metrics.Tag = "optional"; data.Children.Add(metrics); }
                 flights.Children.Add(group); groups.Add(group);
                 // Keep the photo and its credit together; omit both when the tile is too small.
-                if (o.ShowPhoto && a.Photo is { IsValid: true } photo && columnWidth >= 150)
+                if (hasPhoto && a.Photo is { } photo)
                 {
-                    var picture = new StackPanel { Tag = "photo", Width = 84 };
-                    var image = new System.Windows.Controls.Image { Width = 84, Height = 48, Stretch = Stretch.Uniform, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
+                    var photoWidth = (columnWidth - 10) / 2;
+                    var picture = new StackPanel { Tag = "photo", Width = photoWidth, Margin = new(10, 0, 0, 0) };
+                    var image = new System.Windows.Controls.Image { Width = photoWidth, Height = Math.Min(120, photoWidth * 2 / 3), Stretch = Stretch.Uniform, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
+                    if (photo.Representative) picture.Children.Add(Text("Representative photo", 10, true));
                     picture.Children.Add(image);
-                    picture.Children.Add(Text("Photo © " + photo.Photographer + " · Planespotters.net", 10, true));
-                    heading.Children[0].Visibility = Visibility.Collapsed;
-                    picture.Margin = new(0, 0, 10, 0); heading.Children.Add(picture);
-                    _ = ShowPhotoAsync(image, picture, photo, heading.Children[0]);
+                    picture.Children.Add(Text(photo.Credit, 10, true));
+
+                    Grid.SetColumn(picture, 1); body.Children.Add(picture);
+                    _ = ShowPhotoAsync(image, picture, photo);
                 }
             }
         }
@@ -107,10 +113,11 @@ public sealed class AircraftView : Border
             var groupWidth = Math.Max(0, width / flights.Columns - (flights.Columns > 1 ? 8 : 0));
             foreach (var group in groups)
             {
+                var data = (StackPanel)((Grid)group.Children[1]).Children[0];
                 group.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity));
-                while (group.DesiredSize.Height > groupHeight && group.Children.OfType<FrameworkElement>().LastOrDefault(n => Equals(n.Tag, "optional")) is { } detail)
+                while (group.DesiredSize.Height > groupHeight && data.Children.OfType<FrameworkElement>().LastOrDefault(n => Equals(n.Tag, "optional")) is { } detail)
                 {
-                    group.Children.Remove(detail); group.InvalidateMeasure();
+                    data.Children.Remove(detail); data.InvalidateMeasure(); group.InvalidateMeasure();
                     group.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity)); omitted = true;
                 }
                 group.MaxHeight = groupHeight; group.ClipToBounds = true;
@@ -122,10 +129,10 @@ public sealed class AircraftView : Border
         Child = content;
         System.Windows.Automation.AutomationProperties.SetHelpText(this, omitted ? "Enlarge the aircraft tile or widget to show more details." : "");
     }
-    private static async Task ShowPhotoAsync(System.Windows.Controls.Image image, StackPanel container, AircraftPhoto photo, UIElement icon)
+    private static async Task ShowPhotoAsync(System.Windows.Controls.Image image, StackPanel container, AircraftPhoto photo)
     {
         var bitmap = await AircraftPhotoImages.Get(photo);
-        if (bitmap is null) { container.Visibility = Visibility.Collapsed; icon.Visibility = Visibility.Visible; }
+        if (bitmap is null) { container.Visibility = Visibility.Collapsed; }
         else image.Source = bitmap;
     }
 }
