@@ -136,7 +136,7 @@ const workspace = (() => {
         const name=node('span',camera.name,'monitor-name'),health=node('span',undefined,'status-label');health.dataset.streamStatus=camera.slot;
         health.id='monitor-state-'+camera.slot;card.setAttribute('aria-describedby',health.id);card.append(image,name,health);if(monitorMode==='wall'&&pluginsUi.enabled('aircraft')&&tile.aircraft){const replacement=aircraftUi.preview(tile.aircraft,false,false,true);replacement.classList.add('aircraft-replacement');card.append(replacement);}board.append(card);image.addEventListener('load',fitMonitor);dashboardUX.snapshot(image,camera.slot);
       }
-      if(monitorMode==='wall'&&active)layoutWidgetsUi.render(board,active,config.cameras);
+      if(monitorMode==='wall'&&active)layoutWidgetsUi.render(board,active,config?.cameras||[]);
       if(!tiles.length)board.append(node('p',config?cameraInventory.some(c=>c.rtspUrl)?'Streams configured but unassigned. Open Layouts to place them, then Apply to wall.':'No source configured. Open Streams and add an RTSP address, then assign the stream in Layouts.':'Loading snapshot previews…','empty-state'));
     }
     status();fitMonitor();

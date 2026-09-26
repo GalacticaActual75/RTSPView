@@ -80,7 +80,7 @@ public sealed class AircraftView : Border
                 var label = Text(string.IsNullOrWhiteSpace(a.RegisteredOwner) ? a.Label : a.RegisteredOwner, o.TextSize("owner")); label.FontWeight = FontWeights.SemiBold; label.TextWrapping = TextWrapping.Wrap; label.LineStackingStrategy = LineStackingStrategy.BlockLineHeight; label.LineHeight = label.FontSize * 1.25; label.MaxHeight = label.LineHeight * 2; Grid.SetColumn(label, 1); heading.Children.Add(label); group.Children.Add(heading);
                 var body = new Grid { Tag = "body" }; body.ColumnDefinitions.Add(new()); body.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
                 var data = new StackPanel { Tag = "data" }; body.Children.Add(data); group.Children.Add(body);
-                var hasPhoto = o.ShowPhoto && a.Photo is { IsValid: true } && columnWidth >= 220;
+                var hasPhoto = o.ShowPhoto && columnWidth >= 220;
                 var dataWidth = hasPhoto ? (columnWidth - 10) / 2 : columnWidth;
                 var identity = new System.Windows.Controls.Primitives.UniformGrid { Columns = 1 };
                 if (o.Fields.Contains("type")) { var model = Text(string.IsNullOrWhiteSpace(a.ModelName) ? "Aircraft type unavailable" : a.ModelName, o.TextSize("type"), true); model.TextWrapping = TextWrapping.Wrap; identity.Children.Add(model); }
@@ -95,14 +95,15 @@ public sealed class AircraftView : Border
                 if (metrics.Children.Count > 0) { metrics.Tag = "optional"; group.Children.Add(metrics); }
                 flights.Children.Add(group); groups.Add(group);
                 // Keep the photo and its credit together; omit both when the tile is too small.
-                if (hasPhoto && a.Photo is { } photo)
+                if (hasPhoto)
                 {
+                    var photo = a.Photo is { IsValid: true } ? a.Photo : null;
                     var photoWidth = o.CardDesign is "photo" or "board" ? columnWidth : o.CardDesign == "data" ? Math.Min(84, columnWidth / 3) : (columnWidth - 10) / 2;
                     var picture = new StackPanel { Tag = "photo", Width = photoWidth, Margin = new(10, 0, 0, 0) };
                     var image = new System.Windows.Controls.Image { Width = photoWidth, Height = Math.Min(120, photoWidth * 2 / 3), Stretch = Stretch.UniformToFill, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
-                    if (photo.Representative) picture.Children.Add(Text("Representative photo", o.TextSize("photoCredit"), true));
                     picture.Children.Add(image);
-                    picture.Children.Add(Text(photo.Credit, o.TextSize("photoCredit"), true));
+                    var photoCredit = Text(photo is null ? "" : (photo.Representative ? "Representative photo · " : "") + photo.Credit, o.TextSize("photoCredit"), true);
+                    photoCredit.Height = o.TextSize("photoCredit") * 2.5; picture.Children.Add(photoCredit);
 
                     image.SizeChanged += (_, _) => image.Clip = new RectangleGeometry(new Rect(0, 0, image.ActualWidth, image.ActualHeight), 6, 6);
                     Grid.SetColumn(picture, 1); body.Children.Add(picture);
@@ -117,7 +118,7 @@ public sealed class AircraftView : Border
                         body.ColumnDefinitions[0].Width = GridLength.Auto; body.ColumnDefinitions[1].Width = new GridLength(1,GridUnitType.Star);
                         Grid.SetColumn(picture, 0); Grid.SetColumn(data, 1); picture.Margin = new(0,0,10,0);
                     }
-                    _ = ShowPhotoAsync(image, picture, photo);
+                    if (photo is not null) _ = ShowPhotoAsync(image, picture, photo);
                 }
             }
         }
@@ -194,8 +195,13 @@ public sealed class AircraftView : Border
     }
     private static async Task ShowPhotoAsync(System.Windows.Controls.Image image, StackPanel container, AircraftPhoto photo)
     {
-        var bitmap = await AircraftPhotoImages.Get(photo);
-        if (bitmap is null) { container.Visibility = Visibility.Collapsed; }
-        else image.Source = bitmap;
+        while (true)
+        {
+            var bitmap = await AircraftPhotoImages.Get(photo);
+            if (bitmap is not null) { image.Source = bitmap; return; }
+            // Retry even when the traffic snapshot is unchanged; never move the text on failure.
+            await Task.Delay(TimeSpan.FromSeconds(65));
+            if (!image.IsLoaded) return;
+        }
     }
 }

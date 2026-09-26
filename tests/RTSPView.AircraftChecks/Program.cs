@@ -86,6 +86,16 @@ internal static class Program
             aircraft.Update(options with { CardDesign = design, Preset = "board", ShowPhoto = true, Fields = ["type", "altitude"] }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
             Check(Texts(aircraft).Contains("Owner 0") && Texts(aircraft).Contains("Owner 1") && VisualTexts(aircraft).Any(t => t.Text.StartsWith("ALT ")), "native " + design + " design preserves both identities and metrics");
         }
+        foreach (var design in new[] { "compact", "photo", "data", "board" })
+        {
+            aircraft.Height = 420;
+            var fixedPhoto = options with { CardDesign = design, Preset = "board", ShowPhoto = true, Fields = ["type", "altitude"] };
+            aircraft.Update(fixedPhoto, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = null }).ToArray() }); root.UpdateLayout();
+            var beforePhoto = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ") || t.Text.StartsWith("ALT ")).Select(t => (t.Text,t.TranslatePoint(new Point(),aircraft))).ToArray();
+            aircraft.Update(fixedPhoto, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
+            var afterPhoto = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ") || t.Text.StartsWith("ALT ")).Select(t => (t.Text,t.TranslatePoint(new Point(),aircraft))).ToArray();
+            Check(beforePhoto.SequenceEqual(afterPhoto), "native " + design + " photo arrival never moves owner or metrics");
+        }
         aircraft.Height = 215;
         var compactOptions = options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = true, Fields = ["type", "airline", "altitude"] };
         aircraft.Update(compactOptions, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto, Airline = "Japan Airlines", Callsign = a.Registration }).ToArray() }); root.UpdateLayout();

@@ -28,7 +28,7 @@ public sealed class WeatherService(string directory, IWeatherProvider? provider 
             try
             {
                 var settings = await store.LoadAsync(token);
-                var locations = settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Kind == "weather").Select(t => t.Weather!).Concat(settings.Layouts.SelectMany(l => l.Widgets).Where(w => w.Enabled && w.Weather is not null).Select(w => w.Weather!))
+                var locations = settings.Layouts.SelectMany(l => l.Tiles).Where(t => t.Kind == "weather").Select(t => t.Weather!).Concat(settings.Layouts.Concat(settings.AutomationViewLayouts).SelectMany(l => l.Widgets).Where(w => w.Enabled && w.Weather is not null).Select(w => w.Weather!))
                     .Concat(settings.WeatherOverlays.Where(o => o.Enabled).Select(o => o.Weather)).DistinctBy(w => w.CacheKey).Take(32).ToArray();
                 var keys = locations.Select(w => w.CacheKey).ToHashSet();
                 var changed = false;

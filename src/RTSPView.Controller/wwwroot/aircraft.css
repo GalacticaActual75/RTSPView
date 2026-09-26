@@ -35,3 +35,6 @@
 .layout-widget:focus-visible{outline:2px solid #f2c75c;outline-offset:3px}
 
 .aircraft-card[data-design=photo] .aircraft-flight>.aircraft-photo{width:100%;margin:0 0 6px}.aircraft-card[data-design=photo] .aircraft-flight>.aircraft-photo img{width:100%;height:120px;max-height:120px;object-fit:cover}.aircraft-card .aircraft-body .aircraft-photo img{object-fit:cover}
+
+/* Reserve photo and attribution space before metadata or image bytes arrive. */
+.aircraft-card .aircraft-photo a{height:2.5em;line-height:1.25;display:block}.aircraft-card .aircraft-photo img{background:rgba(255,255,255,.025)}

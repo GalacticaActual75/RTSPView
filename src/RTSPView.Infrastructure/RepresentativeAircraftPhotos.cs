@@ -7,12 +7,12 @@ namespace RTSPView.Infrastructure;
 
 public static class RepresentativeAircraftPhotos
 {
-    public static string? Key(AircraftTrack track)
+    public static string? Key(AircraftTrack track, bool modelOnly = false)
     {
         var model = AircraftModels.Name(track.Type);
         // Unknown short ICAO codes do not identify a model reliably in image search.
         if (model.Length < 5 || model.Length > 160 || !model.Any(char.IsDigit)) return null;
-        var airline = track.Airline.Trim();
+        var airline = modelOnly || !AircraftSelection.HasDetailValue(track.Airline) ? "" : track.Airline.Trim();
         return "model/" + Uri.EscapeDataString(model) + "|" + Uri.EscapeDataString(airline);
     }
     public static (string Model, string Airline) Identity(string key)
@@ -23,7 +23,7 @@ public static class RepresentativeAircraftPhotos
     {
         var (model, airline) = Identity(key);
         var query = model.Replace('"',' ') + " " + airline.Replace('"',' ') + " filetype:bitmap";
-        return "https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=5&gsrsearch=" + Uri.EscapeDataString(query) + "&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=480";
+        return "https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=10&gsrsearch=" + Uri.EscapeDataString(query) + "&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=480";
     }
     private static string Plain(string text) => Regex.Replace(WebUtility.HtmlDecode(Regex.Replace(text, "<[^>]*>", " ")), @"\s+", " ").Trim();
     private static string Compact(string text) => new(text.Where(char.IsAsciiLetterOrDigit).Select(char.ToLowerInvariant).ToArray());

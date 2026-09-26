@@ -130,3 +130,8 @@
 
 .designer-board{container-type:inline-size;container-name:wall-preview}
 @container wall-preview (max-width:600px){.designer-tile .snapshot-age{display:none!important}}
+
+.designer-widget-panel{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}.designer-widget-panel[hidden]{display:none}.designer-widget-panel>*{min-width:0;max-width:100%;box-sizing:border-box}.designer-widget-panel button{white-space:normal;overflow-wrap:anywhere}.designer-widget-panel button[aria-pressed=true]{border-color:#f2c75c}.layout-widget.selected{outline:2px solid #f2c75c;outline-offset:2px}.designer-inspector input,.designer-inspector select,.designer-inspector button{max-width:100%;box-sizing:border-box}.designer-action-group{flex-wrap:wrap}.designer-popover{max-width:calc(100vw - 40px)}
+
+/* Give layout selection its own row; actions must never overlap the picker. */
+body #page-layouts .designer-toolbar{display:flex;flex-direction:column;align-items:stretch!important}body #page-layouts .designer-layout-picker{display:flex;flex-wrap:wrap;align-self:stretch;align-items:end;gap:12px;width:100%;min-width:0}body #page-layouts .designer-layout-tools{display:flex;flex-wrap:wrap;align-items:center}body #page-layouts .designer-actions{width:100%;margin-left:0;min-width:0}body #page-layouts .designer-action-group{min-width:0}

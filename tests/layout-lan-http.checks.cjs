@@ -9,28 +9,18 @@ assert.equal(ids.size, 1000);
 for (const id of ids) assert.match(id, /^[a-f0-9]{32}$/);
 assert(!source.includes('crypto.randomUUID('), 'layout actions must work on LAN HTTP');
 
-// Execute the actual Add weather handler with both a full and an empty grid.
-const action = source.slice(source.indexOf("if(!isAutomation&&pluginsUi.enabled('weather'))button('Add weather'"), source.indexOf("    for(const [id,label] of [['add','Add stream']"));
-for (const full of [true, false]) {
-  class Element {
-    constructor() {this.options = [];this.value = '';this.children = [];}
-    append(...items) {this.children.push(...items);}
-    add(option) {this.options.push(option);if (!this.value) this.value = option.value;}
-    showModal() {context.dialogs++;}
-  }
-  Object.assign(context, {
-    pluginsUi:{enabled:()=>true}, isAutomation: false, selectedTile: -1, actions: {}, drawer: '', dialogs: 0, editors: 0, changes: 0,
-    layout: {rows: 3, columns: 3, tiles: full ? Array.from({length:9},(_,i)=>({cameraSlot:i+1})) : []},
-    config: {cameras: Array.from({length:9},(_,i)=>({slot:i+1,name:'Camera '+(i+1)}))},
-    validTile: () => !full, el: () => new Element(), field() {},
-    document: {body: new Element()}, Option: class {constructor(text,value){this.value=String(value);}},
-    button(label, handler) {if(label==='Add weather') handler();return {};},
-    changed() {context.changes++;},
-    weatherUi: {defaults: () => ({}), editor(options, save) {context.editors++;save({location:'Test'});}}
-  });
-  vm.runInContext(action, context);
-  assert.equal(context.dialogs, full ? 1 : 0, 'full grid opens a choice dialog');
-  assert.equal(context.editors, full ? 0 : 1, 'empty grid opens the weather editor');
-  if (!full) {assert.equal(context.layout.tiles.length,1);assert(context.layout.tiles[0].itemId);assert.equal(context.changes,1);}
+
+const widgets=fs.readFileSync('src/RTSPView.Controller/wwwroot/layout-widgets.js','utf8');
+context.weatherUi={defaults:()=>({location:'Test'}),editor:(options,save,placement)=>save(options,placement)};
+context.aircraftUi={...context.weatherUi,balancedTextSizes:()=>({owner:24})};
+vm.runInContext(widgets,context);
+for(const full of [true,false])for(const kind of ['weather','aircraft']){
+ context.layout={tiles:full?Array.from({length:9},(_,i)=>({cameraSlot:i+1})):[]};context.changes=0;context.kind=kind;
+ context.changed=()=>context.changes++;
+ vm.runInContext('layoutWidgetsUi.add(kind,layout,[],changed)',context);
+ assert.equal(context.layout.tiles.length,full?9:0);
+ assert.equal(context.layout.widgets.length,1);
+ assert.equal(context.layout.widgets[0].hostCameraSlot,0);
+ assert.equal(context.changes,1);
 }
-console.log('PASS LAN HTTP: full-grid Add weather dialog, empty-grid weather creation, unique IDs without randomUUID.');
+console.log('PASS LAN HTTP: independent weather/aircraft creation on full and empty layouts; unique IDs.');

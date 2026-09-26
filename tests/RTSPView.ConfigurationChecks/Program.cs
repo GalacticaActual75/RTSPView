@@ -6,6 +6,14 @@ var root = Path.Combine(Path.GetTempPath(), "RTSPView-ConfigurationChecks", Guid
 Directory.CreateDirectory(root);
 try
 {
+    var legacyWidgets = new AppSettings { SchemaVersion = 19, WeatherOverlays = [new() { Enabled = true, HostCameraSlot = 1 }] };
+    var independent = legacyWidgets.Normalize();
+    Check(independent.Layouts[0].Widgets.Count == 1 && independent.Layouts[0].Widgets[0].HostCameraSlot == 0, "legacy camera weather becomes a layout widget");
+    Check(!independent.WeatherOverlays[0].Enabled && independent.WeatherOverlays[0].Weather == legacyWidgets.WeatherOverlays[0].Weather, "legacy overlay settings remain without duplicate rendering");
+    Check(independent.Normalize().Layouts[0].Widgets.Count == 1, "widget migration is idempotent");
+    var detached = independent.Layouts[0] with { Tiles = [] };
+    WallLayout.Validate([detached], detached.Id);
+    Check(detached.Widgets.Count == 1, "removing cameras preserves independent widgets");
     await AuditRegressionChecks.Run(root);
     await OverlaySourceChecks.Run(root);
     await StreamSourceChecks.Run(root);

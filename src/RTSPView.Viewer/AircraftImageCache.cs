@@ -21,6 +21,7 @@ internal sealed class AircraftImageCache(Func<AircraftPhoto, Task<BitmapSource?>
             Tasks.Remove(photo.Url); _retryAfter.Remove(photo.Url);
         }
         if (Tasks.Count >= 64) { var oldest = Tasks.Keys.First(); Tasks.Remove(oldest); _retryAfter.Remove(oldest); }
+        _retryAfter[photo.Url] = now.AddMinutes(1);
         return Tasks[photo.Url] = load(photo);
     }
 }

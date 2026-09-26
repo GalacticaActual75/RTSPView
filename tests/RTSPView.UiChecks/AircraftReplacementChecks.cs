@@ -66,12 +66,12 @@ internal static class AircraftReplacementChecks
                 settingsField.SetValue(viewer, original with { Layouts = [widgetLayout], ActiveLayoutId = widgetLayout.Id }); snapshotsField.SetValue(viewer, new[] { snapshot });
                 sync.Invoke(viewer, null);
                 var floating = widgetLayer.Children.OfType<AircraftView>().Single();
-                if (floating.Width <= 0 || Canvas.GetLeft(floating) + floating.Width > 800.01 || Canvas.GetTop(floating) + floating.Height > 450.01 || !widgetLayer.Children.OfType<WeatherView>().Any()) throw new Exception("Native free and anchored widgets did not fit layout");
+                if (floating.Width <= 0 || Canvas.GetLeft(floating) + floating.Width * 800 / widgetLayout.EffectiveWidth > 800.01 || Canvas.GetTop(floating) + floating.Height * 800 / widgetLayout.EffectiveWidth > 450.01 || !widgetLayer.Children.OfType<WeatherView>().Any()) throw new Exception("Native free and anchored widgets did not fit layout");
                 settingsField.SetValue(viewer, original with { Layouts = [layout with { Id = "other" }], ActiveLayoutId = "other" }); sync.Invoke(viewer, null);
                 if (widgetLayer.Children.Count != 0) throw new Exception("Layout widgets leaked into another layout");
                 settingsField.SetValue(viewer, original with { Layouts = [widgetLayout], ActiveLayoutId = widgetLayout.Id, Plugins = new() { Aircraft = false, Weather = false } }); sync.Invoke(viewer, null);
                 if (widgetLayer.Children.Count != 0) throw new Exception("Disabled plugins left free widgets visible");
-                Console.WriteLine("PASS native free/anchored widgets: bounded geometry, layout isolation and plugin gating.");
+                Console.WriteLine("PASS native independent widgets: bounded geometry, layout isolation and plugin gating.");
             }
             finally { widgetLayer.SetBinding(FrameworkElement.WidthProperty, widthBinding); widgetLayer.SetBinding(FrameworkElement.HeightProperty, heightBinding); }
             Console.WriteLine("PASS disabled aircraft removes native presentation while preserving tile configuration.");

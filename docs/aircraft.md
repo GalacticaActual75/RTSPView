@@ -67,10 +67,14 @@ Optional fade transitions provide separate entrance and exit durations (0–5000
 
 ### Layout widgets and appearance
 
-Layouts can contain up to 16 weather/aircraft widgets independently of the camera grid. Add a widget from the layout toolbar, choose a camera anchor or free placement, drag it to position it, and click (or press Enter) to edit it. These widgets belong only to their saved layout; save/apply commits the draft. Removing an anchor camera preserves its widget as free-positioned. Existing per-camera overlays remain supported. Plugin toggles hide widgets and suspend their feed without deleting configuration. Schema 19 retains a before-layout-widgets backup for rollback.
+Layouts can contain up to 64 independent weather/aircraft widgets. Use Add widget once in the toolbar, drag anywhere on the canvas, and click or press Enter to edit. The Widgets panel selects, edits, and removes widgets; Delete removes a focused widget and Undo restores it. Widgets belong only to their saved layout and survive camera removal. Schema 20 migrates existing camera overlays and data tiles to independent widgets, preserving their configuration and placement; a before-independent-widgets backup supports rollback. Plugin toggles hide widgets without deleting configuration.
 
 Aircraft cards offer Compact horizontal, Photo-led, Data-first, and Two-aircraft board arrangements. The board caps display at two aircraft and retains the existing rotation. Photos have slightly rounded corners. Weather and aircraft backgrounds accept a custom color with independent opacity; Use theme background restores the theme default.
 
 Fade transitions have independent 0–5000 ms entrance and exit durations (defaults 200/800 ms). An opaque full-tile aircraft overlay crossfades over the continuously playing camera; translucent backgrounds retain the chosen amount of camera visibility. Refreshes do not restart the transition.
 
 Photo lookup tries Planespotters by aircraft identifier/registration, then the [Airport-Data thumbnail API](https://airport-data.com/api/doc/), then attributed model/airline photos from Wikimedia Commons. Representative images are labelled; availability varies by provider. The shared model mapping expands known codes such as SR22 to Cirrus SR22, and adsbdb manufacturer metadata supplements model names when available.
+
+Photo-enabled cards reserve image and credit space before lookup/download completes. Missing or failed images retain this space to avoid moving flight data. Photo lookups are ordered by request age, with provider-specific error cooldowns so another provider can continue.
+
+If no airline-matched model photo is found, lookup may use a labelled representative photo of the same model in another livery. This improves coverage without presenting a different aircraft type as a match. Photo coverage remains provider-dependent; 99% is a target, not a verified result.
