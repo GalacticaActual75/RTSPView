@@ -18,11 +18,22 @@
 
 .weather-editor summary::after{content:'▸';margin-left:auto}.weather-editor details[open]>summary::after{content:'▾'}.weather-icon{font-family:'Segoe UI Symbol',sans-serif;font-variant-emoji:text}
 
-/* Tall widgets use a vertical reading and distribute selected information through the height. */
-.weather-card:not(.aircraft-card)[data-widget-shape=portrait]{justify-content:space-between;gap:6px}.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-current{flex-direction:column;align-items:inherit;gap:6px}.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-metrics{flex-direction:column;gap:6px}.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-metrics:empty{display:none}
 
-/* Independent landscape widgets use both edges for the main reading. */
-.weather-card:not(.aircraft-card)[data-widget-shape=landscape] .weather-current{justify-content:space-between!important;width:100%;margin-top:auto}
-.weather-card:not(.aircraft-card)[data-widget-shape=landscape] .weather-current strong{font-size:min(calc(var(--weather-font)*2.5),44cqw,42cqh)}
-.weather-card:not(.aircraft-card)[data-widget-shape=landscape] .weather-icon{font-size:min(calc(var(--weather-icon)*1.5),20cqw,30cqh)}
-.weather-card:not(.aircraft-card)[data-widget-shape=landscape]>.weather-credit{margin-top:auto}
+/* Independent widgets keep one reading group, a stable content area and a footer. */
+.weather-card:not(.aircraft-card)[data-widget-shape]{justify-content:center;gap:4px;position:relative}
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-current{flex-direction:row;justify-content:inherit;gap:10px;min-width:0;width:100%}
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-current strong{font-size:calc(var(--weather-font)*2);flex-shrink:0;overflow:visible}
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-icon{font-size:var(--weather-icon);flex-shrink:0}
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-metrics:empty{display:none}
+.weather-card:not(.aircraft-card)[data-widget-shape]>.weather-credit{position:absolute;left:var(--widget-padding);right:var(--widget-padding);bottom:var(--widget-padding);margin:0;line-height:1.25}
+.weather-card:not(.aircraft-card)[data-widget-shape]>.weather-sample{display:none}
+
+.weather-card:not(.aircraft-card)[data-widget-shape=landscape] .weather-current{justify-content:space-between!important}
+.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-current{flex-direction:column;align-items:center;gap:6px}
+
+/* Secondary readings remain readable as the independent card grows. */
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-highlow{font-size:calc(var(--weather-font)*1.1);opacity:.9}
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-condition{font-size:var(--weather-font)}
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-location{font-size:calc(var(--weather-font)*.8)}
+.weather-card:not(.aircraft-card)[data-widget-shape] .weather-metrics,.weather-card:not(.aircraft-card)[data-widget-shape] .weather-clock{font-size:calc(var(--weather-font)*.85)}
+.weather-card:not(.aircraft-card)[data-widget-shape]>.weather-credit{font-size:12px}

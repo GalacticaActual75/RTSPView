@@ -42,3 +42,8 @@
 .layout-widget .widget-resize{position:absolute;width:12px;height:12px;background:#91caff;border:1px solid #172838;border-radius:3px;z-index:30;opacity:0;touch-action:none}.layout-widget:hover .widget-resize,.layout-widget.selected .widget-resize,.layout-widget:focus-within .widget-resize{opacity:1}.widget-resize-nw{left:-6px;top:-6px;cursor:nwse-resize}.widget-resize-ne{right:-6px;top:-6px;cursor:nesw-resize}.widget-resize-sw{left:-6px;bottom:-6px;cursor:nesw-resize}.widget-resize-se{right:-6px;bottom:-6px;cursor:nwse-resize}
 
 .widget-resize-n{left:calc(50% - 6px);top:-6px;cursor:ns-resize}.widget-resize-s{left:calc(50% - 6px);bottom:-6px;cursor:ns-resize}.widget-resize-e{right:-6px;top:calc(50% - 6px);cursor:ew-resize}.widget-resize-w{left:-6px;top:calc(50% - 6px);cursor:ew-resize}
+
+/* Give the aircraft identity priority while reserving a stable photo column. */
+.aircraft-card[data-design=compact] .aircraft-body.has-photo{grid-template-columns:minmax(0,1.63fr) minmax(0,1fr)}
+.aircraft-card .aircraft-body.has-photo:has(>.aircraft-photo[hidden]){grid-template-columns:minmax(0,1fr)}
+.aircraft-card .aircraft-body.has-photo:has(>.aircraft-photo[hidden])>.aircraft-data{grid-column:1/-1}

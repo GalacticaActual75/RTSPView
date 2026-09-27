@@ -20,7 +20,7 @@ internal static class Program
         {
             ProviderSmoke(args).GetAwaiter().GetResult(); return;
         }
-        Backend().GetAwaiter().GetResult();
+        if (!args.Contains("--presentation-only")) Backend().GetAwaiter().GetResult();
         var colored = new AircraftOptions { BackgroundColor = "#123456", BackgroundOpacity = 50 };
         var surface = new Border(); WidgetAppearance.Apply(surface, colored.Appearance);
         Check(((SolidColorBrush)surface.Background).Color == Color.FromArgb(127,18,52,86), "custom widget background retains opacity in Live View");
@@ -106,6 +106,12 @@ internal static class Program
         var wrappedOwner = VisualTexts(aircraft).First(t => t.Text == longOwner);
         Check(wrappedOwner.ActualHeight > wrappedOwner.LineHeight && wrappedOwner.ActualHeight <= wrappedOwner.LineHeight * 2 + 1, "owner names wrap within two lines");
         Check(!Texts(aircraft).Any(t => t.Contains("Unavailable") || t.Contains("N/A")) && Texts(aircraft).Contains("Airline: Japan Airlines") && Texts(aircraft).Contains("Destination (lookup): SEA · Seattle"), "unavailable details are omitted while known airline and destination remain");
+        aircraft.Width=620;aircraft.Height=220;
+        aircraft.Update(options with { ShowPhoto=true, Preset="featured", CardDesign="compact", Fields=["type","airline","destination","altitude","speed","distance","track","verticalRate"] },
+            boardSnapshot with { Aircraft=[boardSnapshot.Aircraft[0] with { Photo=testPhoto, RegisteredOwner="Alaska Airlines", Type="B739", Airline="Alaska Airlines", Destination="SEA · Seattle Tacoma International Airport" }] });root.UpdateLayout();
+        var retainedImage=VisualImages(aircraft).Single();
+        var visibleAncestry=true;for(DependencyObject? node=retainedImage;node is not null;node=VisualTreeHelper.GetParent(node))if(node is UIElement element&&element.Visibility!=Visibility.Visible)visibleAncestry=false;
+        Check(visibleAncestry && retainedImage.Source is not null && retainedImage.ActualHeight>=47 && retainedImage.Visibility==Visibility.Visible,"wide short native card retains its loaded photo after trimming details");
         Directory.CreateDirectory("artifacts/aircraft");
         var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
         using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
@@ -138,6 +144,11 @@ internal static class Program
             var b = AircraftGeometry.Bounds(new() { Aircraft = options with { FontSize = font }, HostCameraSlot = 1 }, width, width / 1.777);
             Check(b.Width >= 0 && b.Height >= 0 && b.Left + b.Width <= width + .001 && b.Top + b.Height <= width / 1.777 + .001, "overlay geometry stays within camera bounds");
         }
+    }
+    private static IEnumerable<System.Windows.Controls.Image> VisualImages(DependencyObject parent)
+    {
+        if(parent is System.Windows.Controls.Image image)yield return image;
+        for(var i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++)foreach(var item in VisualImages(VisualTreeHelper.GetChild(parent,i)))yield return item;
     }
     private static string[] Texts(DependencyObject parent)
     {

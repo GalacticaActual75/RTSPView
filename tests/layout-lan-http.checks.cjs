@@ -43,3 +43,12 @@ context.weatherUi.overlayBounds=()=>({height:200});context.scaled={kind:'weather
 assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),2);
 context.scaled.contentScale=10;assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),2);
 console.log('PASS content fitting depends on current dimensions, never resize history.');
+
+context.weatherUi.overlayBounds=()=>({height:180});context.pixelWidget={kind:'weather',margin:12,weather:{}};context.pixelLayout={outputWidth:1920,outputHeight:1080};
+vm.runInContext('layoutWidgetsUi.setRectangle(pixelWidget,pixelLayout,{left:1588,top:888,width:320,height:180})',context);
+const pixelBounds=vm.runInContext('layoutWidgetsUi.bounds(pixelWidget,pixelLayout,1920,1080)',context);
+for(const [k,v]of Object.entries({left:1588,top:888,width:320,height:180}))assert(Math.abs(pixelBounds[k]-v)<.001,'Exact wall pixel '+k);
+vm.runInContext('layoutWidgetsUi.setRectangle(pixelWidget,pixelLayout,{left:-200,top:9999,width:9999,height:10})',context);
+const clamped=vm.runInContext('layoutWidgetsUi.bounds(pixelWidget,pixelLayout,1920,1080)',context);
+assert.equal(clamped.left,12);assert.equal(clamped.width,1896);assert.equal(clamped.height,96);assert.equal(clamped.top+clamped.height,1068);
+console.log('PASS exact widget pixel placement, safe minima and wall-edge clamping.');

@@ -46,10 +46,18 @@ const aircraftUi = (() => {
       const heading=row.querySelector('.weather-current'),credits=[...photo.children].filter(n=>n!==img).reduce((sum,n)=>sum+n.offsetHeight,0);
       const reserved=(row.querySelector('.aircraft-metrics')?.offsetHeight||0)+(['photo','board'].includes(node.dataset.design)?(row.querySelector('.aircraft-data')?.offsetHeight||0)+8:0);
       const available=node.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom)-(title?.offsetHeight||0)-footer.offsetHeight-heading.offsetHeight-credits-20-reserved;
-      img.style.maxHeight=Math.max(0,Math.min(120,available))+'px';if(available<48){photo.hidden=true;photo.dataset.aircraftHidden='';}
+      img.style.maxHeight=Math.max(32,Math.min(120,available))+'px';
+      const data=row.querySelector('.aircraft-data');
+      if(['compact','data'].includes(node.dataset.design)&&data&&data.offsetWidth<180&&data.offsetHeight>available+credits+1){photo.hidden=true;photo.dataset.aircraftHidden='';}
     }
-    let omitted=false;const optional=[...node.querySelectorAll('.aircraft-metric')];while(node.scrollHeight>node.clientHeight+1&&optional.length){const n=optional.pop();n.hidden=true;n.dataset.aircraftHidden='';omitted=true;}
-    if(rows.length){const details=[...rows[0].querySelectorAll('.aircraft-metric:not(.aircraft-photo)'),...rows[0].querySelectorAll('.aircraft-photo')];while(node.scrollHeight>node.clientHeight+1&&details.length){const n=details.pop();n.hidden=true;n.dataset.aircraftHidden='';omitted=true;}}
+    let omitted=false;const optional=[...node.querySelectorAll('.aircraft-metrics'),...node.querySelectorAll('.aircraft-data .aircraft-metric')];while(node.scrollHeight>node.clientHeight+1&&optional.length){const n=optional.pop();n.hidden=true;n.dataset.aircraftHidden='';omitted=true;}
+    if(rows.length){const details=[...node.querySelectorAll('.aircraft-photo')];while(node.scrollHeight>node.clientHeight+1&&details.length){const n=details.pop();n.hidden=true;n.dataset.aircraftHidden='';omitted=true;}}
+    for(const photo of node.querySelectorAll('.aircraft-photo:not([hidden])')){
+      const img=photo.querySelector('img');if(!img||!photo.offsetWidth)continue;
+      let low=Math.min(parseFloat(img.style.maxHeight)||48,photo.offsetWidth*2/3),high=Math.min(120,photo.offsetWidth*2/3);
+      for(let attempt=0;attempt<8;attempt++){const candidate=(low+high)/2;img.style.maxHeight=candidate+'px';if(node.scrollHeight<=node.clientHeight+1)low=candidate;else high=candidate;}
+      img.style.maxHeight=low+'px';
+    }
     const hiddenFlights=node.querySelectorAll('.aircraft-flight[data-aircraft-hidden]').length;if(hiddenFlights)footer.textContent=hiddenFlights+' more hidden · '+footer.textContent;if(omitted)footer.textContent='Details hidden · '+footer.textContent;node.title=omitted?'Enlarge the aircraft tile or widget to show more details.':'';
   }
   const resize=new ResizeObserver(entries=>entries.forEach(e=>fit(e.target)));
@@ -110,11 +118,11 @@ const aircraftUi = (() => {
     o.maximumAircraft=Math.min(2,o.maximumAircraft);
     const dialog=el('dialog',undefined,'weather-editor aircraft-editor'),form=el('form'),body=el('div',undefined,'weather-editor-body'),left=el('section'),controls=el('section');
     form.append(el('h2',overlay?'Aircraft Widget':'Aircraft tile'),el('p',overlay?'Save & apply updates this camera’s aircraft widget in every layout that shows the camera.':'Use in layout draft changes this draft. Save or apply the layout to persist it.','weather-note'),body);body.append(left,controls);dialog.append(form);
-    const stage=el('div',undefined,'weather-editor-preview'),host=el('div',undefined,'weather-preview-host');left.append(stage);if(placement)stage.style.aspectRatio='16/9';
+    const stage=el('div',undefined,'weather-editor-preview'),host=el('div',undefined,'weather-preview-host');left.append(stage);if(placement)stage.style.aspectRatio=widgetContext?.output?widgetContext.output.width+'/'+widgetContext.output.height:'16/9';
     if(backgroundSlot){const image=el('img');image.alt='Camera snapshot';dashboardUX.snapshot(image,backgroundSlot);stage.append(image);}stage.append(host);
     left.append(el('p','Sample aircraft only demonstrate the design and never trigger camera replacement. Live traffic comes from ADSB.lol; its coverage may differ from Flightradar24. Cards show at most two aircraft and rotate every 20 seconds, nearest first. Small cards omit details that do not fit.','weather-note'));
     const status=el('p','','weather-editor-state');status.setAttribute('role','status');
-    function paintPreview(){host.replaceChildren(preview(o,true));if(placement){const scale=stage.clientWidth/640,b=widgetContext?layoutWidgetsUi.bounds({...placement,aircraft:o},{tiles:[]},640,360):overlayBounds({...placement,aircraft:o},640,360);Object.assign(host.style,{position:'absolute',left:b.left*scale+'px',top:b.top*scale+'px',width:b.width*scale+'px',height:b.height*scale+'px',visibility:placement.enabled?'visible':'hidden'});Object.assign(host.firstElementChild.style,{width:b.width/(widgetContext?layoutWidgetsUi.contentScale({...placement,aircraft:o},b):1)+'px',height:b.height/(widgetContext?layoutWidgetsUi.contentScale({...placement,aircraft:o},b):1)+'px',transformOrigin:'top left',transform:`scale(${scale*(widgetContext?layoutWidgetsUi.contentScale({...placement,aircraft:o},b):1)})`});}}
+    function paintPreview(){host.replaceChildren(preview(o,true));if(placement){const outputWidth=widgetContext?.output?.width||640,outputHeight=widgetContext?.output?.height||360,scale=stage.clientWidth/outputWidth,b=widgetContext?layoutWidgetsUi.bounds({...placement,aircraft:o},{tiles:[]},outputWidth,outputHeight):overlayBounds({...placement,aircraft:o},640,360);Object.assign(host.style,{position:'absolute',left:b.left*scale+'px',top:b.top*scale+'px',width:b.width*scale+'px',height:b.height*scale+'px',visibility:placement.enabled?'visible':'hidden'});Object.assign(host.firstElementChild.style,{width:b.width/(widgetContext?layoutWidgetsUi.contentScale({...placement,aircraft:o},b):1)+'px',height:b.height/(widgetContext?layoutWidgetsUi.contentScale({...placement,aircraft:o},b):1)+'px',transformOrigin:'top left',transform:`scale(${scale*(widgetContext?layoutWidgetsUi.contentScale({...placement,aircraft:o},b):1)})`});}}
     function field(label,control,parent=controls){const n=el('label',label);control.setAttribute('aria-label',label);if(control.type==='checkbox'){n.className='weather-toggle';const track=el('span',undefined,'switch');control.setAttribute('role','switch');track.append(control,el('span'));n.append(track);}else n.append(control);parent.append(n);return control;}
     function button(label,action,parent=controls){const n=el('button',label,'secondary');n.type='button';n.onclick=action;parent.append(n);return n;}
     const inputs={};

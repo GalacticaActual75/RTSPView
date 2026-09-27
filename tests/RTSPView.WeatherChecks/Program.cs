@@ -58,13 +58,29 @@ internal static class Program
             detailed.Width=size.Width;detailed.Height=size.Height;detailed.Measure(size);detailed.Arrange(new Rect(size));detailed.UpdateLayout();
             Check(detailed.DesiredSize.Width<=size.Width+24,"native resize remains bounded "+size);
         }
-        compact.IndependentWidget = true; compact.Width = 530; compact.Height = 350;
-        compact.Update(new() { Preset = "minimal", Fields = ["temperature", "condition", "highLow"] }, data);
-        compact.Measure(new Size(530,350)); compact.Arrange(new Rect(0,0,530,350)); compact.UpdateLayout();
-        var reading = FindText(compact).Single(t => t.Text == "72°F");
-        var readingBounds = reading.TransformToAncestor(compact).TransformBounds(new Rect(reading.RenderSize));
-        Check(readingBounds.Right > 500 && readingBounds.Left > 265, "independent landscape weather uses the right side of the card");
-        Check(reading.FontSize > 36, "independent landscape weather enlarges its main reading");
+        compact.IndependentWidget = true;
+        var matrix = new Canvas { Width = 1100, Height = 900, Background = Brushes.DimGray };
+        var cases = new[] { new Size(180,160), new Size(320,180), new Size(530,350), new Size(180,400), new Size(640,120), new Size(160,96) };
+        for (var index=0; index<cases.Length; index++)
+        {
+            var box=cases[index];
+            var options=new WeatherOptions { Preset="minimal", Fields=["temperature","condition","highLow"], FontSize=24, IconSize=36 };
+            var widget=new WallWidget { Kind="weather", Weather=options, HeightPercent=20 };
+            var scale=widget.ContentScaleFor(box.Width,box.Height);
+            var card=new WeatherView { IndependentWidget=true, Width=box.Width/scale, Height=box.Height/scale, LayoutTransform=new ScaleTransform(scale,scale) };
+            card.Update(options,data with {Temperature=index%3==0?2.77777778:index%3==1?-24.44444444:40.55555556});
+            Canvas.SetLeft(card,index<3?new[]{10d,200,540}[index]:index==3?10:200);Canvas.SetTop(card,index<3?10:index==3?380:index==4?380:520);
+            matrix.Children.Add(card);
+            card.Measure(box);card.Arrange(new Rect(box));card.UpdateLayout();
+            var secondary=FindText(card).Single(t=>t.Text.StartsWith("H "));
+            Check(secondary.FontSize>=options.FontSize,"independent high/low has readable relative size "+box);
+            var main=FindText(card).Single(t=>t.Text is "37°F" or "-12°F" or "105°F");
+            var transformed=main.TransformToAncestor(card).TransformBounds(new Rect(main.RenderSize));
+            Check(transformed.Left>=-.5&&transformed.Right<=card.ActualWidth+.5&&transformed.Top>=-.5&&transformed.Bottom<=card.ActualHeight+.5,"complete independent temperature stays inside "+box);
+        }
+        matrix.Measure(new Size(1100,900));matrix.Arrange(new Rect(0,0,1100,900));matrix.UpdateLayout();
+        var widgetBitmap=new RenderTargetBitmap(1100,900,96,96,PixelFormats.Pbgra32);widgetBitmap.Render(matrix);
+        using(var file=File.Create("artifacts/weather/widget-layout-matrix.png")){var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(widgetBitmap));encoder.Save(file);}
         compact.Update(new() {Location="Not fetched"},null);
         Check(FindText(compact).Any(t=>t.Text=="No weather fetched yet"),"native no-fetch state is explicit");
         Check(WeatherFormatting.Icon(0,false)=="☾" && WeatherFormatting.Icon(0,true)=="☀","native day/night icons");

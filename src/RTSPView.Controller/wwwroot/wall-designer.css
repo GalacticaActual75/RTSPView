@@ -135,3 +135,5 @@
 
 /* Give layout selection its own row; actions must never overlap the picker. */
 body #page-layouts .designer-toolbar{display:flex;flex-direction:column;align-items:stretch!important}body #page-layouts .designer-layout-picker{display:flex;flex-wrap:wrap;align-self:stretch;align-items:end;gap:12px;width:100%;min-width:0}body #page-layouts .designer-layout-tools{display:flex;flex-wrap:wrap;align-items:center}body #page-layouts .designer-actions{width:100%;margin-left:0;min-width:0}body #page-layouts .designer-action-group{min-width:0}
+
+.widget-dimensions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.widget-dimensions label{min-width:0;font-size:12px}.widget-dimensions input{display:block;width:100%;min-width:0;margin-top:5px}.widget-size-presets{display:flex;flex-wrap:wrap;gap:6px}.widget-size-presets button{flex:1;padding:8px;min-width:0}.widget-align{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.widget-align button{min-height:36px;font-size:18px}.designer-widget-panel h4{margin:8px 0 0}

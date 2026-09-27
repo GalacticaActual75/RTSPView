@@ -28,7 +28,7 @@ public sealed record WallWidget
     public double ContentScaleFor(double width, double height)
     {
         if (HeightPercent is null) return 1;
-        var referenceWidth = Kind == "weather" ? Math.Clamp(320 * width / Math.Max(1,height),180,320) : Aircraft!.CardDesign == "board" || Aircraft.Preset == "board" ? 480 : 320;
+        var referenceWidth = Kind == "weather" ? Math.Clamp(320 * width / Math.Max(1,height),180,320) : Aircraft!.CardDesign == "board" || Aircraft.Preset == "board" ? 640 : 400;
         var referenceHeight = Kind == "weather"
             ? WeatherGeometry.Bounds(new WeatherOverlay { Weather = Weather!, WidthPercent = 100, Margin = 0 }, referenceWidth, 10000).Height
             : AircraftGeometry.Bounds(new AircraftOverlay { Aircraft = Aircraft!, WidthPercent = 100, Margin = 0 }, referenceWidth, 10000).Height;

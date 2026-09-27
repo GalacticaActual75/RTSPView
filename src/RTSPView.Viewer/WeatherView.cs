@@ -33,12 +33,13 @@ public sealed class WeatherView : Border
         var foreground = light ? Brushes.Black : Brushes.White;
         var muted = new SolidColorBrush(light ? Color.FromRgb(70, 80, 95) : Color.FromRgb(160, 174, 190));
         var portrait = ActualHeight > ActualWidth * 1.25;
+        Grid? mainReading = null;
         var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition());
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.Children.Add(stack);
-        var credit = new TextBlock { Text = "Open-Meteo.com · CC BY 4.0", FontSize = 10, Foreground = muted, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new(0, 3, 0, 0) };
+        var credit = new TextBlock { Text = "Open-Meteo.com · CC BY 4.0", FontSize = IndependentWidget ? 12 : 10, Foreground = muted, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new(0, 3, 0, 0) };
         Grid.SetRow(credit, 1); content.Children.Add(credit); Child = content;
         var size = Math.Min(o.FontSize, Math.Max(12, (ActualWidth - o.Padding * 2) / 5));
         var width = Math.Max(0, ActualWidth - o.Padding * 2); var height = Math.Max(0, ActualHeight - o.Padding * 2 - 18);
@@ -48,7 +49,7 @@ public sealed class WeatherView : Border
             stack.Children.Add(new TextBlock { Text = text, FontFamily = new("Segoe UI"), FontSize = font, Foreground = secondary ? muted : foreground,
                 TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = o.Alignment switch { "center" => TextAlignment.Center, "right" => TextAlignment.Right, _ => TextAlignment.Left }, Margin = new(0, 1, 0, 1) });
         }
-        if (Has("location")) Text(o.Location, Math.Max(12, size * .6), true);
+        if (Has("location")) Text(o.Location, Math.Max(12, size * (IndependentWidget ? .8 : .6)), true);
         var freshness = s?.Freshness(now) ?? "unavailable";
         // Status belongs in the persistent footer so small cards cannot hide stale data warnings.
         if (freshness is "stale" or "retrying") credit.Text = (freshness == "stale" ? "Outdated" : "Refresh failed") + " · Open-Meteo.com · CC BY 4.0";
@@ -62,23 +63,39 @@ public sealed class WeatherView : Border
                 var row = new StackPanel { Orientation = portrait ? Orientation.Vertical : Orientation.Horizontal, HorizontalAlignment = o.Alignment switch { "center" => HorizontalAlignment.Center, "right" => HorizontalAlignment.Right, _ => HorizontalAlignment.Left } };
                 if (Has("condition")) row.Children.Add(new TextBlock { Text = WeatherFormatting.Icon(s.Code, s.IsDay), FontSize = Math.Min(o.IconSize, Math.Max(14, width * .2)), Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(o.Accent)), Margin = new(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
                 if (Has("temperature")) row.Children.Add(new TextBlock { Text = WeatherFormatting.Temperature(s.Temperature, o.Units) + (o.Units == "imperial" ? "F" : "C"), FontSize = size * 1.5, FontWeight = FontWeights.SemiBold, Foreground = foreground });
-                if (IndependentWidget && !portrait && row.Children.Count > 0)
+                if (IndependentWidget)
                 {
-                    var reading = new Grid(); reading.ColumnDefinitions.Add(new ColumnDefinition()); reading.ColumnDefinitions.Add(new ColumnDefinition());
+                    // Give the reading the remaining width after the icon, and fit the whole
+                    // temperature inside it. No fixed column may crop its sign or leading digits.
+                    var reading = new Grid(); mainReading=reading;
+                    if (portrait) { reading.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); reading.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); }
+                    else { reading.ColumnDefinitions.Add(new ColumnDefinition { Width=GridLength.Auto }); reading.ColumnDefinitions.Add(new ColumnDefinition()); }
                     var parts = row.Children.Cast<TextBlock>().ToArray(); row.Children.Clear();
-                    for (var i = 0; i < parts.Length; i++)
+                    foreach (var part in parts)
                     {
-                        var temperature = parts[i].FontWeight == FontWeights.SemiBold;
-                        parts[i].FontSize = temperature ? Math.Min(o.FontSize * 2.5, Math.Min(ActualWidth * .44, ActualHeight * .42)) : Math.Min(o.IconSize * 1.5, Math.Min(ActualWidth * .2, ActualHeight * .3));
-                        parts[i].HorizontalAlignment = temperature ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-                        Grid.SetColumn(parts[i], temperature ? 1 : 0); reading.Children.Add(parts[i]);
+                        var temperature = part.FontWeight == FontWeights.SemiBold;
+                        part.FontSize = Math.Max(1, temperature ? Math.Min(o.FontSize*2.5,Math.Min(width*.45,height*.5)) : Math.Min(o.IconSize*1.25,Math.Min(width*.25,height*.4)));
+                        part.Margin = new Thickness();
+                        var fit = new Viewbox { Child=part, Stretch=Stretch.Uniform, StretchDirection=StretchDirection.DownOnly,
+                            HorizontalAlignment=portrait?HorizontalAlignment.Center:temperature?HorizontalAlignment.Right:HorizontalAlignment.Left,
+                            VerticalAlignment=VerticalAlignment.Center,
+                            Margin=new Thickness(0,0,!portrait&&!temperature&&parts.Length>1?10:0,portrait&&!temperature?6:0),
+                            MaxWidth=Math.Max(1,width), MaxHeight=Math.Max(1,height*.62) };
+                        if(portrait)Grid.SetRow(fit,temperature?1:0);else Grid.SetColumn(fit,temperature?1:0);
+                        reading.Children.Add(fit);
                     }
-                    stack.Children.Add(reading);
+                    if(!portrait && o.Alignment != "left")
+                    {
+                        reading.ColumnDefinitions[1].Width=GridLength.Auto;
+                        stack.Children.Add(new Viewbox { Child=reading, Stretch=Stretch.Uniform, StretchDirection=StretchDirection.DownOnly,
+                            MaxWidth=Math.Max(1,width), HorizontalAlignment=o.Alignment=="center"?HorizontalAlignment.Center:HorizontalAlignment.Right });
+                    }
+                    else stack.Children.Add(reading);
                 }
                 else stack.Children.Add(row);
             }
-            if (Has("condition") && o.Preset != "minimal") Text(WeatherFormatting.Condition(s.Code), Math.Max(12, size * .65));
-            if (Has("highLow")) Text("H " + WeatherFormatting.Temperature(today?.High, o.Units) + "  L " + WeatherFormatting.Temperature(today?.Low, o.Units), Math.Max(12, size * .6), true);
+            if (Has("condition") && o.Preset != "minimal") Text(WeatherFormatting.Condition(s.Code), Math.Max(12, size * (IndependentWidget ? 1 : .65)));
+            if (Has("highLow")) Text("H " + WeatherFormatting.Temperature(today?.High, o.Units) + "  L " + WeatherFormatting.Temperature(today?.Low, o.Units), Math.Max(12, size * (IndependentWidget ? 1.1 : .6)), true);
             if (height > 0)
             {
                 var metrics = new List<string>();
@@ -88,7 +105,7 @@ public sealed class WeatherView : Border
                 var hour = s.Hourly.FirstOrDefault(h => h.Time <= now && h.Time.AddHours(1) > now);
                 if (Has("precipitation")) metrics.Add("Rain chance " + (hour?.RainChance?.ToString("0") ?? "—") + "%");
                 if (Has("sun")) metrics.Add("Rise " + (today?.Sunrise is { } rise ? WeatherFormatting.LocalTime(rise, s.TimeZone).ToString("HH:mm") : "—") + " · Set " + (today?.Sunset is { } set ? WeatherFormatting.LocalTime(set, s.TimeZone).ToString("HH:mm") : "—"));
-                foreach (var metric in metrics) Text(metric, Math.Max(12, size * .55), true);
+                foreach (var metric in metrics) Text(metric, Math.Max(12, size * (IndependentWidget ? .85 : .55)), true);
             }
             if (width >= 240 && height >= 280 && Has("hourly"))
             {
@@ -105,8 +122,19 @@ public sealed class WeatherView : Border
             }
             if (freshness != "fresh") Text((freshness == "stale" ? "Outdated" : "Refresh failed") + " · " + Math.Max(0, (int)(now - s.FetchedAt).TotalMinutes) + "m ago", 11, true);
         }
-        if (Has("clock")) Text(WeatherFormatting.LocalTime(now, s?.TimeZone ?? (o.TimeZone == "auto" ? "UTC" : o.TimeZone)).ToString("ddd, MMM d · HH:mm"), Math.Max(12, size * .55), true);
+        if (Has("clock")) Text(WeatherFormatting.LocalTime(now, s?.TimeZone ?? (o.TimeZone == "auto" ? "UTC" : o.TimeZone)).ToString("ddd, MMM d · HH:mm"), Math.Max(12, size * (IndependentWidget ? .85 : .55)), true);
         stack.Measure(new System.Windows.Size(width, double.PositiveInfinity));
+        if(IndependentWidget && mainReading is not null)
+        {
+            for(var attempt=0;attempt<3 && stack.DesiredSize.Height>height;attempt++)
+            {
+                var factor=Math.Clamp((height-(stack.DesiredSize.Height-mainReading.DesiredSize.Height)-2)/Math.Max(1,mainReading.DesiredSize.Height),.1,.95);
+                foreach(var label in mainReading.Children.OfType<Viewbox>().Select(v=>v.Child).OfType<TextBlock>())label.FontSize=Math.Max(1,label.FontSize*factor);
+                foreach(var box in mainReading.Children.OfType<Viewbox>())box.InvalidateMeasure();
+                mainReading.InvalidateMeasure();stack.InvalidateMeasure();
+                stack.Measure(new System.Windows.Size(width,double.PositiveInfinity));
+            }
+        }
         while (stack.DesiredSize.Height > height && stack.Children.Count > 1)
         {
             // Remove lowest-priority trailing detail before shrinking the main reading.
@@ -114,7 +142,7 @@ public sealed class WeatherView : Border
             stack.Children.RemoveAt(stack.Children.Count - 1);
             stack.Measure(new System.Windows.Size(width, double.PositiveInfinity));
         }
-        if (portrait && stack.Children.Count > 1)
+        if (portrait && !IndependentWidget && stack.Children.Count > 1)
         {
             var distributed = new Grid(); var children = stack.Children.Cast<UIElement>().ToArray(); stack.Children.Clear();
             for (var i = 0; i < children.Length; i++)

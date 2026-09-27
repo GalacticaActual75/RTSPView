@@ -30,12 +30,32 @@ const weatherUi = (() => {
   function fitDetails(card){
     if(!card.isConnected)return;
     if(card.dataset.widgetShape)card.dataset.widgetShape=card.clientHeight>card.clientWidth*1.25?'portrait':'landscape';
-    const style=getComputedStyle(card),width=card.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),height=card.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom)-18;
+    const style=getComputedStyle(card),width=card.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),height=card.clientHeight-parseFloat(style.paddingTop)-(card.dataset.widgetShape?parseFloat(style.paddingTop):parseFloat(style.paddingBottom))-18;
     for(const child of card.querySelectorAll('[data-weather-omitted]')){child.hidden=false;delete child.dataset.weatherOmitted;}
     let omitted=false;const hide=n=>{n.hidden=true;n.dataset.weatherOmitted='';omitted=true;};
     const hours=card.querySelector('.weather-hours'),days=card.querySelector('.weather-days');
     if(hours){if(width<240||height<280)hide(hours);else [...hours.children].slice(Math.max(2,Math.min(6,Math.floor(width/80)))).forEach(hide);}
     if(days){if(width<240||height<380)hide(days);else [...days.children].slice(Math.max(1,Math.min(5,Math.floor((height-350)/28)))).forEach(hide);}
+    if(card.dataset.widgetShape){
+      const current=card.querySelector('.weather-current'),reading=current?.querySelector('strong'),icon=current?.querySelector('.weather-icon');
+      card.style.setProperty('--widget-padding',style.paddingLeft);
+      card.style.paddingBottom=(parseFloat(style.paddingTop)+18)+'px';
+      if(current){
+        const portrait=card.dataset.widgetShape==='portrait',base=parseFloat(style.getPropertyValue('--weather-font')),iconBase=parseFloat(style.getPropertyValue('--weather-icon'));
+        current.style.setProperty('justify-content',portrait?'center':style.textAlign==='center'?'center':style.textAlign==='right'?'flex-end':'space-between','important');
+        current.style.gap=portrait?'6px':'10px';
+        if(reading)reading.style.fontSize=Math.min(base*2.5,width*.45,height*.5)+'px';
+        if(icon)icon.style.fontSize=Math.min(iconBase*1.25,width*.25,height*.4)+'px';
+        const parts=[...current.children],gap=parts.length>1?10:0;
+        const natural=portrait?Math.max(1,...parts.map(n=>n.scrollWidth)):parts.reduce((sum,n)=>sum+n.scrollWidth,0)+gap;
+        const naturalHeight=portrait?parts.reduce((sum,n)=>sum+n.offsetHeight,0)+6:Math.max(1,...parts.map(n=>n.offsetHeight));
+        const secondary=[...card.children].filter(n=>n!==current&&!n.matches('.weather-credit,.weather-sample')&&getComputedStyle(n).display!=='none');
+        const reserved=secondary.reduce((sum,n)=>sum+n.offsetHeight,0)+4*(secondary.length+1);
+        const scale=Math.min(1,width/Math.max(1,natural),Math.max(1,Math.min(height*.62,height-reserved))/naturalHeight);
+        for(const part of parts)part.style.fontSize=(parseFloat(getComputedStyle(part).fontSize)*scale)+'px';
+        current.style.gap=(gap*scale)+'px';
+      }
+    }
     const credit=card.querySelector('.weather-credit');credit.textContent=credit.dataset.label;
     const children=[...card.children].filter(n=>!n.hidden&&n!==credit);
     while(card.scrollHeight>card.clientHeight+1&&children.length>1)hide(children.pop());
@@ -84,13 +104,13 @@ const weatherUi = (() => {
     let o={...defaults(),...structuredClone(initial)},placement=overlay?structuredClone(overlay):null;
     const dialog=el('dialog',undefined,'weather-editor'),form=el('form'),title=el('h2',overlay?'Weather Widget':'Weather tile');dialog.append(form);form.append(title);form.append(el('p',overlay?'Save & apply updates this camera’s Weather Widget across all standard and automation layouts.':'Use in layout draft changes only this draft. Save or apply the layout to persist it.','weather-note'));if(overlay&&!widgetContext){const used=el('p',usage.length?'Used in: '+usage.join(', '):'Not assigned to a layout. The widget will appear wherever this camera is placed.','weather-note');form.append(used);form.append(el('p','Automation focus positions also show this widget when a rule selects this camera.','weather-note'));}
     const body=el('div',undefined,'weather-editor-body'),left=el('section'),controls=el('section');body.append(left,controls);form.append(body);
-    const stage=el('div',undefined,'weather-editor-preview');if(placement)stage.style.aspectRatio='16/9';left.append(stage);
+    const stage=el('div',undefined,'weather-editor-preview');if(placement)stage.style.aspectRatio=widgetContext?.output?widgetContext.output.width+'/'+widgetContext.output.height:'16/9';left.append(stage);
     if(backgroundSlot){const img=el('img');img.alt='Camera snapshot';dashboardUX.snapshot(img,backgroundSlot);stage.append(img);}
     const previewHost=el('div',undefined,'weather-preview-host');stage.append(previewHost);
     const previewNote=el('p','Preview uses sample weather until this location has been saved and fetched.','weather-note');left.append(previewNote);
     left.append(el('p','Small displays omit details that do not fit. The camera keeps playing behind a widget.','weather-note'));
     const state=el('p','','weather-editor-state');state.setAttribute('role','status');state.tabIndex=-1;
-    function paint(){previewHost.replaceChildren(preview(o,true));if(widgetContext)previewHost.firstElementChild.dataset.widgetShape='landscape';if(placement){previewHost.style.visibility=placement.enabled?'visible':'hidden';previewHost.querySelector('.weather-sample')?.remove();const scale=stage.clientWidth/640,b=widgetContext?layoutWidgetsUi.bounds({...placement,weather:o},{tiles:[]},640,360):overlayBounds({...placement,weather:o},640,360);Object.assign(previewHost.style,{position:'absolute',width:b.width/(widgetContext?layoutWidgetsUi.contentScale({...placement,weather:o},b):1)+'px',height:b.height/(widgetContext?layoutWidgetsUi.contentScale({...placement,weather:o},b):1)+'px',left:b.left*scale+'px',top:b.top*scale+'px',transformOrigin:'top left',transform:'scale('+(scale*(widgetContext?layoutWidgetsUi.contentScale({...placement,weather:o},b):1))+')'});}previewNote.textContent=snapshots.some(s=>s.key===key(o))?'Cached weather preview · '+o.location:'Sample weather preview · save to fetch your location';}
+    function paint(){previewHost.replaceChildren(preview(o,true));if(widgetContext)previewHost.firstElementChild.dataset.widgetShape='landscape';if(placement){previewHost.style.visibility=placement.enabled?'visible':'hidden';previewHost.querySelector('.weather-sample')?.remove();const outputWidth=widgetContext?.output?.width||640,outputHeight=widgetContext?.output?.height||360,scale=stage.clientWidth/outputWidth,b=widgetContext?layoutWidgetsUi.bounds({...placement,weather:o},{tiles:[]},outputWidth,outputHeight):overlayBounds({...placement,weather:o},640,360);Object.assign(previewHost.style,{position:'absolute',width:b.width/(widgetContext?layoutWidgetsUi.contentScale({...placement,weather:o},b):1)+'px',height:b.height/(widgetContext?layoutWidgetsUi.contentScale({...placement,weather:o},b):1)+'px',left:b.left*scale+'px',top:b.top*scale+'px',transformOrigin:'top left',transform:'scale('+(scale*(widgetContext?layoutWidgetsUi.contentScale({...placement,weather:o},b):1))+')'});}previewNote.textContent=snapshots.some(s=>s.key===key(o))?'Cached weather preview · '+o.location:'Sample weather preview · save to fetch your location';}
     const field=(label,input,parent=controls)=>{input.setAttribute('aria-label',label);const wrap=el('label',label);if(input.type==='checkbox'){wrap.className='weather-toggle';const track=el('span',undefined,'switch');input.setAttribute('role','switch');track.append(input,el('span'));wrap.append(track);}else if(input.type==='range'){const output=el('output',input.value),number=el('input');number.type='number';number.min=input.min;number.max=input.max;number.step=input.step||'1';number.value=input.value;number.setAttribute('aria-label',label+' value');input.setAttribute('aria-label',label+' slider');const update=input.oninput;input.oninput=()=>{output.textContent=input.value;number.value=input.value;update?.();};number.oninput=()=>{if(number.value!==''&&number.checkValidity()){input.value=number.value;output.textContent=input.value;update?.();}};wrap.append(output,input,number);}else wrap.append(input);parent.append(wrap);return input;};
     const btn=(label,action,parent=controls)=>{const b=el('button',label,'secondary');b.type='button';b.onclick=action;parent.append(b);return b;};
     const input=(label,name,type='text',parent=controls,min,max)=>{const n=el('input');n.type=type;n.value=o[name]??'';if(min!==undefined)n.min=min;if(max!==undefined)n.max=max;n.oninput=()=>{o[name]=['number','range'].includes(type)?(n.value===''?null:Number(n.value)):n.value;paint();};return field(label,n,parent);};

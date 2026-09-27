@@ -81,9 +81,9 @@ public sealed class AircraftView : Border
                 var body = new Grid { Tag = "body" }; body.ColumnDefinitions.Add(new()); body.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
                 var data = new StackPanel { Tag = "data" }; body.Children.Add(data); group.Children.Add(body);
                 var hasPhoto = o.ShowPhoto && columnWidth >= 220;
-                var dataWidth = hasPhoto ? (columnWidth - 10) / 2 : columnWidth;
+                var dataWidth = hasPhoto ? (columnWidth - 10) * .62 : columnWidth;
                 var identity = new System.Windows.Controls.Primitives.UniformGrid { Columns = 1 };
-                if (o.Fields.Contains("type")) { var model = Text(string.IsNullOrWhiteSpace(a.ModelName) ? "Aircraft type unavailable" : a.ModelName, o.TextSize("type"), true); model.TextWrapping = TextWrapping.Wrap; identity.Children.Add(model); }
+                if (o.Fields.Contains("type")) { var model = Text(string.IsNullOrWhiteSpace(a.ModelName) ? (string.IsNullOrWhiteSpace(a.Type) ? "Aircraft type unavailable" : a.Type) : a.ModelName, o.TextSize("type"), true); model.TextWrapping = TextWrapping.Wrap; identity.Children.Add(model); }
                 if (!string.IsNullOrWhiteSpace(a.Registration)) identity.Children.Add(Text(a.Registration, o.TextSize("registration"), true));
                 data.Children.Add(identity);
                 if (!string.IsNullOrWhiteSpace(a.Callsign) && a.Callsign != a.Registration && !string.IsNullOrWhiteSpace(a.RegisteredOwner)) { var callsign = Text(a.Callsign, o.TextSize("callsign"), true); callsign.Tag = "optional"; data.Children.Add(callsign); }
@@ -144,20 +144,41 @@ public sealed class AircraftView : Border
                     foreach (var row in group.Children.OfType<FrameworkElement>().Skip(2)) { row.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity)); reserved += row.DesiredSize.Height; }
                     if (o.CardDesign is "photo" or "board") { data.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity)); reserved += data.DesiredSize.Height + 8; }
                     var available = Math.Max(0, groupHeight - group.Margin.Top - group.Margin.Bottom - heading.DesiredSize.Height - creditHeight - reserved);
-                    if (available < 48) picture.Visibility = Visibility.Collapsed;
-                    else image.Height = Math.Min(image.Height, available);
-                    if (o.CardDesign is "compact" or "data")
+                    image.MaxHeight = image.Height;
+                    // Keep the photo until the final set of visible text rows is known.
+                    image.Height = Math.Min(image.MaxHeight, Math.Max(32, available));
+                    if (o.CardDesign is "compact" or "data" && groupWidth-picture.Width-10 < 180)
                     {
-                        data.Measure(new System.Windows.Size(Math.Max(1, groupWidth - picture.Width - 10), double.PositiveInfinity));
-                        if (data.DesiredSize.Height > groupHeight - group.Margin.Top - group.Margin.Bottom - heading.DesiredSize.Height - reserved + 1)
-                        { picture.Visibility = Visibility.Collapsed; Grid.SetColumn(data, 0); Grid.SetColumnSpan(data, 2); }
+                        data.Measure(new System.Windows.Size(Math.Max(1,groupWidth-picture.Width-10),double.PositiveInfinity));
+                        if(data.DesiredSize.Height > groupHeight-group.Margin.Top-group.Margin.Bottom-heading.DesiredSize.Height-reserved+1)
+                        { picture.Visibility=Visibility.Collapsed;Grid.SetColumn(data,0);Grid.SetColumnSpan(data,2); }
                     }
                 }
                 group.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity));
-                while (group.DesiredSize.Height > groupHeight + 1 && data.Children.OfType<FrameworkElement>().Concat(group.Children.OfType<FrameworkElement>()).LastOrDefault(n => Equals(n.Tag, "optional")) is { } detail)
+                while (group.DesiredSize.Height > groupHeight + 1 && (data.Children.OfType<FrameworkElement>().LastOrDefault(n => Equals(n.Tag, "optional")) ?? group.Children.OfType<FrameworkElement>().LastOrDefault(n => Equals(n.Tag, "optional"))) is { } detail)
                 {
-                    if (data.Children.Contains(detail)) data.Children.Remove(detail); else group.Children.Remove(detail); data.InvalidateMeasure(); group.InvalidateMeasure();
+                    if (data.Children.Contains(detail)) data.Children.Remove(detail); else group.Children.Remove(detail); data.InvalidateMeasure(); body.InvalidateMeasure(); group.InvalidateMeasure();
                     group.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity)); omitted = true;
+                }
+                if (body.Children.OfType<StackPanel>().FirstOrDefault(n => Equals(n.Tag, "photo") && n.Visibility==Visibility.Visible) is { } fittedPhoto)
+                {
+                    var fittedImage = fittedPhoto.Children.OfType<System.Windows.Controls.Image>().Single();
+                    if (group.DesiredSize.Height > groupHeight + 1)
+                    {
+                        fittedPhoto.Visibility = Visibility.Collapsed; Grid.SetColumn(data,0); Grid.SetColumnSpan(data,2); omitted=true;
+                    }
+                    else
+                    {
+                        var low=fittedImage.Height; var high=fittedImage.MaxHeight;
+                        for(var attempt=0;attempt<8;attempt++)
+                        {
+                            var candidate=(low+high)/2; fittedImage.Height=candidate;
+                            fittedPhoto.InvalidateMeasure();body.InvalidateMeasure();group.InvalidateMeasure();
+                            group.Measure(new System.Windows.Size(groupWidth,double.PositiveInfinity));
+                            if(group.DesiredSize.Height<=groupHeight+1)low=candidate;else high=candidate;
+                        }
+                        fittedImage.Height=low;
+                    }
                 }
                 group.MaxHeight = groupHeight; group.ClipToBounds = true;
             }
