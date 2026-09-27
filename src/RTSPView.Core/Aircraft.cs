@@ -4,6 +4,7 @@ namespace RTSPView.Core;
 
 public sealed record AircraftOptions
 {
+    public string Density { get; init; } = "auto";
     public string Location { get; init; } = "Home";
     public double Latitude { get; init; }
     public double Longitude { get; init; }
@@ -47,6 +48,7 @@ public sealed record AircraftOptions
         FontSize = FontSize, IconSize = IconSize, Padding = Padding, CornerRadius = CornerRadius, Alignment = Alignment };
     public void Validate()
     {
+        WidgetViewport.ValidateDensity(Density);
         Appearance.Validate();
         if (CardDesign is not ("compact" or "photo" or "data" or "board")) throw new InvalidDataException("Choose a supported aircraft card design.");
         if (FadeInMilliseconds is < 0 or > 5000 || FadeOutMilliseconds is < 0 or > 5000) throw new InvalidDataException("Aircraft fades must be between 0 and 5000 milliseconds.");

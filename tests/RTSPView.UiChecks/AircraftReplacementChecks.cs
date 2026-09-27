@@ -114,7 +114,7 @@ internal static class AircraftReplacementChecks
     }
     private static void AssertCallsign(AircraftView view)
     {
-        var label = Descendants(view).OfType<TextBlock>().SingleOrDefault(t => t.Text == "Example Airlines" && t.FontWeight == FontWeights.SemiBold);
+        var label = Descendants(view).OfType<TextBlock>().SingleOrDefault(t => t.Text == "TEST27" && t.FontWeight == FontWeights.SemiBold);
         if (label is null || !label.IsVisible || label.ActualWidth < 10 || label.ActualHeight < 10)
             throw new Exception("Aircraft replacement has no visibly laid-out callsign");
         var bounds = label.TransformToAncestor(view).TransformBounds(new Rect(label.RenderSize));

@@ -19,21 +19,28 @@
 .weather-editor summary::after{content:'▸';margin-left:auto}.weather-editor details[open]>summary::after{content:'▾'}.weather-icon{font-family:'Segoe UI Symbol',sans-serif;font-variant-emoji:text}
 
 
-/* Independent widgets keep one reading group, a stable content area and a footer. */
-.weather-card:not(.aircraft-card)[data-widget-shape]{justify-content:center;gap:4px;position:relative}
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-current{flex-direction:row;justify-content:inherit;gap:10px;min-width:0;width:100%}
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-current strong{font-size:calc(var(--weather-font)*2);flex-shrink:0;overflow:visible}
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-icon{font-size:var(--weather-icon);flex-shrink:0}
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-metrics:empty{display:none}
-.weather-card:not(.aircraft-card)[data-widget-shape]>.weather-credit{position:absolute;left:var(--widget-padding);right:var(--widget-padding);bottom:var(--widget-padding);margin:0;line-height:1.25}
-.weather-card:not(.aircraft-card)[data-widget-shape]>.weather-sample{display:none}
+/* Shared responsive flow: measured rows, readable type, no reference-canvas scaling. */
+.weather-card[data-responsive]{gap:3px;justify-content:center;min-height:0;line-height:1.25}
+.weather-card[data-responsive]>*,.weather-card[data-responsive] .aircraft-flight>*{flex-shrink:0;min-width:0}
+.weather-card[data-responsive] .weather-current{flex-direction:row;gap:8px}
+.weather-card[data-responsive] .weather-current strong{font-size:var(--weather-font);white-space:normal;overflow-wrap:anywhere}
+.weather-card[data-responsive] .weather-location,.weather-card[data-responsive] .weather-highlow,.weather-card[data-responsive] .weather-condition,.weather-card[data-responsive] .weather-clock,.weather-card[data-responsive] .weather-metrics,.weather-card[data-responsive] .weather-hours,.weather-card[data-responsive] .weather-days{font-size:var(--weather-font);white-space:normal;overflow-wrap:anywhere;line-height:1.25;margin:0}
+.weather-card[data-responsive]>.weather-credit{position:static;margin:0;padding:0;line-height:1.25;white-space:normal;overflow-wrap:anywhere;text-decoration:none}
+.weather-card[data-responsive] [hidden]{display:none!important}
+.weather-card[data-responsive] .weather-condition{color:var(--weather-accent)}
+.widget-wall-context{position:absolute;inset:0;background:#080d13}
+.widget-context-cell{position:absolute;overflow:hidden;display:grid;place-items:center;font-size:10px;color:#a6b5c4;border:1px solid #273746}
+.widget-context-cell img{position:absolute;width:100%;height:100%}
+.weather-editor-preview .weather-preview-host{z-index:1}
 
-.weather-card:not(.aircraft-card)[data-widget-shape=landscape] .weather-current{justify-content:space-between!important}
-.weather-card:not(.aircraft-card)[data-widget-shape=portrait] .weather-current{flex-direction:column;align-items:center;gap:6px}
+/* Wide weather cards use both halves of their available area. */
+.weather-card[data-composition="columns"]{display:grid;grid-template-columns:1fr 1fr;column-gap:4%;align-items:stretch}
+.weather-primary,.weather-secondary{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;min-height:0}
+.weather-primary>*,.weather-secondary>*{flex-shrink:0;min-width:0}
+.weather-card[data-composition="columns"] .weather-primary{align-items:center;text-align:center}
+.weather-card[data-composition="columns"] .weather-current{justify-content:center!important}
+.weather-card[data-composition="columns"] .weather-location{font-size:calc(var(--weather-font)*1.35);font-weight:600}
+.weather-card[data-responsive] .weather-credit{position:static;margin:0;padding:0;line-height:1.25;white-space:normal;overflow-wrap:anywhere;text-decoration:none}
 
-/* Secondary readings remain readable as the independent card grows. */
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-highlow{font-size:calc(var(--weather-font)*1.1);opacity:.9}
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-condition{font-size:var(--weather-font)}
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-location{font-size:calc(var(--weather-font)*.8)}
-.weather-card:not(.aircraft-card)[data-widget-shape] .weather-metrics,.weather-card:not(.aircraft-card)[data-widget-shape] .weather-clock{font-size:calc(var(--weather-font)*.85)}
-.weather-card:not(.aircraft-card)[data-widget-shape]>.weather-credit{font-size:12px}
+.weather-card[data-composition="columns"] .weather-current{width:100%}
+.weather-card[data-composition="columns"] .weather-current strong{min-width:0}

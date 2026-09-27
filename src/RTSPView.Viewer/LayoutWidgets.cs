@@ -57,8 +57,8 @@ public partial class MainWindow
             var id = EffectiveLayout.Id + "/" + widget.Kind + "/" + widget.Id;
             if (!_layoutWidgets.TryGetValue(id, out var view)) { view = widget.Kind == "weather" ? new WeatherView { IndependentWidget = true } : new AircraftView(); _layoutWidgets[id] = view; LayoutWidgetLayer.Children.Add(view); }
             var scale = LayoutWidgetLayer.ActualWidth / EffectiveLayout.EffectiveWidth;
-            var bounds = widget.Bounds(EffectiveLayout.EffectiveWidth, EffectiveLayout.EffectiveHeight);
-            var contentScale = widget.ContentScaleFor(bounds.Width,bounds.Height);
+            var bounds = widget.Bounds(EffectiveLayout);
+            var contentScale = 1d;
             view.Width = bounds.Width / contentScale; view.Height = bounds.Height / contentScale;
             view.LayoutTransform = new System.Windows.Media.ScaleTransform(scale * contentScale,scale * contentScale);
             Canvas.SetLeft(view, bounds.Left * scale); Canvas.SetTop(view, bounds.Top * scale);

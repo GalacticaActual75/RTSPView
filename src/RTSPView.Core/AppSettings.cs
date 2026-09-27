@@ -5,7 +5,7 @@ public sealed record AppSettings
     // In-memory freshness token; never exported or included in automation hashes.
     [System.Text.Json.Serialization.JsonIgnore]
     public string? StorageRevision { get; set; }
-    public const int CurrentSchemaVersion = 20;
+    public const int CurrentSchemaVersion = 21;
     // IDs 10–25 remain reserved for existing overlay streams.
     public static readonly int[] MainCameraSlots = [1,2,3,4,5,6,7,8,9,26,27,28,29,30,31,32];
     public IReadOnlyList<WallLayout> Layouts { get; init; } = [new()];

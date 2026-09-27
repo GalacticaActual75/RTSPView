@@ -1,0 +1,31 @@
+namespace RTSPView.Core;
+
+// The presentation contract used by both widget types. Keep browser parity covered by tests.
+public sealed record WidgetViewport(double Width, double Height, double Padding, double Font, double Heading, double Reading, int DetailLevel, bool Wide)
+{
+    public static WidgetViewport For(double width, double height, string density = "auto")
+    {
+        width = Math.Max(1, width); height = Math.Max(1, height);
+        var padding = Math.Clamp(Math.Min(width, height) * .045, 4, 24);
+        var font = Math.Clamp(Math.Min(width / 22, height / 13), 12, 32);
+        var level = width < 160 || height < 150 ? 0 : width < 420 || height < 260 ? 1 : 2;
+        if (density == "minimal") level = 0;
+        if (density == "standard") level = Math.Min(level, 1);
+        if (density == "detailed" && width >= 160 && height >= 150) level = 2;
+        return new(width, height, padding, font, font * 1.35,
+            Math.Clamp(Math.Min(width * .22, height * .28), 24, 160), level, width > height * 2.2);
+    }
+    public static WidgetViewport WeatherFor(double width, double height, string density = "auto")
+    {
+        var v = For(width, height, density);
+        if (width < 600 || height < 260 || width < height * 1.3) return v with { Wide = false };
+        var font = Math.Clamp(Math.Min(width / 24, height / 12), 12, 72);
+        return v with { Wide = true, Font = font, Heading = font * 1.35,
+            Reading = Math.Clamp(Math.Min(width * .15, height * .4), 24, 320) };
+    }
+    public static void ValidateDensity(string value)
+    {
+        if (value is not ("auto" or "minimal" or "standard" or "detailed"))
+            throw new InvalidDataException("Choose Auto, Minimal, Standard or Detailed information density.");
+    }
+}

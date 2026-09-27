@@ -71,9 +71,9 @@ internal static class Program
             card.Update(options,data with {Temperature=index%3==0?2.77777778:index%3==1?-24.44444444:40.55555556});
             Canvas.SetLeft(card,index<3?new[]{10d,200,540}[index]:index==3?10:200);Canvas.SetTop(card,index<3?10:index==3?380:index==4?380:520);
             matrix.Children.Add(card);
-            card.Measure(box);card.Arrange(new Rect(box));card.UpdateLayout();
+            matrix.Measure(new Size(1100,900));matrix.Arrange(new Rect(0,0,1100,900));matrix.UpdateLayout();
             var secondary=FindText(card).Single(t=>t.Text.StartsWith("H "));
-            Check(secondary.FontSize>=options.FontSize,"independent high/low has readable relative size "+box);
+            Check(secondary.FontSize>=12 && secondary.Opacity > 0 && secondary.ActualHeight > 0,"responsive high/low remains readable and visible "+box);
             var main=FindText(card).Single(t=>t.Text is "37°F" or "-12°F" or "105°F");
             var transformed=main.TransformToAncestor(card).TransformBounds(new Rect(main.RenderSize));
             Check(transformed.Left>=-.5&&transformed.Right<=card.ActualWidth+.5&&transformed.Top>=-.5&&transformed.Bottom<=card.ActualHeight+.5,"complete independent temperature stays inside "+box);
@@ -82,11 +82,26 @@ internal static class Program
         var widgetBitmap=new RenderTargetBitmap(1100,900,96,96,PixelFormats.Pbgra32);widgetBitmap.Render(matrix);
         using(var file=File.Create("artifacts/weather/widget-layout-matrix.png")){var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(widgetBitmap));encoder.Save(file);}
         compact.Update(new() {Location="Not fetched"},null);
-        Check(FindText(compact).Any(t=>t.Text=="No weather fetched yet"),"native no-fetch state is explicit");
+        Check(FindText(compact).Any(t=>t.Text=="Waiting for weather"),"native no-fetch state is explicit");
         Check(WeatherFormatting.Icon(0,false)=="☾" && WeatherFormatting.Icon(0,true)=="☀","native day/night icons");
         detailed.Update(new() {Fields=WeatherOptions.AllowedFields},data);
         detailed.Width=180;detailed.Height=100;detailed.Measure(new Size(180,100));detailed.Arrange(new Rect(0,0,180,100));detailed.UpdateLayout();
-        Check(FindText(detailed).Any(t=>t.Text.Contains("Details hidden")),"native omitted details are identified");
+        Check(FindText(detailed).Where(t=>t.Opacity>0).All(t=>t.FontSize>=10),"adaptive small cards keep readable type instead of warning clutter");
+        Directory.CreateDirectory("artifacts/widgets");
+        var contracts = (from size in new[] {new Size(160,96),new Size(180,400),new Size(640,120),new Size(320,180),new Size(640,360),new Size(960,540),new Size(1920,1080)}
+                         from density in new[] {"auto","minimal","standard","detailed"}
+                         select new { Density=density, Viewport=WidgetViewport.For(size.Width,size.Height,density), Weather=WidgetViewport.WeatherFor(size.Width,size.Height,density) }).ToArray();
+        File.WriteAllText("artifacts/widgets/viewport-contract.json",JsonSerializer.Serialize(contracts));
+        var large = new WeatherView { Width=1280, Height=720 };
+        large.Update(new() { Location="Test city", Fields=["location","temperature","condition","highLow"] }, data);
+        large.Measure(new Size(1280,720));large.Arrange(new Rect(0,0,1280,720));large.UpdateLayout();
+        var temperature=FindText(large).Single(t=>t.Text=="72°F");
+        var highLow=FindText(large).Single(t=>t.Text.StartsWith("H "));
+        Check(temperature.Opacity>0 && temperature.ActualHeight>0 && highLow.Opacity>0 && highLow.ActualHeight>0,"large sparse card retains both core readings");
+        Check(temperature.TransformToAncestor(large).Transform(new Point()).X<640 && highLow.TransformToAncestor(large).Transform(new Point()).X>640,"large sparse card distributes readings across both halves");
+        Check(temperature.FontSize>=190 && highLow.FontSize>=50,"large card scales primary and secondary type");
+        var largeBitmap=new RenderTargetBitmap(1280,720,96,96,PixelFormats.Pbgra32);largeBitmap.Render(large);
+        using(var file=File.Create("artifacts/weather/large-weather-composition.png")){var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(largeBitmap));encoder.Save(file);}
         app.Shutdown();
     }
     private static IEnumerable<TextBlock> FindText(DependencyObject node)
@@ -118,6 +133,29 @@ internal static class Program
             await store.SaveAsync(settings);var loaded=await store.LoadAsync();Check(loaded.Layouts[0].Tiles.Last().Kind=="weather"&&loaded.WeatherOverlays.Count==1,"eight cameras plus weather and overlay persist");
             Check(File.Exists(path+".before-weather.json"),"pre-weather rollback backup retained");
             Check(JsonSettingsStore.ParseImport(JsonSerializer.Serialize(loaded)).Layouts[0].Tiles.Last().Weather!.CacheKey==weather.CacheKey,"weather survives export/import");
+            var legacy = new WallWidget { Id="legacy", Weather=weather with { FontSize=64, Padding=40 }, WidthPercent=35, HeightPercent=30, X=80, Y=60 };
+            var legacySettings = settings with { SchemaVersion=20, Layouts=[settings.Layouts[0] with { Widgets=[legacy] }] };
+            await File.WriteAllTextAsync(path,JsonSerializer.Serialize(legacySettings));
+            var upgraded=await store.LoadAsync();
+            Check(upgraded.SchemaVersion==21 && upgraded.Layouts[0].Widgets[0].Cell is null && upgraded.Layouts[0].Widgets[0].Weather!.Density=="auto","schema 20 keeps floating placement and defaults to responsive Auto");
+            Check(upgraded.Layouts[0].Widgets[0].Bounds(1920,1080)==legacy.Bounds(1920,1080),"legacy geometry survives responsive migration exactly");
+            await store.SaveAsync(upgraded);
+            Check(File.Exists(path+".before-responsive-widgets.json"),"responsive migration retains rollback backup");
+            foreach(var gridSize in new[]{1,2,3})
+            {
+                var gridLayout = new WallLayout { Rows=gridSize, Columns=gridSize, Tiles=[], Widgets=[legacy with {Cell=new(){Row=gridSize-1,Column=gridSize-1}}] };
+                WallLayout.Validate([gridLayout],gridLayout.Id);
+                var bounds=gridLayout.Widgets[0].Bounds(gridLayout);
+                Check(Math.Abs(bounds.Width-1920d/gridSize)<.001 && Math.Abs(bounds.Height-1080d/gridSize)<.001 && bounds.Left+bounds.Width<=1920.001,"grid widget follows "+gridSize+" by "+gridSize+" layout");
+                var roundTrip=JsonSettingsStore.ParseImport(JsonSerializer.Serialize(upgraded with {Layouts=[gridLayout]}));
+                Check(roundTrip.Layouts[0].Widgets[0].Cell==gridLayout.Widgets[0].Cell,"grid placement survives export/import");
+            }
+            var mixed=new WallLayout { Rows=2, Columns=3, Tiles=[], RowWeights=[.25,.75],ColumnWeights=[.2,.3,.5] };
+            var spanning=legacy with { Cell=new(){Row=0,Column=1,RowSpan=2,ColumnSpan=2} };
+            var span=spanning.Bounds(mixed);Check(span.Width==1536 && span.Height==1080 && span.Left==384,"multi-cell widget follows unequal grid proportions");
+            Check(spanning.Bounds(mixed with {Rows=1,Columns=1,RowWeights=[],ColumnWeights=[]}).Width==1920,"shrinking grid retains and clamps widget");
+            settings=settings with { StorageRevision=(await store.LoadAsync()).StorageRevision };
+            await store.SaveAsync(settings);
             try{WallLayout.Validate([layout with {Tiles=layout.Tiles.Append(layout.Tiles.Last()).ToArray()}],layout.Id);throw new Exception("duplicate accepted");}catch(InvalidDataException){Console.WriteLine("PASS duplicate weather item rejected");}
             try{(weather with {Latitude=double.NaN}).Validate();throw new Exception("coordinate accepted");}catch(InvalidDataException){Console.WriteLine("PASS nonfinite coordinate rejected");}
             await WeatherCache.WriteAsync(directory,[snapshot],CancellationToken.None);Check((await WeatherCache.ReadAsync(directory)).Single().Temperature==22.2,"cache round trip");

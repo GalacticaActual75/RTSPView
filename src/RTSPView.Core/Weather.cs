@@ -4,6 +4,7 @@ namespace RTSPView.Core;
 
 public sealed record WeatherOptions
 {
+    public string Density { get; init; } = "auto";
     public string Location { get; init; } = "Home";
     public double Latitude { get; init; }
     public double Longitude { get; init; }
@@ -24,6 +25,7 @@ public sealed record WeatherOptions
     public string CacheKey => Latitude.ToString("F4", CultureInfo.InvariantCulture) + "," + Longitude.ToString("F4", CultureInfo.InvariantCulture);
     public void Validate()
     {
+        WidgetViewport.ValidateDensity(Density);
         if (string.IsNullOrWhiteSpace(Location) || Location.Length > 80 || !double.IsFinite(Latitude) || !double.IsFinite(Longitude) || Latitude is < -90 or > 90 || Longitude is < -180 or > 180 ||
             TimeZone is null || TimeZone.Length > 100 || Preset is not ("minimal" or "compact" or "overlay" or "detailed" or "forecast" or "dashboard") || Units is not ("metric" or "imperial") ||
             Theme is not ("auto" or "dark" or "light") || Alignment is not ("left" or "center" or "right") ||

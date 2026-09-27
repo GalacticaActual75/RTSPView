@@ -40,9 +40,9 @@ assert.equal(tall.widthPercent,400/1920*100);assert.equal(tall.heightPercent,300
 console.log('PASS unlocked corner resize and independent edge resizing.');
 
 context.weatherUi.overlayBounds=()=>({height:200});context.scaled={kind:'weather',heightPercent:50,contentScale:.05};
-assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),2);
-context.scaled.contentScale=10;assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),2);
-console.log('PASS content fitting depends on current dimensions, never resize history.');
+assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),1);
+context.scaled.contentScale=10;assert.equal(vm.runInContext('layoutWidgetsUi.contentScale(scaled,{width:640,height:400})',context),1);
+console.log('PASS responsive layout uses tile dimensions and ignores legacy content scaling.');
 
 context.weatherUi.overlayBounds=()=>({height:180});context.pixelWidget={kind:'weather',margin:12,weather:{}};context.pixelLayout={outputWidth:1920,outputHeight:1080};
 vm.runInContext('layoutWidgetsUi.setRectangle(pixelWidget,pixelLayout,{left:1588,top:888,width:320,height:180})',context);
