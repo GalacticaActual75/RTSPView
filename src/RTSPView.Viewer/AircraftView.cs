@@ -60,7 +60,7 @@ public sealed class AircraftView : Border
             foreach (var aircraft in selected)
             {
                 var reserved = (o.ShowHeading && viewport.DetailLevel > 0 ? viewport.Font * 1.25 + 3 : 0) + 10 * 1.25 + 6;
-                var column = new WidgetFlow { MaxHeight = Math.Max(1, ActualHeight - viewport.Padding * 2 - reserved), Margin = new Thickness(0, 0, selected.Length > 1 ? 8 : 0, 0) };
+                var column = new WidgetFlow { AlignTop = selected.Length > 1, MaxHeight = Math.Max(1, ActualHeight - viewport.Padding * 2 - reserved), Margin = new Thickness(0, 0, selected.Length > 1 ? 8 : 0, 0) };
                 var flight = new Grid(); board.Children.Add(flight); flight.Children.Add(column);
                 void Detail(string value, double size, int priority) => column.Add(WidgetFlow.Text(value, size, appearance), priority);
                 var identity = WidgetFlow.Text(aircraft.Label, viewport.Heading, appearance);

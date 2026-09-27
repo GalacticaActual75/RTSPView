@@ -11,6 +11,7 @@ public sealed class WidgetFlow : System.Windows.Controls.Panel
     private readonly Dictionary<UIElement, int> _priority = [];
     private readonly List<UIElement> _visible = [];
     public double Gap { get; init; } = 3;
+    public bool AlignTop { get; init; }
     public void Add(UIElement child, int priority) { Children.Add(child); _priority[child] = priority; }
     protected override System.Windows.Size MeasureOverride(System.Windows.Size available)
     {
@@ -27,7 +28,7 @@ public sealed class WidgetFlow : System.Windows.Controls.Panel
     protected override System.Windows.Size ArrangeOverride(System.Windows.Size final)
     {
         var height = _visible.Sum(c => c.DesiredSize.Height) + Math.Max(0, _visible.Count - 1) * Gap;
-        var y = Math.Max(0, (final.Height - height) / 2);
+        var y = AlignTop ? 0 : Math.Max(0, (final.Height - height) / 2);
         foreach (UIElement child in Children)
         {
             if (!_visible.Contains(child)) { child.Arrange(new Rect(0, 0, 0, 0)); child.Opacity = 0; continue; }

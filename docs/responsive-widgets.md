@@ -73,3 +73,5 @@ Validate on MAIN-CAM-MONITOR after an explicitly authorized install: real stream
 The sparse 1280×720 weather regression also checks that the temperature and high/low occupy opposite halves, remain visible, and scale their typography. The browser fixture includes Sparse weather and 1280×720 alongside its other sizes. Visual proof: `artifacts/widgets/weather-editor-balanced.png`; native proof: `artifacts/weather/large-weather-composition.png`.
 
 Aircraft headings can be disabled per widget with Show location heading. The renderer removes the heading and its height reservation; existing settings default to showing it. Regression checks cover visibility, image area, rounded image clipping, fixed 10px credits, settings round-trip and reclaimed heading space.
+
+Two-flight boards align their text columns at the top in both renderers, including when only one aircraft has a loaded photo. Native regression cases cover either photo-bearing column and both heading settings.

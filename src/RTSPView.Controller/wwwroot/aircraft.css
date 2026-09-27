@@ -38,3 +38,5 @@
 .aircraft-flight[data-photo-layout] .aircraft-photo img{display:block}
 
 .aircraft-flight[data-photo-layout] .aircraft-photo img{margin:0 auto;max-width:100%;border-radius:12px}
+
+.aircraft-flights[data-columns="2"] .aircraft-readings{justify-content:flex-start}

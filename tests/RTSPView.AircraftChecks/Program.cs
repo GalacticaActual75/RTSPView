@@ -105,6 +105,20 @@ internal static class Program
             if(box.Width<600||box.Height<240)Check(!text.Any(t=>t.Text=="ASA456"),"small board rotates one aircraft " + box);
             else Check(text.Any(t=>t.Text=="ASA456"),"large board shows two aircraft " + box);
         }
+        foreach (var photoOnFirst in new[] { true, false })
+        foreach (var showHeading in new[] { true, false })
+        {
+            var mixedBoard = new AircraftView {Width=960,Height=540};
+            mixedBoard.Update(options with { CardDesign="board",ShowHeading=showHeading,Fields=["altitude","type"] },snapshot with {Aircraft=[
+                snapshot.Aircraft[0] with {Photo=photoOnFirst?testPhoto:null,Type="C182"},
+                snapshot.Aircraft[1] with {Photo=photoOnFirst?null:testPhoto,Type="Naval Aircraft Factory N3N-3"}]});
+            mixedBoard.Measure(new Size(960,540));mixedBoard.Arrange(new Rect(0,0,960,540));mixedBoard.UpdateLayout();
+            var identifiers=VisualTexts(mixedBoard).Where(t=>t.Text is "UAL123" or "ASA456").ToArray();
+            var heights=identifiers.Select(t=>t.TransformToAncestor(mixedBoard).Transform(new Point()).Y).ToArray();
+            Check(heights.Length==2&&Math.Abs(heights[0]-heights[1])<.5,"two-flight identifiers align with mixed photo availability");
+            var altitudes=VisualTexts(mixedBoard).Where(t=>t.Text.StartsWith("ALT ")).Select(t=>t.TransformToAncestor(mixedBoard).Transform(new Point()).Y).ToArray();
+            Check(altitudes.Length==2&&Math.Abs(altitudes[0]-altitudes[1])<.5,"two-flight altitude rows align with unequal text lengths");
+        }
         var headingCard = new AircraftView { Width=320, Height=180 };
         void Heading(bool show)
         {
