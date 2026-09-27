@@ -90,7 +90,7 @@ internal static class Program
         Directory.CreateDirectory("artifacts/widgets");
         var contracts = (from size in new[] {new Size(160,96),new Size(180,400),new Size(640,120),new Size(320,180),new Size(640,360),new Size(960,540),new Size(1920,1080)}
                          from density in new[] {"auto","minimal","standard","detailed"}
-                         select new { Density=density, Viewport=WidgetViewport.For(size.Width,size.Height,density), Weather=WidgetViewport.WeatherFor(size.Width,size.Height,density) }).ToArray();
+                         select new { Density=density, Viewport=WidgetViewport.For(size.Width,size.Height,density), Weather=WidgetViewport.WeatherFor(size.Width,size.Height,density), Photo=AircraftPhotoViewport.For(size.Width,size.Height), PhotoEmphasis=AircraftPhotoViewport.For(size.Width,size.Height,true) }).ToArray();
         File.WriteAllText("artifacts/widgets/viewport-contract.json",JsonSerializer.Serialize(contracts));
         var large = new WeatherView { Width=1280, Height=720 };
         large.Update(new() { Location="Test city", Fields=["location","temperature","condition","highLow"] }, data);

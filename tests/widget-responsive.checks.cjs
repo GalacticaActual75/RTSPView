@@ -4,6 +4,7 @@ for(const file of ['widget-responsive.js','weather.js','wall-proportions.js','wa
 const view=vm.runInContext('widgetViewport',context),widgets=vm.runInContext('layoutWidgetsUi',context);
 for(const record of JSON.parse(fs.readFileSync('artifacts/widgets/viewport-contract.json','utf8'))){
  for(const [key,value] of Object.entries(record.Weather)){const actual=view.weatherMeasure(record.Weather.Width,record.Weather.Height,record.Density)[key[0].toLowerCase()+key.slice(1)];if(typeof value==='number')assert(Math.abs(actual-value)<1e-8,key+' weather parity');else assert.equal(actual,value);}
+ for(const emphasis of [false,true])for(const [key,value] of Object.entries(emphasis?record.PhotoEmphasis:record.Photo)){const actual=view.aircraftPhoto(record.Viewport.Width,record.Viewport.Height,emphasis)[key[0].toLowerCase()+key.slice(1)];if(typeof value==='number')assert(Math.abs(actual-value)<1e-8,key+' photo parity');else assert.equal(actual,value);}
  const native=record.Viewport,browser=view.measure(native.Width,native.Height,record.Density);
  for(const [key,value]of Object.entries(native)){const actual=browser[key[0].toLowerCase()+key.slice(1)];if(typeof value==='number')assert(Math.abs(actual-value)<1e-8,key+' parity');else assert.equal(actual,value);}
  assert(browser.font>=12&&browser.font<=32);assert(browser.reading>=24);assert(browser.padding<=24);

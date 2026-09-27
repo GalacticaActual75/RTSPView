@@ -19,6 +19,7 @@ public sealed record AircraftOptions
     public bool FadeEnabled { get; init; }
     public int FadeInMilliseconds { get; init; } = 200;
     public int FadeOutMilliseconds { get; init; } = 800;
+    public bool ShowHeading { get; init; } = true;
     public bool ShowPhoto { get; init; } = true;
     public string CardDesign { get; init; } = "compact";
     public string Theme { get; init; } = "auto";

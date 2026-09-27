@@ -29,3 +29,18 @@ public sealed record WidgetViewport(double Width, double Height, double Padding,
             throw new InvalidDataException("Choose Auto, Minimal, Standard or Detailed information density.");
     }
 }
+
+// Photo space is independent of optional text rows and information density.
+public sealed record AircraftPhotoViewport(bool Visible, bool Columns, double TextWidth, double TextHeight, double PhotoWidth, double PhotoHeight)
+{
+    public static AircraftPhotoViewport For(double width, double height, bool emphasis = false)
+    {
+        var columns = width >= 280 && height >= 90;
+        var visible = columns || width >= 160 && height >= 220;
+        var fraction = emphasis ? .5 : .44;
+        var photoWidth = columns ? (width - 8) * fraction : width;
+        var photoHeight = columns ? height : (height - 8) * fraction;
+        return new(visible, columns, columns ? width - 8 - photoWidth : width,
+            columns ? height : height - 8 - photoHeight, photoWidth, photoHeight);
+    }
+}

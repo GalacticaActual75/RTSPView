@@ -27,5 +27,10 @@ const widgetViewport = (() => {
     while(nodes.length&&total()>height+.5){const n=nodes.reduce((a,b)=>rank(a)<=rank(b)?a:b);n.hidden=true;n.dataset.responsiveHidden='';nodes.splice(nodes.indexOf(n),1);}
   }
   function reset(node){for(const n of node.querySelectorAll('[data-responsive-hidden]')){n.hidden=false;delete n.dataset.responsiveHidden;}}
-  return {measure,weatherMeasure,apply,fitRows,reset};
+  function aircraftPhoto(width,height,emphasis=false){
+    const columns=width>=280&&height>=90,visible=columns||width>=160&&height>=220,fraction=emphasis?.5:.44;
+    const photoWidth=columns?(width-8)*fraction:width,photoHeight=columns?height:(height-8)*fraction;
+    return {visible,columns,textWidth:columns?width-8-photoWidth:width,textHeight:columns?height:height-8-photoHeight,photoWidth,photoHeight};
+  }
+  return {measure,weatherMeasure,aircraftPhoto,apply,fitRows,reset};
 })();

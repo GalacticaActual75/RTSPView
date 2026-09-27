@@ -5,7 +5,7 @@ const aircraftUi = (() => {
   const textSize=(o,key)=>o.textSizes?.[key]??(key==='owner'?o.fontSize*(o.preset==='board'?1:1.5):['photoCredit','footer'].includes(key)?10:Math.max(12,o.fontSize*(key==='status'?.65:.6)));
   const balancedTextSizes=()=>({location:12,owner:20,type:18,registration:14,callsign:14,airline:14,destination:14,altitude:16,speed:16,distance:14,track:14,verticalRate:14,photoCredit:10,footer:10,status:16});
   function sized(n,o,key){n.dataset.aircraftText=key;n.style.fontSize=textSize(o,key)+'px';n.style.lineHeight='1.25';return n;}
-  const defaults = () => ({density:'auto',location:'',latitude:null,longitude:null,radiusMiles:10,minimumAltitudeFeet:null,maximumAltitudeFeet:null,preset:'featured',units:'imperial',maximumAircraft:2,cardDesign:'compact',fadeEnabled:false,fadeInMilliseconds:200,fadeOutMilliseconds:800,textSizes:{},hideWhenEmpty:false,showPhoto:true,
+  const defaults = () => ({density:'auto',location:'',latitude:null,longitude:null,radiusMiles:10,minimumAltitudeFeet:null,maximumAltitudeFeet:null,preset:'featured',units:'imperial',maximumAircraft:2,cardDesign:'compact',fadeEnabled:false,fadeInMilliseconds:200,fadeOutMilliseconds:800,textSizes:{},hideWhenEmpty:false,showHeading:true,showPhoto:true,
     ...Object.fromEntries(['theme','accent','backgroundColor','backgroundOpacity','fontSize','iconSize','padding','cornerRadius','alignment'].map(k=>[k,weatherUi.defaults()[k]])),fields:Object.keys(labels)});
   const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const key=o=>`${Number(o.latitude).toFixed(4)},${Number(o.longitude).toFixed(4)},${Number(o.radiusMiles).toFixed(1)}`;
@@ -46,16 +46,32 @@ const aircraftUi = (() => {
     const v=widgetViewport.apply(node,entry.options);widgetViewport.reset(node);
     for(const photo of node.querySelectorAll('.aircraft-photo'))if(photo.dataset.photoState!=='loaded'){photo.hidden=true;delete photo.dataset.responsiveHidden;}
     const hide=n=>{n.hidden=true;n.dataset.responsiveHidden='';};
-    for(const n of node.querySelectorAll('[data-aircraft-text]'))n.style.fontSize=(n.dataset.aircraftText==='owner'?v.heading:['footer','photoCredit'].includes(n.dataset.aircraftText)?Math.max(10,v.font*.75):v.font)+'px';
-    if(v.detailLevel===0)for(const n of node.querySelectorAll('.weather-location,.aircraft-photo,[data-aircraft-text=type],[data-aircraft-text=registration],[data-aircraft-text=registeredOwner],[data-aircraft-text=callsign],[data-aircraft-text=speed],[data-aircraft-text=track],[data-aircraft-text=verticalRate]'))hide(n);
+    for(const n of node.querySelectorAll('[data-aircraft-text]'))n.style.fontSize=(n.dataset.aircraftText==='owner'?v.heading:['footer','photoCredit'].includes(n.dataset.aircraftText)?10:v.font)+'px';
+    if(v.detailLevel===0)for(const n of node.querySelectorAll('.weather-location,[data-aircraft-text=type],[data-aircraft-text=registration],[data-aircraft-text=registeredOwner],[data-aircraft-text=callsign],[data-aircraft-text=speed],[data-aircraft-text=track],[data-aircraft-text=verticalRate]'))hide(n);
     if(v.detailLevel<2)for(const n of node.querySelectorAll('[data-aircraft-text=airline],[data-aircraft-text=destination]'))hide(n);
     const title=node.querySelector('.weather-location'),footer=node.querySelector('.weather-credit');
     const reserved=(title&&!title.hidden?title.offsetHeight+3:0)+(footer?.offsetHeight||0)+6;
     for(const flight of node.querySelectorAll('.aircraft-flight')){
+      const previous=flight.querySelector('.aircraft-readings');if(previous)previous.replaceWith(...previous.children);
+      flight.style.height='';flight.style.gridTemplateColumns='';flight.style.gridTemplateRows='';delete flight.dataset.photoLayout;
+      const budget=Math.max(0,node.clientHeight-2*v.padding-reserved),picture=flight.querySelector('.aircraft-photo');
+      let textHost=flight,textBudget=budget;
+      if(picture?.dataset.photoState==='loaded'){
+        const layout=widgetViewport.aircraftPhoto(flight.clientWidth,budget,entry.options.cardDesign==='photo');
+        const credit=picture.querySelector('a'),img=picture.querySelector('img');credit.style.fontSize='10px';
+        picture.style.width=layout.photoWidth+'px';
+        const imageHeight=layout.photoHeight-credit.offsetHeight-3;
+        if(layout.visible&&imageHeight>=32){
+          const readings=el('div',undefined,'aircraft-readings');for(const child of [...flight.children])if(child!==picture)readings.append(child);flight.prepend(readings);
+          textHost=readings;textBudget=layout.textHeight;flight.style.height=budget+'px';flight.dataset.photoLayout=layout.columns?'columns':'rows';
+          flight.style.gridTemplateColumns=layout.columns?layout.textWidth+'px 8px '+layout.photoWidth+'px':'minmax(0,1fr)';
+          flight.style.gridTemplateRows=layout.columns?'minmax(0,1fr)':layout.textHeight+'px 8px '+layout.photoHeight+'px';const ratio=img.naturalWidth/Math.max(1,img.naturalHeight),photoWidth=Math.min(layout.photoWidth,imageHeight*ratio);img.style.width=photoWidth+'px';img.style.height=photoWidth/ratio+'px';img.style.borderRadius=Math.max(6,Math.min(18,Math.min(photoWidth,photoWidth/ratio)*.075))+'px';
+        }else hide(picture);
+      }
       // Flatten metric rows so altitude and distance survive optional fields independently.
       const metrics=flight.querySelector('.aircraft-metrics');if(metrics)while(metrics.firstChild)flight.insertBefore(metrics.firstChild,metrics);metrics?.remove();
       const rank=n=>n.matches('.weather-current')?100:n.dataset.aircraftText==='altitude'?95:n.dataset.aircraftText==='distance'?90:n.dataset.aircraftText==='speed'?80:n.dataset.aircraftText==='type'?70:n.dataset.aircraftText==='registration'?65:n.matches('.aircraft-photo')?(entry.options.cardDesign==='photo'?75:45):20;
-      widgetViewport.fitRows(flight,Math.max(0,node.clientHeight-2*v.padding-reserved),rank);
+      widgetViewport.fitRows(textHost,textBudget,rank);
     }
     widgetViewport.fitRows(node,node.clientHeight-2*v.padding,n=>n.matches('.aircraft-flights,.weather-condition')?100:n===footer?95:n===title?35:20);
   }
@@ -87,7 +103,7 @@ const aircraftUi = (() => {
     const oldImages=new Map();for(const img of node.querySelectorAll('.aircraft-photo img')){const url=img.getAttribute('src');if(!oldImages.has(url))oldImages.set(url,[]);oldImages.get(url).push(img);}
     node.replaceChildren();node.dataset.theme=o.theme;node.dataset.preset=o.preset;node.dataset.design=o.cardDesign||'compact';
     weatherUi.applyAppearance(node,o);
-    node.append(sized(el('div',(o.location||'Your location')+' · Nearby aircraft','weather-location'),o,'location'));
+    if(o.showHeading!==false)node.append(sized(el('div',(o.location||'Your location')+' · Nearby aircraft','weather-location'),o,'location'));
     if(state==='unavailable'){node.append(sized(el('div','Aircraft data unavailable','weather-condition'),o,'status'));if(s?.lastError)node.append(sized(el('div',s.lastError,'aircraft-feed-error'),o,'status'));}
     else if(!all.length)node.append(sized(el('div',state==='stale'?'Waiting for fresh positions':'No aircraft nearby','weather-condition'),o,'status'));
     else {
@@ -163,6 +179,7 @@ const aircraftUi = (() => {
     input('Minimum altitude (ft, optional)','minimumAltitudeFeet','number',filters,-2000,100000,true);input('Maximum altitude (ft, optional)','maximumAltitudeFeet','number',filters,-2000,100000,true);
     select('Presentation','cardDesign',[['compact','Responsive flight card'],['photo','Photo emphasis'],['board','Two flights when space allows']]);
     select('Units','units',[['imperial','Feet · knots · miles'],['metric','Meters · km/h · kilometers']]);
+    toggle('Show location heading','showHeading');
     toggle('Show aircraft photo when available','showPhoto');
     const fades=el('details');fades.append(el('summary','Fade transitions'));controls.append(fades);
     toggle('Fade when appearing or disappearing','fadeEnabled',o,fades);

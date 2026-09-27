@@ -61,6 +61,32 @@ internal static class Program
                 if (n is UIElement e && (e.Opacity == 0 || e.Visibility != Visibility.Visible || e.RenderSize.Height <= 0)) return false;
             return true;
         }
+        // Loaded photos must survive ordinary popup sizes, every density and design.
+        {
+            foreach (var density in new[] { "auto", "minimal", "standard", "detailed" })
+            foreach (var design in new[] { "compact", "photo", "board" })
+            foreach (var box in new[] { new Size(320,180), new Size(640,360), new Size(960,540) })
+            {
+                var popupOptions = options with { CardDesign=design, ShowPhoto=true, Density=density };
+                var bounds=AircraftGeometry.Bounds(new() { Aircraft=popupOptions },box.Width,box.Height);
+                foreach (var target in new[] { box, new Size(bounds.Width,bounds.Height) })
+                {
+                    var popup=new AircraftView { Width=target.Width,Height=target.Height };
+                    popup.Update(popupOptions,snapshot with { Aircraft=[snapshot.Aircraft[0] with { Photo=testPhoto }] },overlay:true);
+                    popup.Measure(target);popup.Arrange(new Rect(target));popup.UpdateLayout();
+                    if (target.Width >= 160 && target.Height >= 180)
+                    {
+                        var loaded=VisualImages(popup).Single();
+                        Check(Visible(loaded,popup), $"loaded photo stays visible {design} {density} {target}");
+                        Check(VisualTexts(popup).Where(t=>t.Text.Contains("Photo ©")||t.Text.Contains("ADSB.lol")).All(t=>t.FontSize==10),"photo and ADS-B credits remain small as card grows");
+                        Check(loaded.Clip is RectangleGeometry { RadiusX: >= 6, RadiusY: >= 6 }, "photo itself has rounded corners");
+                        Check(loaded.ActualWidth>=90 && loaded.ActualHeight>=50,"photo gets usable dimensions instead of a tiny thumbnail");
+                        Check(VisualTexts(popup).Any(t=>t.Text.StartsWith("ALT ")&&Visible(t,popup)),"altitude remains visible beside photo");
+                    }
+                    if (args.Contains("--photo-layout-trace")) Console.WriteLine($"PHOTO TRACE design={design} card={target.Width:0}x{target.Height:0} loaded={VisualImages(popup).Count()} visible={VisualImages(popup).Count(i=>Visible(i,popup))} density={WidgetViewport.For(target.Width,target.Height).DetailLevel}");
+                }
+            }
+        }
         foreach (var box in new[] { new Size(160,96), new Size(180,400), new Size(640,120), new Size(320,180), new Size(640,360), new Size(960,540), new Size(1920,1080) })
         foreach (var photo in new AircraftPhoto?[] { null, failedPhoto, pendingPhoto, testPhoto })
         {
@@ -79,6 +105,21 @@ internal static class Program
             if(box.Width<600||box.Height<240)Check(!text.Any(t=>t.Text=="ASA456"),"small board rotates one aircraft " + box);
             else Check(text.Any(t=>t.Text=="ASA456"),"large board shows two aircraft " + box);
         }
+        var headingCard = new AircraftView { Width=320, Height=180 };
+        void Heading(bool show)
+        {
+            headingCard.Update(options with { ShowHeading=show },snapshot with { Aircraft=[snapshot.Aircraft[0] with {Photo=testPhoto}] });
+            headingCard.Measure(new Size(320,180));headingCard.Arrange(new Rect(0,0,320,180));headingCard.UpdateLayout();
+        }
+        Heading(true);
+        var before=VisualTexts(headingCard).Single(t=>t.Text=="UAL123").Parent as FrameworkElement;
+        var beforeHeight=before!.ActualHeight;
+        Heading(false);
+        var after=VisualTexts(headingCard).Single(t=>t.Text=="UAL123").Parent as FrameworkElement;
+        Check(!VisualTexts(headingCard).Any(t=>t.Text.Contains("Nearby aircraft")),"location heading can be removed");
+        Check(after!.ActualHeight>beforeHeight+15,"hidden heading space is reclaimed by flight content");
+        Check(JsonSerializer.Deserialize<AircraftOptions>(JsonSerializer.Serialize(options with {ShowHeading=false}))!.ShowHeading==false,"hidden heading preference survives settings serialization");
+        Check(JsonSerializer.Deserialize<AircraftOptions>("{}")!.ShowHeading,"legacy aircraft cards retain their heading by default");
         aircraft.Width=620;aircraft.Height=420;
         var longCard = new AircraftView { Width=180, Height=160 };
         longCard.Update(options, snapshot with { Aircraft=[snapshot.Aircraft[0] with { Callsign="LONGCALLSIGN123",Type="An unusually long aircraft type description",RegisteredOwner="An unusually long owner name" }] });

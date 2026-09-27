@@ -44,7 +44,7 @@ public sealed class AircraftView : Border
         WidgetAppearance.Apply(this, appearance);
         var flow = new WidgetFlow(); Child = flow;
         void Line(string text, double size, int priority) => flow.Add(WidgetFlow.Text(text, size, appearance), priority);
-        if (viewport.DetailLevel > 0) Line(o.Location + " · Nearby aircraft", viewport.Font, 35);
+        if (o.ShowHeading && viewport.DetailLevel > 0) Line(o.Location + " · Nearby aircraft", viewport.Font, 35);
         if (freshness == "unavailable")
         {
             Line(_snapshot is null ? "Waiting for aircraft" : "Aircraft data unavailable", viewport.Heading, 100);
@@ -59,9 +59,9 @@ public sealed class AircraftView : Border
             flow.Add(board, 100);
             foreach (var aircraft in selected)
             {
-                var reserved = (viewport.DetailLevel > 0 ? viewport.Font * 1.25 + 3 : 0) + Math.Max(10, viewport.Font * .75) * 1.25 + 6;
+                var reserved = (o.ShowHeading && viewport.DetailLevel > 0 ? viewport.Font * 1.25 + 3 : 0) + 10 * 1.25 + 6;
                 var column = new WidgetFlow { MaxHeight = Math.Max(1, ActualHeight - viewport.Padding * 2 - reserved), Margin = new Thickness(0, 0, selected.Length > 1 ? 8 : 0, 0) };
-                board.Children.Add(column);
+                var flight = new Grid(); board.Children.Add(flight); flight.Children.Add(column);
                 void Detail(string value, double size, int priority) => column.Add(WidgetFlow.Text(value, size, appearance), priority);
                 var identity = WidgetFlow.Text(aircraft.Label, viewport.Heading, appearance);
                 identity.FontWeight = FontWeights.SemiBold;
@@ -76,21 +76,56 @@ public sealed class AircraftView : Border
                 }
                 if (viewport.DetailLevel > 1)
                     foreach (var field in new[] { "airline", "destination" }) if (o.Fields.Contains(field) && AircraftSelection.HasDetailValue(field == "airline" ? aircraft.Airline : aircraft.Destination)) Detail(AircraftSelection.Metric(field, aircraft, o), viewport.Font, 20);
-                if (o.ShowPhoto && viewport.DetailLevel > 0 && aircraft.Photo is { IsValid: true } photo)
+                if (o.ShowPhoto && aircraft.Photo is { IsValid: true } photo)
                 {
                     var task = AircraftPhotoImages.Get(photo);
                     if (task.IsCompletedSuccessfully && task.Result is {} bitmap)
                     {
-                        var picture = new StackPanel();
-                        picture.Children.Add(new System.Windows.Controls.Image { Source = bitmap, Height = Math.Clamp(ActualHeight * .22, 48, 260), Stretch = Stretch.Uniform });
-                        picture.Children.Add(WidgetFlow.Text((photo.Representative ? "Representative · " : "") + photo.Credit, Math.Max(10, viewport.Font * .75), appearance));
-                        column.Add(picture, o.CardDesign == "photo" ? 75 : 45);
+                        var width = Math.Max(1, (ActualWidth - viewport.Padding * 2) / selected.Length - (selected.Length > 1 ? 8 : 0));
+                        var height = column.MaxHeight;
+                        var layout = AircraftPhotoViewport.For(width, height, o.CardDesign == "photo");
+                        if (layout.Visible)
+                        {
+                            var credit = WidgetFlow.Text((photo.Representative ? "Representative · " : "") + photo.Credit, 10, appearance);
+                            credit.Measure(new System.Windows.Size(layout.PhotoWidth, double.PositiveInfinity));
+                            var imageHeight = layout.PhotoHeight - credit.DesiredSize.Height - 3;
+                            if (imageHeight >= 32)
+                            {
+                                var picture = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                                var ratio = bitmap.PixelWidth / (double)Math.Max(1, bitmap.PixelHeight);
+                                var photoWidth = Math.Min(layout.PhotoWidth, imageHeight * ratio);
+                                var image = new System.Windows.Controls.Image { Source = bitmap, Width = photoWidth, Height = photoWidth / ratio,
+                                    Stretch = Stretch.Uniform, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+                                var radius = Math.Clamp(Math.Min(image.Width, image.Height) * .075, 6, 18);
+                                image.Clip = new RectangleGeometry(new Rect(0, 0, image.Width, image.Height), radius, radius);
+                                picture.Children.Add(image);
+                                picture.Children.Add(credit);
+                                flight.Height = height;
+                                column.Margin = new Thickness(0);
+                                column.MaxHeight = layout.TextHeight;
+                                if (layout.Columns)
+                                {
+                                    flight.ColumnDefinitions.Add(new() { Width = new GridLength(layout.TextWidth) });
+                                    flight.ColumnDefinitions.Add(new() { Width = new GridLength(8) });
+                                    flight.ColumnDefinitions.Add(new() { Width = new GridLength(layout.PhotoWidth) });
+                                    Grid.SetColumn(picture, 2);
+                                }
+                                else
+                                {
+                                    flight.RowDefinitions.Add(new() { Height = new GridLength(layout.TextHeight) });
+                                    flight.RowDefinitions.Add(new() { Height = new GridLength(8) });
+                                    flight.RowDefinitions.Add(new() { Height = new GridLength(layout.PhotoHeight) });
+                                    Grid.SetRow(picture, 2);
+                                }
+                                flight.Children.Add(picture);
+                            }
+                        }
                     }
                     else if (!task.IsCompleted && _pendingPhotos.Add(task)) _ = PhotoReady(task);
                 }
             }
         }
-        Line((freshness == "stale" ? "Outdated · " : "") + "ADSB.lol · ODbL · adsbdb", Math.Max(10, viewport.Font * .75), 95);
+        Line((freshness == "stale" ? "Outdated · " : "") + "ADSB.lol · ODbL · adsbdb", 10, 95);
     }
     private readonly HashSet<Task<System.Windows.Media.Imaging.BitmapSource?>> _pendingPhotos = [];
     private async Task PhotoReady(Task<System.Windows.Media.Imaging.BitmapSource?> task)

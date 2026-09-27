@@ -44,7 +44,7 @@ Temperature, high/low, condition and attribution have explicit priorities. Locat
 
 The primary identifier, altitude and distance take precedence. Type, registration, speed, owner, route and other metrics receive progressively lower priorities. Small boards show one rotating flight; larger boards can show two. Existing nearest-first/stable 20-second rotation and unit conversion remain.
 
-Images occupy space only after successful loading. Missing metadata, pending downloads and failures leave no photo rectangle. Loaded photos use contained aspect fitting; image and credit disappear together if they cannot fit. Browser failures retry on a cooldown, as the native cache already does. Representative-photo labels and photographer/source/license attribution remain attached to the image.
+Images occupy space only after successful loading. Missing metadata, pending downloads and failures leave no photo rectangle. Loaded photos use contained aspect fitting; image and credit disappear together only when there is too little space for a usable image and its attribution. Loaded photos have a separate column beside the readings, or a separate row on tall cards; optional text cannot evict them. Photos scale to the available region with rounded image corners. Photo and ADS-B credits use a fixed 10px font. Minimal density controls text detail, not photo eligibility. Browser failures retry on a cooldown, as the native cache already does. Representative-photo labels and photographer/source/license attribution remain attached to the image.
 
 ## Settings and compatibility
 
@@ -71,3 +71,5 @@ Reproduce with `tools/checks.ps1`; its browser policy-parity check consumes the 
 Validate on MAIN-CAM-MONITOR after an explicitly authorized install: real stream snapshots, GPU/native-video composition, real aircraft photo providers, monitor DPI and actual output resolution. Browser snapshots are not a live video capture and do not reproduce every native overlay/mask or original-resolution camera framing detail. The HTML/WPF typography and image timing can differ slightly despite matching size rules. The beta release packages this change; host installation and real-feed acceptance remain outstanding.
 
 The sparse 1280×720 weather regression also checks that the temperature and high/low occupy opposite halves, remain visible, and scale their typography. The browser fixture includes Sparse weather and 1280×720 alongside its other sizes. Visual proof: `artifacts/widgets/weather-editor-balanced.png`; native proof: `artifacts/weather/large-weather-composition.png`.
+
+Aircraft headings can be disabled per widget with Show location heading. The renderer removes the heading and its height reservation; existing settings default to showing it. Regression checks cover visibility, image area, rounded image clipping, fixed 10px credits, settings round-trip and reclaimed heading space.

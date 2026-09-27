@@ -28,3 +28,13 @@
 .aircraft-card[data-responsive] .aircraft-photo,.aircraft-card[data-responsive] .aircraft-body .aircraft-photo{width:100%;margin:0;flex:initial}
 .aircraft-card[data-responsive] .aircraft-photo img,.aircraft-card[data-responsive][data-design] .aircraft-photo img{width:100%;height:clamp(48px,22cqh,260px);max-height:none;aspect-ratio:auto;object-fit:contain;background:none}
 .aircraft-card[data-responsive] .aircraft-photo a{height:auto;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+
+.aircraft-card[data-responsive] .aircraft-flight[data-photo-layout]{display:grid;gap:0;align-items:stretch}
+.aircraft-readings{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;min-height:0}
+.aircraft-readings>*{flex-shrink:0;min-width:0}
+.aircraft-flight[data-photo-layout] .aircraft-photo{align-self:center}
+.aircraft-flight[data-photo-layout="columns"] .aircraft-photo{grid-column:3}
+.aircraft-flight[data-photo-layout="rows"] .aircraft-photo{grid-row:3}
+.aircraft-flight[data-photo-layout] .aircraft-photo img{display:block}
+
+.aircraft-flight[data-photo-layout] .aircraft-photo img{margin:0 auto;max-width:100%;border-radius:12px}
