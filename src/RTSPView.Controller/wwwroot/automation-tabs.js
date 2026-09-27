@@ -11,11 +11,12 @@ const automationTabs = (() => {
     for (const [index, title] of ['MQTT', 'Tapo', 'Automation Priority'].entries()) {
       const pane = panes[index]; pane.setAttribute('role', 'tabpanel'); pane.setAttribute('aria-labelledby', 'automation-tab-' + index);
       const tab = document.createElement('button'); tab.type = 'button'; tab.id = 'automation-tab-' + index; tab.textContent = title; tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', pane.id);
-      tab.onclick = () => { panes.forEach((p, i) => { p.hidden = i !== index; nav.children[i].setAttribute('aria-selected', String(i === index)); nav.children[i].tabIndex = i === index ? 0 : -1; }); if (index === 2) load(); };
+      tab.onclick = () => { adminLayout.remember('automationTab',String(index)); panes.forEach((p, i) => { p.hidden = i !== index; nav.children[i].setAttribute('aria-selected', String(i === index)); nav.children[i].tabIndex = i === index ? 0 : -1; }); if (index === 2) load(); };
       tab.onkeydown = e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); const n = e.key === 'Home' ? 0 : e.key === 'End' ? 2 : (index + (e.key === 'ArrowRight' ? 1 : 2)) % 3; nav.children[n].click(); nav.children[n].focus(); } }; nav.append(tab);
     }
     save.onclick = persist; panel.querySelector('.priority-reload').onclick = () => { dirty = false; panel.dataset.dirty = 'false'; load(); };
-    nav.children[0].click();
+    const savedTab=adminLayout.recall('automationTab','0');
+    nav.children[['0','1','2'].includes(savedTab)?Number(savedTab):0].click();
   }
   function render() {
     list.replaceChildren();
