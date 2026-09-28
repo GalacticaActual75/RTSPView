@@ -70,7 +70,7 @@ const aircraftUi = (() => {
       }
       // Flatten metric rows so altitude and distance survive optional fields independently.
       const metrics=flight.querySelector('.aircraft-metrics');if(metrics)while(metrics.firstChild)flight.insertBefore(metrics.firstChild,metrics);metrics?.remove();
-      const rank=n=>n.matches('.weather-current')?100:n.dataset.aircraftText==='altitude'?95:n.dataset.aircraftText==='distance'?90:n.dataset.aircraftText==='speed'?80:n.dataset.aircraftText==='type'?70:n.dataset.aircraftText==='registration'?65:n.matches('.aircraft-photo')?(entry.options.cardDesign==='photo'?75:45):20;
+      const rank=n=>n.matches('.weather-current')?100:n.dataset.aircraftText==='altitude'?95:n.dataset.aircraftText==='distance'?90:n.dataset.aircraftText==='speed'?80:n.dataset.aircraftText==='type'?92:n.dataset.aircraftText==='registeredOwner'?85:n.dataset.aircraftText==='registration'?65:n.matches('.aircraft-photo')?(entry.options.cardDesign==='photo'?75:45):20;
       widgetViewport.fitRows(textHost,textBudget,rank);
     }
     widgetViewport.fitRows(node,node.clientHeight-2*v.padding,n=>n.matches('.aircraft-flights,.weather-condition')?100:n===footer?95:n===title?35:20);
@@ -138,7 +138,7 @@ const aircraftUi = (() => {
       }
     }
     const shown=selected.length;
-    const credit=el('a',(entry.sampleAllowed&&!actual?'Sample aircraft · ':'')+(state==='stale'?'Outdated · ':state==='unavailable'?'Unavailable · ':'')+(all.length>shown?`+${all.length-shown} nearby · `:'')+'ADSB.lol · ODbL 1.0'+' · adsbdb','weather-credit');credit.href='https://www.adsb.lol/docs/open-data/api/';credit.target='_blank';credit.rel='noopener noreferrer';credit.dataset.label=credit.textContent;node.append(sized(credit,o,'footer'));requestAnimationFrame(()=>fit(node));
+    const credit=el('a',(entry.sampleAllowed&&!actual?'Sample aircraft · ':'')+(state==='stale'?'Outdated · ':state==='unavailable'?'Unavailable · ':'')+(all.length>shown?`+${all.length-shown} nearby · `:'')+'ADSB.lol · ODbL 1.0'+' · adsbdb'+(selected.some(a=>a.detailsSource==='FAA')?' · FAA':''),'weather-credit');credit.href='https://www.adsb.lol/docs/open-data/api/';credit.target='_blank';credit.rel='noopener noreferrer';credit.dataset.label=credit.textContent;node.append(sized(credit,o,'footer'));requestAnimationFrame(()=>fit(node));
   }
   function preview(options,sampleAllowed=false,overlay=false,takeover=false){const node=el('div',undefined,'weather-card aircraft-card'),entry={options:structuredClone(options),sampleAllowed,overlay,takeover,featured:null,selectedAt:0};views.set(node,entry);paint(node,entry);resize.observe(node);return node;}
   async function refresh(){if(typeof pluginsUi!=='undefined'&&!pluginsUi.enabled('aircraft'))return;polling=true;if(fetching)return;fetching=true;try{snapshots=await api('/api/aircraft');}catch{/* Per-position age continues to expire even on an outage. */}finally{fetching=false;for(const [node,entry] of views){if(!node.isConnected){resize.unobserve(node);views.delete(node);}else paint(node,entry);}for(const [node,o] of statuses){if(!node.isConnected)statuses.delete(node);else paintStatus(node,o);}}}
@@ -201,6 +201,6 @@ const aircraftUi = (() => {
     if(widgetContext)widgetContext(controls,placement,dialog,paintPreview);
     const observer=new ResizeObserver(paintPreview);observer.observe(stage);dialog.onclose=()=>{observer.disconnect();dialog.remove();if(opener?.isConnected)opener.focus();};document.body.append(dialog);dialog.showModal();paintPreview();inputs.location.focus();refresh();
   }
-  async function overlayEditor(slot){try{const config=await api('/api/config'),existing=(config.aircraftOverlays||[]).find(o=>o.hostCameraSlot===slot)||{hostCameraSlot:slot,enabled:true,widthPercent:40,x:100,y:100,margin:12,aircraft:{...defaults(),fields:["type","altitude","speed","distance"]}};editor(existing.aircraft,async(_,overlay)=>{const saved=await api('/api/aircraft/overlays/'+slot,{method:'PUT',body:JSON.stringify(overlay)});window.dispatchEvent(new CustomEvent('aircraft-overlay-saved',{detail:saved}));},existing,slot);}catch(e){uiDialogs.toast(e.message,'error');}}
+  async function overlayEditor(slot){try{const config=await api('/api/config'),existing=(config.aircraftOverlays||[]).find(o=>o.hostCameraSlot===slot)||{hostCameraSlot:slot,enabled:true,widthPercent:40,x:100,y:100,margin:12,aircraft:{...defaults(),fields:["type","owner","airline","altitude","speed","distance"]}};editor(existing.aircraft,async(_,overlay)=>{const saved=await api('/api/aircraft/overlays/'+slot,{method:'PUT',body:JSON.stringify(overlay)});window.dispatchEvent(new CustomEvent('aircraft-overlay-saved',{detail:saved}));},existing,slot);}catch(e){uiDialogs.toast(e.message,'error');}}
   return {fit,setVisible,hasDetailValue,textSize,balancedTextSizes,selectFlights,defaults,preview,editor,overlayEditor,overlayBounds,refresh,nearby,metric,shouldHide,status,replacementState};
 })();

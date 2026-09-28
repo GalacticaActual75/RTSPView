@@ -72,7 +72,7 @@ public sealed record AircraftOverlay
     public int X { get; init; } = 100;
     public int Y { get; init; } = 100;
     public int Margin { get; init; } = 12;
-    public AircraftOptions Aircraft { get; init; } = new() { Fields = ["type", "altitude", "speed", "distance"] };
+    public AircraftOptions Aircraft { get; init; } = new() { Fields = ["type", "owner", "airline", "altitude", "speed", "distance"] };
     public void Validate()
     {
         if (Aircraft is null) throw new InvalidDataException("Aircraft settings are required.");
@@ -91,7 +91,9 @@ public sealed record AircraftTrack
     public string Callsign { get; init; } = "";
     public string Registration { get; init; } = "";
     public string Type { get; init; } = "";
-    public string ModelName => AircraftModels.Name(Type);
+    public string ResolvedModel { get; init; } = "";
+    public string DetailsSource { get; init; } = "";
+    public string ModelName => AircraftSelection.HasDetailValue(ResolvedModel) ? ResolvedModel : AircraftModels.Name(Type);
     public double Latitude { get; init; }
     public double Longitude { get; init; }
     public double? AltitudeFeet { get; init; }

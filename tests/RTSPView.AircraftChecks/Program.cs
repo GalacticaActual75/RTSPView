@@ -15,12 +15,18 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--metadata-only")) { AircraftMetadataChecks.Run().GetAwaiter().GetResult(); return; }
+        if (args.Length == 2 && args[0] == "--registry-smoke")
+        {
+            var registry = FaaAircraftDetails.Parse(File.ReadAllText(args[1]), "A71518");
+            Check(registry.Owner == "Private Owner" && registry.Model == "CubCrafters Carbon Cub (CCK-1865)", "live FAA page resolves N5555U"); return;
+        }
         // Explicit opt-in diagnostic; normal regression tests never contact flight services.
         if (args.Length == 4 && args[0] == "--provider-smoke")
         {
             ProviderSmoke(args).GetAwaiter().GetResult(); return;
         }
-        if (!args.Contains("--presentation-only")) Backend().GetAwaiter().GetResult();
+        if (!args.Contains("--presentation-only")) { AircraftMetadataChecks.Run().GetAwaiter().GetResult(); Backend().GetAwaiter().GetResult(); }
         var colored = new AircraftOptions { BackgroundColor = "#123456", BackgroundOpacity = 50 };
         var surface = new Border(); WidgetAppearance.Apply(surface, colored.Appearance);
         Check(((SolidColorBrush)surface.Background).Color == Color.FromArgb(127,18,52,86), "custom widget background retains opacity in Live View");
@@ -61,6 +67,12 @@ internal static class Program
                 if (n is UIElement e && (e.Opacity == 0 || e.Visibility != Visibility.Visible || e.RenderSize.Height <= 0)) return false;
             return true;
         }
+        var registryTrack = Track(now) with { Callsign="N5555U", Registration="N5555U", Type="CC11", ResolvedModel="CubCrafters Carbon Cub (CCK-1865)", RegisteredOwner="Private Owner", DetailsSource="FAA", Photo=null };
+        var registryCard = new AircraftView { Width=640, Height=360 };
+        registryCard.Update(options with { ShowPhoto=false }, snapshot with { Aircraft=[registryTrack] });
+        registryCard.Measure(new Size(640,360)); registryCard.Arrange(new Rect(0,0,640,360)); registryCard.UpdateLayout();
+        Check(VisualTexts(registryCard).Any(t=>t.Text==registryTrack.ModelName&&Visible(t,registryCard)), "native wall shows resolved Carbon Cub model");
+        Check(VisualTexts(registryCard).Any(t=>t.Text=="Private Owner"&&Visible(t,registryCard)), "native wall retains owner before secondary metrics");
         // Loaded photos must survive ordinary popup sizes, every density and design.
         {
             foreach (var density in new[] { "auto", "minimal", "standard", "detailed" })

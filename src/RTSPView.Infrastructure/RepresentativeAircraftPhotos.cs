@@ -9,7 +9,7 @@ public static class RepresentativeAircraftPhotos
 {
     public static string? Key(AircraftTrack track, bool modelOnly = false)
     {
-        var model = AircraftModels.Name(track.Type);
+        var model = track.ModelName;
         // Unknown short ICAO codes do not identify a model reliably in image search.
         if (model.Length < 5 || model.Length > 160 || !model.Any(char.IsDigit)) return null;
         var airline = modelOnly || !AircraftSelection.HasDetailValue(track.Airline) ? "" : track.Airline.Trim();

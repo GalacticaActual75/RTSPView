@@ -70,9 +70,9 @@ public sealed class AircraftView : Border
                     if (o.Fields.Contains(field) && (viewport.DetailLevel > 0 || field is "altitude" or "distance")) Detail(AircraftSelection.Metric(field, aircraft, o), viewport.Font, field == "altitude" ? 95 : field == "distance" ? 90 : field == "speed" ? 80 : 25);
                 if (viewport.DetailLevel > 0)
                 {
-                    if (o.Fields.Contains("type")) Detail(string.IsNullOrWhiteSpace(aircraft.ModelName) ? aircraft.Type : aircraft.ModelName, viewport.Font, 70);
+                    if (o.Fields.Contains("type")) Detail(string.IsNullOrWhiteSpace(aircraft.ModelName) ? aircraft.Type : aircraft.ModelName, viewport.Font, 92);
                     if (aircraft.Registration != aircraft.Label && AircraftSelection.HasDetailValue(aircraft.Registration)) Detail(aircraft.Registration, viewport.Font, 65);
-                    if (o.Fields.Contains("owner") && AircraftSelection.HasDetailValue(aircraft.RegisteredOwner)) Detail(aircraft.RegisteredOwner, viewport.Font, 40);
+                    if (o.Fields.Contains("owner") && AircraftSelection.HasDetailValue(aircraft.RegisteredOwner)) Detail(aircraft.RegisteredOwner, viewport.Font, 85);
                 }
                 if (viewport.DetailLevel > 1)
                     foreach (var field in new[] { "airline", "destination" }) if (o.Fields.Contains(field) && AircraftSelection.HasDetailValue(field == "airline" ? aircraft.Airline : aircraft.Destination)) Detail(AircraftSelection.Metric(field, aircraft, o), viewport.Font, 20);
@@ -125,7 +125,7 @@ public sealed class AircraftView : Border
                 }
             }
         }
-        Line((freshness == "stale" ? "Outdated · " : "") + "ADSB.lol · ODbL · adsbdb", 10, 95);
+        Line((freshness == "stale" ? "Outdated · " : "") + "ADSB.lol · ODbL · adsbdb" + (nearby.Any(a => a.DetailsSource == "FAA") ? " · FAA" : ""), 10, 95);
     }
     private readonly HashSet<Task<System.Windows.Media.Imaging.BitmapSource?>> _pendingPhotos = [];
     private async Task PhotoReady(Task<System.Windows.Media.Imaging.BitmapSource?> task)

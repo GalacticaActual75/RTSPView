@@ -14,6 +14,8 @@ assert.equal(ui.metric('speed',track,{...options,units:'metric'}),'SPD 185 km/h'
 assert.equal(ui.metric('verticalRate',track,options),'V/S — ft/min');
 assert.equal(ui.metric('track',track,options),'TRK 0° N');
 assert.equal(ui.metric('type',{...track,type:'',registration:''},options),'');
+assert.equal(ui.metric('type',{...track,type:'CC11',modelName:'CubCrafters Carbon Cub (CCK-1865)',registration:'N5555U'},options),'CubCrafters Carbon Cub (CCK-1865) · N5555U');
+assert.equal(ui.metric('owner',{...track,registeredOwner:'Private Owner'},options),'Private Owner');
 for(const width of [120,320,640,1920])for(const fontSize of [12,24,64]){
  const overlay={widthPercent:40,x:100,y:100,margin:12,aircraft:{...options,fontSize,padding:14,iconSize:36,preset:'featured'}};
  const bounds=ui.overlayBounds(overlay,width,width*9/16);
