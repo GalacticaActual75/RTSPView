@@ -46,3 +46,5 @@
 .aircraft-field-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px;margin:8px 0}.aircraft-field-row label{margin:0}.aircraft-field-row button{padding:6px 10px}.aircraft-photo-option{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}
 
 .aircraft-card{font-family:"Segoe UI",sans-serif}.aircraft-card .weather-current strong{font-weight:600}
+
+.aircraft-flights[data-columns="2"] .aircraft-flight[data-photo-layout="rows"] .aircraft-photo{display:grid;align-self:stretch;min-height:0}.aircraft-flights[data-columns="2"] .aircraft-flight[data-photo-layout="rows"] .aircraft-photo img{align-self:start}.aircraft-flights[data-columns="2"] .aircraft-flight[data-photo-layout="rows"] .aircraft-photo a{grid-row:3;align-self:end}

@@ -21,6 +21,8 @@ public sealed record AircraftOptions
     public int FadeOutMilliseconds { get; init; } = 800;
     public bool ShowHeading { get; init; } = true;
     public bool ShowPhoto { get; init; } = true;
+    public bool WaitForPhoto { get; init; }
+    public int PhotoWaitSeconds { get; init; } = 10;
     public string CardDesign { get; init; } = "compact";
     public string Theme { get; init; } = "auto";
     public string Accent { get; init; } = "#F2C75C";
@@ -55,6 +57,7 @@ public sealed record AircraftOptions
     {
         WidgetViewport.ValidateDensity(Density);
         Appearance.Validate();
+        if (PhotoWaitSeconds is < 1 or > 60) throw new InvalidDataException("Photo wait must be between 1 and 60 seconds.");
         if (FieldOrder is null || FieldOrder.Length > DefaultFieldOrder.Length || FieldOrder.Any(f => !DefaultFieldOrder.Contains(f)) || FieldOrder.Distinct().Count() != FieldOrder.Length)
             throw new InvalidDataException("Choose a unique order of supported aircraft information fields.");
         if (CardDesign is not ("compact" or "photo" or "data" or "board")) throw new InvalidDataException("Choose a supported aircraft card design.");

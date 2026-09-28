@@ -48,6 +48,16 @@ internal static class Program
         var surface = new Border(); WidgetAppearance.Apply(surface, colored.Appearance);
         Check(((SolidColorBrush)surface.Background).Color == Color.FromArgb(127,18,52,86), "custom widget background retains opacity in Live View");
         var now = DateTimeOffset.UtcNow;
+        var gate = new AircraftPhotoGate();
+        Check(gate.Decide("pending",false,false,now,10)==AircraftPhotoDecision.Waiting,"photo gate initially hides an unresolved aircraft");
+        Check(gate.Decide("pending",false,false,now.AddSeconds(9),10)==AircraftPhotoDecision.Waiting,"photo wait respects configured deadline");
+        Check(gate.Decide("pending",false,false,now.AddSeconds(10),10)==AircraftPhotoDecision.WithoutPhoto,"missing photo falls back at timeout");
+        Check(gate.Decide("pending",true,false,now.AddSeconds(11),10)==AircraftPhotoDecision.WithoutPhoto,"late photo cannot pop into text-only encounter");
+        Check(gate.Decide("loaded",true,false,now,10)==AircraftPhotoDecision.Photo,"downloaded photo releases aircraft immediately");
+        Check(gate.Decide("failed",false,true,now,10)==AircraftPhotoDecision.WithoutPhoto,"failed photo releases text-only aircraft");
+        gate.Retain([]);
+        Check(gate.Decide("pending",true,false,now.AddSeconds(12),10)==AircraftPhotoDecision.Photo,"returning aircraft starts a new photo encounter");
+        Check(!JsonSerializer.Deserialize<AircraftOptions>("{}")!.WaitForPhoto,"legacy widgets retain immediate display by default");
         var rotation = new AircraftRotation();
         var ranked = Enumerable.Range(0,5).Select(i => new AircraftTrack { Hex = i.ToString() }).ToArray();
         string Pair(AircraftTrack[] tracks, int seconds) => string.Join(",", rotation.Select(tracks, 5, now.AddSeconds(seconds)).Select(a => a.Hex));
@@ -165,6 +175,13 @@ internal static class Program
             .Max(t=>t.TransformToAncestor(orderedCard).TransformBounds(new Rect(t.RenderSize)).Bottom);
         Check(VisualImages(orderedCard).All(i=>Math.Abs(i.TransformToAncestor(orderedCard).Transform(new Point()).Y-textBottom-8)<1),"paired photos follow visible text with an eight-pixel gap");
         Check(VisualImages(orderedCard).All(i=>i.Clip is RectangleGeometry {RadiusX: >=10, RadiusY: >=10}),"aircraft photos use softer rounded corners");
+        var credits=orderedText.Where(t=>t.Text.Contains("Photo ©")).ToArray();
+        Check(credits.Length==2 && credits.All(t=>t.TransformToAncestor(orderedCard).TransformBounds(new Rect(t.RenderSize)).Bottom>490),"paired photo credits stay near bottom of card");
+        Check(VisualImages(orderedCard).All(i=>i.ActualHeight>AircraftPhotoViewport.For(452,473,false,true).PhotoHeight),"paired photos reclaim unused text space");
+        orderedCard.Update(reordered with {FieldOrder=["type","altitude","owner"]},snapshot);
+        orderedCard.Measure(new Size(960,540));orderedCard.Arrange(new Rect(0,0,960,540));orderedCard.UpdateLayout();
+        var reorderedText=VisualTexts(orderedCard).Where(t=>Visible(t,orderedCard)).ToArray();
+        Check(Array.FindIndex(reorderedText,t=>t.Text==snapshot.Aircraft[0].ModelName||t.Text==snapshot.Aircraft[0].Type)<Array.FindIndex(reorderedText,t=>t.Text.StartsWith("ALT ")),"existing native card updates field order without restarting viewer");
         var headingCard = new AircraftView { Width=320, Height=180 };
         void Heading(bool show)
         {

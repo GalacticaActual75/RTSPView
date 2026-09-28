@@ -72,3 +72,12 @@ assert.deepEqual(Array.from(ui.orderedFields({fieldOrder:['owner','type','altitu
 assert.equal(new Set(ui.orderedFields({fieldOrder:['type','type','photo']})).size,10);
 assert.equal(ui.orderedFields({}).includes('registration'),true);
 console.log('PASS user information ordering, missing legacy fields and fixed photo exclusion.');
+const states=new Map();
+assert.equal(ui.photoDecision(states,'a',false,false,0,10),'waiting');
+assert.equal(ui.photoDecision(states,'a',false,false,9999,10),'waiting');
+assert.equal(ui.photoDecision(states,'a',false,false,10000,10),'withoutPhoto');
+assert.equal(ui.photoDecision(states,'a',true,false,11000,10),'withoutPhoto');
+assert.equal(ui.photoDecision(states,'b',true,false,0,10),'photo');
+assert.equal(ui.photoDecision(states,'c',false,true,0,10),'withoutPhoto');
+assert.equal(ui.defaults().waitForPhoto,false);
+console.log('PASS optional photo wait: ready, pending, timeout, failure and no late image pop-in.');

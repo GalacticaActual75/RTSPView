@@ -14,6 +14,7 @@ public sealed class AircraftView : Border
     private AircraftOptions _options = new();
     private AircraftSnapshot? _snapshot;
     private AircraftRotation _rotation = new();
+    private AircraftPhotoGate _photoGate = new();
 
     private bool _overlay;
     private bool _takeover;
@@ -24,10 +25,11 @@ public sealed class AircraftView : Border
     public void Update(AircraftOptions options, AircraftSnapshot? snapshot, bool overlay = false, bool takeover = false)
     {
         if (_options.CacheKey != options.CacheKey) _rotation = new();
+        if (_options.CacheKey != options.CacheKey || _options.WaitForPhoto != options.WaitForPhoto || _options.ShowPhoto != options.ShowPhoto || _options.PhotoWaitSeconds != options.PhotoWaitSeconds) _photoGate = new();
         _options = options; _snapshot = snapshot; _overlay = overlay; _takeover = takeover;
         var now = DateTimeOffset.UtcNow;
         var update = System.Text.Json.JsonSerializer.Serialize(new { options, snapshot, overlay, takeover,
-            RetryMinute = now.ToUnixTimeSeconds() / 65, Freshness = snapshot?.Freshness(now), Matching = AircraftSelection.Nearby(options, snapshot, now).Select(a => a.Hex), Rotation = _rotation.Select(AircraftSelection.Nearby(options, snapshot, now), options.CardDesign == "board" ? 2 : options.Preset == "board" ? options.MaximumAircraft : 1, now).Select(a => a.Hex) });
+            RotationTick = now.ToUnixTimeSeconds() / 20, RetryMinute = now.ToUnixTimeSeconds() / 65, PhotoTick = options.WaitForPhoto && options.ShowPhoto ? now.ToUnixTimeSeconds() : 0, Freshness = snapshot?.Freshness(now), Matching = AircraftSelection.Nearby(options, snapshot, now).Select(a => a.Hex) });
         if (update == _lastUpdate) return;
         _lastUpdate = update; Render();
     }
@@ -35,8 +37,25 @@ public sealed class AircraftView : Border
     {
         var o = _options; var now = DateTimeOffset.UtcNow;
         var nearby = AircraftSelection.Nearby(o, _snapshot, now);
+        var waiting = false;
+        _photoGate.Retain(nearby.Select(a => a.Hex));
+        if (o.WaitForPhoto && o.ShowPhoto)
+        {
+            var readyAircraft = new List<AircraftTrack>();
+            foreach (var aircraft in nearby)
+            {
+                var task = aircraft.Photo is { IsValid: true } photo ? AircraftPhotoImages.Get(photo) : null;
+                if (task is { IsCompleted: false } && _pendingPhotos.Add(task)) _ = PhotoReady(task);
+                var ready = task is { IsCompletedSuccessfully: true, Result: not null };
+                var failed = task is { IsCompleted: true } && !ready;
+                var decision = _photoGate.Decide(aircraft.Hex, ready, failed, now, o.PhotoWaitSeconds);
+                if (decision == AircraftPhotoDecision.Waiting) waiting = true;
+                else readyAircraft.Add(decision == AircraftPhotoDecision.WithoutPhoto ? aircraft with { Photo = null } : aircraft);
+            }
+            nearby = readyAircraft.ToArray();
+        }
         var freshness = _snapshot?.Freshness(now) ?? "unavailable";
-        var show = !((_takeover || _overlay && o.HideWhenEmpty) && (freshness != "fresh" || nearby.Length == 0));
+        var show = !((_takeover || _overlay && o.HideWhenEmpty) && (freshness != "fresh" || nearby.Length == 0)) && !((_overlay || _takeover) && waiting && nearby.Length == 0);
         SetVisible(show);
         if (!show) return;
         var viewport = WidgetViewport.For(ActualWidth, ActualHeight, o.Density);
@@ -50,14 +69,14 @@ public sealed class AircraftView : Border
             Line(_snapshot is null ? "Waiting for aircraft" : "Aircraft data unavailable", viewport.Heading, 100);
             if (!string.IsNullOrWhiteSpace(_snapshot?.LastError)) Line(_snapshot.LastError, viewport.Font, 20);
         }
-        else if (nearby.Length == 0) Line(freshness == "stale" ? "Waiting for fresh positions" : "No aircraft nearby", viewport.Heading, 100);
+        else if (nearby.Length == 0) Line(waiting ? "Waiting for aircraft photo" : freshness == "stale" ? "Waiting for fresh positions" : "No aircraft nearby", viewport.Heading, 100);
         else
         {
             var count = (o.CardDesign == "board" || o.Preset == "board") && ActualWidth >= 600 && ActualHeight >= 240 ? 2 : 1;
             var selected = _rotation.Select(nearby, count, now);
             var board = new System.Windows.Controls.Primitives.UniformGrid { Columns = selected.Length };
             flow.Add(board, 100);
-            var photoRows = new List<(Grid Flight, WidgetFlow Text, double Width, double Budget)>();
+            var photoRows = new List<(Grid Flight, WidgetFlow Text, double Width, double Budget, double Height, System.Windows.Controls.Image Image, TextBlock Credit)>();
             foreach (var aircraft in selected)
             {
                 var reserved = (o.ShowHeading && viewport.DetailLevel > 0 ? viewport.Font * 1.25 + 3 : 0) + 10 * 1.25 + 6;
@@ -65,6 +84,7 @@ public sealed class AircraftView : Border
                 var width = Math.Max(1, (ActualWidth - viewport.Padding * 2 - (selected.Length > 1 ? 8 : 0)) / selected.Length);
                 var font = selected.Length > 1 ? Math.Clamp(Math.Min(width / 16, column.MaxHeight / 13), 12, 28) : viewport.Font;
                 var flight = new Grid { Margin = new Thickness(selected.Length > 1 && board.Children.Count > 0 ? 4 : 0, 0, selected.Length > 1 && board.Children.Count == 0 ? 4 : 0, 0) }; board.Children.Add(flight); flight.Children.Add(column);
+                if (selected.Length > 1) flight.Height = column.MaxHeight;
                 void Detail(string value, double size, int priority) => column.Add(WidgetFlow.Text(value, size, appearance), priority);
                 var identity = WidgetFlow.Text(aircraft.Label, Math.Min(font * 1.35, width / (Math.Max(1, aircraft.Label.Length) * .75)), appearance);
                 identity.TextWrapping = TextWrapping.NoWrap; identity.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -129,7 +149,11 @@ public sealed class AircraftView : Border
                                     if (selected.Length > 1)
                                     {
                                         picture.VerticalAlignment = VerticalAlignment.Top;
-                                        photoRows.Add((flight, column, layout.TextWidth, layout.TextHeight));
+                                        picture.Children.Remove(credit);
+                                        flight.RowDefinitions.Add(new() { Height = new GridLength(3) });
+                                        flight.RowDefinitions.Add(new() { Height = GridLength.Auto });
+                                        Grid.SetRow(credit, 4); flight.Children.Add(credit);
+                                        photoRows.Add((flight, column, layout.TextWidth, layout.TextHeight, height, image, credit));
                                     }
                                 }
                                 flight.Children.Add(picture);
@@ -144,7 +168,20 @@ public sealed class AircraftView : Border
             {
                 foreach (var row in photoRows) row.Text.Measure(new System.Windows.Size(row.Width, row.Budget));
                 var textHeight = photoRows.Max(row => row.Text.DesiredSize.Height);
-                foreach (var row in photoRows) row.Flight.RowDefinitions[0].Height = new GridLength(textHeight);
+                var creditHeight = photoRows.Max(row => row.Credit.DesiredSize.Height);
+                foreach (var row in photoRows)
+                {
+                    var imageHeight = Math.Max(1, row.Height - textHeight - 8 - 3 - creditHeight);
+                    row.Flight.RowDefinitions[0].Height = new GridLength(textHeight);
+                    row.Flight.RowDefinitions[2].Height = new GridLength(imageHeight);
+                    row.Flight.RowDefinitions[4].Height = new GridLength(creditHeight);
+                    row.Credit.VerticalAlignment = VerticalAlignment.Bottom;
+                    var ratio = row.Image.Width / row.Image.Height;
+                    row.Image.Width = Math.Min(row.Width, imageHeight * ratio);
+                    row.Image.Height = row.Image.Width / ratio;
+                    var radius = Math.Clamp(Math.Min(row.Image.Width, row.Image.Height) * .12, 10, 28);
+                    row.Image.Clip = new RectangleGeometry(new Rect(0, 0, row.Image.Width, row.Image.Height), radius, radius);
+                }
             }
         }
         Line((freshness == "stale" ? "Outdated · " : "") + "ADSB.lol · ODbL · adsbdb" + (nearby.Any(a => a.DetailsSource == "FAA") ? " · FAA" : ""), 10, 95);
