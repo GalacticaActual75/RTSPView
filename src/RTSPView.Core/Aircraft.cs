@@ -41,6 +41,9 @@ public sealed record AircraftOptions
     public int Padding { get; init; } = 14;
     public int CornerRadius { get; init; } = 10;
     public string Alignment { get; init; } = "left";
+    public static readonly string[] DefaultFieldOrder = ["altitude", "type", "registration", "owner", "airline", "distance", "speed", "destination", "track", "verticalRate"];
+    public string[] FieldOrder { get; init; } = [.. DefaultFieldOrder];
+    public string[] OrderedFields() => FieldOrder.Concat(DefaultFieldOrder).Distinct().ToArray();
     public string[] Fields { get; init; } = ["type", "owner", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate"];
     public static readonly string[] AllowedFields = ["type", "owner", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate"];
     // Filters and presentation share one query for the same area.
@@ -52,6 +55,8 @@ public sealed record AircraftOptions
     {
         WidgetViewport.ValidateDensity(Density);
         Appearance.Validate();
+        if (FieldOrder is null || FieldOrder.Length > DefaultFieldOrder.Length || FieldOrder.Any(f => !DefaultFieldOrder.Contains(f)) || FieldOrder.Distinct().Count() != FieldOrder.Length)
+            throw new InvalidDataException("Choose a unique order of supported aircraft information fields.");
         if (CardDesign is not ("compact" or "photo" or "data" or "board")) throw new InvalidDataException("Choose a supported aircraft card design.");
         if (FadeInMilliseconds is < 0 or > 5000 || FadeOutMilliseconds is < 0 or > 5000) throw new InvalidDataException("Aircraft fades must be between 0 and 5000 milliseconds.");
         if (TextSizes is null || TextSizes.Count > TextSizeFields.Length || TextSizes.Any(p => !TextSizeFields.Contains(p.Key) || p.Value is < 8 or > 64))

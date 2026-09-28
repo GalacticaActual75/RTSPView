@@ -44,7 +44,7 @@ public sealed class WeatherView : Border
             primary = new WidgetFlow(); grid.Children.Add(primary); grid.Children.Add(flow); Grid.SetColumn(flow, 2); Child = grid;
         }
         Child.Opacity = o.ContentOpacity / 100d;
-        var primaryOptions = columns ? o with { Alignment = "center" } : o;
+        var primaryOptions = o;
         bool Has(string field) => o.Fields.Contains(field);
         void Line(string text, double size, int priority) => flow.Add(WidgetFlow.Text(text, size, o), priority);
         var state = snapshot?.Freshness(now) ?? "unavailable";

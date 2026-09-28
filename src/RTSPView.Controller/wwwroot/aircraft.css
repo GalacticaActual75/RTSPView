@@ -22,7 +22,7 @@
 
 .aircraft-card[data-responsive] .aircraft-flight{display:flex;flex-direction:column;gap:3px;margin:0;container-type:normal}
 .aircraft-card[data-responsive] .weather-current strong{color:var(--weather-accent)}
-.aircraft-card[data-responsive] .weather-current strong{display:block;max-height:none;line-clamp:unset;-webkit-line-clamp:unset;white-space:normal;overflow-wrap:anywhere}
+.aircraft-card[data-responsive] .weather-current strong{display:block;max-height:none;line-clamp:unset;-webkit-line-clamp:unset;white-space:nowrap;overflow-wrap:normal;overflow:hidden;text-overflow:ellipsis}
 .aircraft-card[data-responsive] .aircraft-data>*{white-space:normal;overflow-wrap:anywhere}
 .aircraft-card[data-responsive] .aircraft-body,.aircraft-card[data-responsive][data-design] .aircraft-body{display:flex;flex-direction:column;gap:3px}
 .aircraft-card[data-responsive] .aircraft-photo,.aircraft-card[data-responsive] .aircraft-body .aircraft-photo{width:100%;margin:0;flex:initial}
@@ -40,3 +40,9 @@
 .aircraft-flight[data-photo-layout] .aircraft-photo img{margin:0 auto;max-width:100%;border-radius:12px}
 
 .aircraft-flights[data-columns="2"] .aircraft-readings{justify-content:flex-start}
+.aircraft-flights[data-columns="2"] .aircraft-flight[data-photo-layout="rows"] .aircraft-photo{align-self:start}
+
+.aircraft-card[data-responsive] .weather-current strong{white-space:nowrap;overflow-wrap:normal;overflow:hidden;text-overflow:ellipsis}
+.aircraft-field-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px;margin:8px 0}.aircraft-field-row label{margin:0}.aircraft-field-row button{padding:6px 10px}.aircraft-photo-option{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}
+
+.aircraft-card{font-family:"Segoe UI",sans-serif}.aircraft-card .weather-current strong{font-weight:600}

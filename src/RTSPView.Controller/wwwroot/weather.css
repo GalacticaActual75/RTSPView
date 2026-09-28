@@ -37,8 +37,7 @@
 .weather-card[data-composition="columns"]{display:grid;grid-template-columns:1fr 1fr;column-gap:4%;align-items:stretch}
 .weather-primary,.weather-secondary{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;min-height:0}
 .weather-primary>*,.weather-secondary>*{flex-shrink:0;min-width:0}
-.weather-card[data-composition="columns"] .weather-primary{align-items:center;text-align:center}
-.weather-card[data-composition="columns"] .weather-current{justify-content:center!important}
+.weather-card[data-composition="columns"] .weather-primary{align-items:stretch;text-align:inherit}
 .weather-card[data-composition="columns"] .weather-location{font-size:calc(var(--weather-font)*1.35);font-weight:600}
 .weather-card[data-responsive] .weather-credit{position:static;margin:0;padding:0;line-height:1.25;white-space:normal;overflow-wrap:anywhere;text-decoration:none}
 

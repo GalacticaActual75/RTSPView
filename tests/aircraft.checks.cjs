@@ -67,3 +67,8 @@ ui.setVisible(fadeNode,fadeEntry,false);assert.equal(fadeAnimations[1].settings.
 fadeAnimations[1].onfinish();assert.equal(fadeNode.style.visibility,'hidden');
 ui.setVisible(fadeNode,fadeEntry,true);assert.equal(fadeNode.style.visibility,'visible');
 console.log('PASS quick entrance, slower exit, and no animation restart on refresh.');
+
+assert.deepEqual(Array.from(ui.orderedFields({fieldOrder:['owner','type','altitude']})).slice(0,3),['owner','type','altitude']);
+assert.equal(new Set(ui.orderedFields({fieldOrder:['type','type','photo']})).size,10);
+assert.equal(ui.orderedFields({}).includes('registration'),true);
+console.log('PASS user information ordering, missing legacy fields and fixed photo exclusion.');

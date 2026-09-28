@@ -33,9 +33,9 @@ public sealed record WidgetViewport(double Width, double Height, double Padding,
 // Photo space is independent of optional text rows and information density.
 public sealed record AircraftPhotoViewport(bool Visible, bool Columns, double TextWidth, double TextHeight, double PhotoWidth, double PhotoHeight)
 {
-    public static AircraftPhotoViewport For(double width, double height, bool emphasis = false)
+    public static AircraftPhotoViewport For(double width, double height, bool emphasis = false, bool paired = false)
     {
-        var columns = width >= 280 && height >= 90;
+        var columns = !paired && width >= 280 && height >= 90;
         var visible = columns || width >= 160 && height >= 220;
         var fraction = emphasis ? .5 : .44;
         var photoWidth = columns ? (width - 8) * fraction : width;

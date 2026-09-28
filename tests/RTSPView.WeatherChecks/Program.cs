@@ -59,6 +59,20 @@ internal static class Program
             detailed.Width=size.Width;detailed.Height=size.Height;detailed.Measure(size);detailed.Arrange(new Rect(size));detailed.UpdateLayout();
             Check(detailed.DesiredSize.Width<=size.Width+24,"native resize remains bounded "+size);
         }
+        foreach(var alignment in new[] {"left","center","right"})
+        foreach(var size in new[] {new Size(180,160),new Size(640,360),new Size(1280,720)})
+        {
+            var aligned=new WeatherView {Width=size.Width,Height=size.Height};
+            var settings=new WeatherOptions {Alignment=alignment,Fields=["temperature","condition","highLow"]};
+            aligned.Update(settings,data);aligned.Measure(size);aligned.Arrange(new Rect(size));aligned.UpdateLayout();
+            Check(FindText(aligned).All(t=>t.TextAlignment.ToString().ToLowerInvariant()==alignment),"all weather text respects "+alignment+" at "+size);
+            foreach(var text in FindText(aligned).Where(t=>t.Opacity>0&&t.ActualHeight>0))
+            {
+                var bounds=text.TransformToAncestor(aligned).TransformBounds(new Rect(text.RenderSize));
+                Check(bounds.Left>=-.5&&bounds.Right<=size.Width+.5&&bounds.Top>=-.5&&bounds.Bottom<=size.Height+.5,"aligned weather text stays inside card");
+            }
+            Check(JsonSerializer.Deserialize<WeatherOptions>(JsonSerializer.Serialize(settings))!.Alignment==alignment,"weather alignment survives save/reload");
+        }
         compact.IndependentWidget = true;
         var matrix = new Canvas { Width = 1100, Height = 900, Background = Brushes.DimGray };
         var cases = new[] { new Size(180,160), new Size(320,180), new Size(530,350), new Size(180,400), new Size(640,120), new Size(160,96) };
@@ -91,7 +105,7 @@ internal static class Program
         Directory.CreateDirectory("artifacts/widgets");
         var contracts = (from size in new[] {new Size(160,96),new Size(180,400),new Size(640,120),new Size(320,180),new Size(640,360),new Size(960,540),new Size(1920,1080)}
                          from density in new[] {"auto","minimal","standard","detailed"}
-                         select new { Density=density, Viewport=WidgetViewport.For(size.Width,size.Height,density), Weather=WidgetViewport.WeatherFor(size.Width,size.Height,density), Photo=AircraftPhotoViewport.For(size.Width,size.Height), PhotoEmphasis=AircraftPhotoViewport.For(size.Width,size.Height,true) }).ToArray();
+                         select new { Density=density, Viewport=WidgetViewport.For(size.Width,size.Height,density), Weather=WidgetViewport.WeatherFor(size.Width,size.Height,density), Photo=AircraftPhotoViewport.For(size.Width,size.Height), PhotoEmphasis=AircraftPhotoViewport.For(size.Width,size.Height,true), PhotoPair=AircraftPhotoViewport.For(size.Width,size.Height,false,true) }).ToArray();
         File.WriteAllText("artifacts/widgets/viewport-contract.json",JsonSerializer.Serialize(contracts));
         var large = new WeatherView { Width=1280, Height=720 };
         large.Update(new() { Location="Test city", Fields=["location","temperature","condition","highLow"] }, data);

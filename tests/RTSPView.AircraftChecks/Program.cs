@@ -148,6 +148,23 @@ internal static class Program
             var altitudes=VisualTexts(mixedBoard).Where(t=>t.Text.StartsWith("ALT ")).Select(t=>t.TransformToAncestor(mixedBoard).Transform(new Point()).Y).ToArray();
             Check(altitudes.Length==2&&Math.Abs(altitudes[0]-altitudes[1])<.5,"two-flight altitude rows align with unequal text lengths");
         }
+        var reordered = options with { CardDesign="board", ShowHeading=false, Fields=["type","altitude","owner"], FieldOrder=["owner","type","altitude"] };
+        reordered.Validate();
+        Check(JsonSerializer.Deserialize<AircraftOptions>(JsonSerializer.Serialize(reordered))!.OrderedFields().Take(3).SequenceEqual(new[] {"owner","type","altitude"}),"custom information order survives save/reload");
+        Check(JsonSerializer.Deserialize<AircraftOptions>("{}")!.OrderedFields().SequenceEqual(AircraftOptions.DefaultFieldOrder),"legacy settings receive complete default order");
+        foreach(var invalid in new[] {new[] {"type","type"},new[] {"photo"}})
+        { try { (options with {FieldOrder=invalid}).Validate(); throw new Exception("Invalid field order accepted"); } catch(InvalidDataException) {} }
+        var orderedCard = new AircraftView {Width=960,Height=540};
+        orderedCard.Update(reordered,snapshot with {Aircraft=snapshot.Aircraft.Select(a=>a with {RegisteredOwner="Private Owner",Photo=testPhoto}).ToArray()});
+        orderedCard.Measure(new Size(960,540));orderedCard.Arrange(new Rect(0,0,960,540));orderedCard.UpdateLayout();
+        var orderedText=VisualTexts(orderedCard).Where(t=>Visible(t,orderedCard)).ToArray();
+        Check(Array.FindIndex(orderedText,t=>t.Text=="Private Owner")<Array.FindIndex(orderedText,t=>t.Text.StartsWith("ALT ")),"native card renders user information order");
+        Check(orderedText.Where(t=>t.Text is "UAL123" or "ASA456").All(t=>t.TextWrapping==TextWrapping.NoWrap),"two-aircraft identifiers stay on one line");
+        Check(VisualImages(orderedCard).All(i=>i.TransformToAncestor(orderedCard).Transform(new Point()).Y>orderedText[0].TransformToAncestor(orderedCard).Transform(new Point()).Y+100),"paired photos occupy fixed area below full-width text");
+        var textBottom = orderedText.Where(t=>t.Parent is WidgetFlow && t.Text != "ADSB.lol · ODbL · adsbdb" && !t.Text.Contains("Photo ©"))
+            .Max(t=>t.TransformToAncestor(orderedCard).TransformBounds(new Rect(t.RenderSize)).Bottom);
+        Check(VisualImages(orderedCard).All(i=>Math.Abs(i.TransformToAncestor(orderedCard).Transform(new Point()).Y-textBottom-8)<1),"paired photos follow visible text with an eight-pixel gap");
+        Check(VisualImages(orderedCard).All(i=>i.Clip is RectangleGeometry {RadiusX: >=10, RadiusY: >=10}),"aircraft photos use softer rounded corners");
         var headingCard = new AircraftView { Width=320, Height=180 };
         void Heading(bool show)
         {

@@ -57,33 +57,43 @@ public sealed class AircraftView : Border
             var selected = _rotation.Select(nearby, count, now);
             var board = new System.Windows.Controls.Primitives.UniformGrid { Columns = selected.Length };
             flow.Add(board, 100);
+            var photoRows = new List<(Grid Flight, WidgetFlow Text, double Width, double Budget)>();
             foreach (var aircraft in selected)
             {
                 var reserved = (o.ShowHeading && viewport.DetailLevel > 0 ? viewport.Font * 1.25 + 3 : 0) + 10 * 1.25 + 6;
-                var column = new WidgetFlow { AlignTop = selected.Length > 1, MaxHeight = Math.Max(1, ActualHeight - viewport.Padding * 2 - reserved), Margin = new Thickness(0, 0, selected.Length > 1 ? 8 : 0, 0) };
-                var flight = new Grid(); board.Children.Add(flight); flight.Children.Add(column);
+                var column = new WidgetFlow { AlignTop = selected.Length > 1, MaxHeight = Math.Max(1, ActualHeight - viewport.Padding * 2 - reserved), Margin = new Thickness(0) };
+                var width = Math.Max(1, (ActualWidth - viewport.Padding * 2 - (selected.Length > 1 ? 8 : 0)) / selected.Length);
+                var font = selected.Length > 1 ? Math.Clamp(Math.Min(width / 16, column.MaxHeight / 13), 12, 28) : viewport.Font;
+                var flight = new Grid { Margin = new Thickness(selected.Length > 1 && board.Children.Count > 0 ? 4 : 0, 0, selected.Length > 1 && board.Children.Count == 0 ? 4 : 0, 0) }; board.Children.Add(flight); flight.Children.Add(column);
                 void Detail(string value, double size, int priority) => column.Add(WidgetFlow.Text(value, size, appearance), priority);
-                var identity = WidgetFlow.Text(aircraft.Label, viewport.Heading, appearance);
+                var identity = WidgetFlow.Text(aircraft.Label, Math.Min(font * 1.35, width / (Math.Max(1, aircraft.Label.Length) * .75)), appearance);
+                identity.TextWrapping = TextWrapping.NoWrap; identity.TextTrimming = TextTrimming.CharacterEllipsis;
                 identity.FontWeight = FontWeights.SemiBold;
                 identity.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(o.Accent)); column.Add(identity, 100);
-                foreach (var field in new[] { "altitude", "distance", "speed", "track", "verticalRate" })
-                    if (o.Fields.Contains(field) && (viewport.DetailLevel > 0 || field is "altitude" or "distance")) Detail(AircraftSelection.Metric(field, aircraft, o), viewport.Font, field == "altitude" ? 95 : field == "distance" ? 90 : field == "speed" ? 80 : 25);
-                if (viewport.DetailLevel > 0)
+                var order = o.OrderedFields();
+                foreach (var field in order)
                 {
-                    if (o.Fields.Contains("type")) Detail(string.IsNullOrWhiteSpace(aircraft.ModelName) ? aircraft.Type : aircraft.ModelName, viewport.Font, 92);
-                    if (aircraft.Registration != aircraft.Label && AircraftSelection.HasDetailValue(aircraft.Registration)) Detail(aircraft.Registration, viewport.Font, 65);
-                    if (o.Fields.Contains("owner") && AircraftSelection.HasDetailValue(aircraft.RegisteredOwner)) Detail(aircraft.RegisteredOwner, viewport.Font, 85);
+                    if (field != "registration" && !o.Fields.Contains(field)) continue;
+                    if (viewport.DetailLevel == 0 && field is not ("altitude" or "distance")) continue;
+                    if (viewport.DetailLevel < 2 && field is "airline" or "destination") continue;
+                    var value = field switch
+                    {
+                        "type" => string.IsNullOrWhiteSpace(aircraft.ModelName) ? aircraft.Type : aircraft.ModelName,
+                        "registration" => aircraft.Registration != aircraft.Label ? aircraft.Registration : "",
+                        "owner" => aircraft.RegisteredOwner,
+                        "airline" => AircraftSelection.HasDetailValue(aircraft.Airline) ? AircraftSelection.Metric(field, aircraft, o) : "",
+                        "destination" => AircraftSelection.HasDetailValue(aircraft.Destination) ? AircraftSelection.Metric(field, aircraft, o) : "",
+                        _ => AircraftSelection.Metric(field, aircraft, o)
+                    };
+                    if (AircraftSelection.HasDetailValue(value)) Detail(value, font, 90 - Array.IndexOf(order, field));
                 }
-                if (viewport.DetailLevel > 1)
-                    foreach (var field in new[] { "airline", "destination" }) if (o.Fields.Contains(field) && AircraftSelection.HasDetailValue(field == "airline" ? aircraft.Airline : aircraft.Destination)) Detail(AircraftSelection.Metric(field, aircraft, o), viewport.Font, 20);
                 if (o.ShowPhoto && aircraft.Photo is { IsValid: true } photo)
                 {
                     var task = AircraftPhotoImages.Get(photo);
                     if (task.IsCompletedSuccessfully && task.Result is {} bitmap)
                     {
-                        var width = Math.Max(1, (ActualWidth - viewport.Padding * 2) / selected.Length - (selected.Length > 1 ? 8 : 0));
                         var height = column.MaxHeight;
-                        var layout = AircraftPhotoViewport.For(width, height, o.CardDesign == "photo");
+                        var layout = AircraftPhotoViewport.For(width, height, o.CardDesign == "photo", selected.Length > 1);
                         if (layout.Visible)
                         {
                             var credit = WidgetFlow.Text((photo.Representative ? "Representative · " : "") + photo.Credit, 10, appearance);
@@ -96,7 +106,7 @@ public sealed class AircraftView : Border
                                 var photoWidth = Math.Min(layout.PhotoWidth, imageHeight * ratio);
                                 var image = new System.Windows.Controls.Image { Source = bitmap, Width = photoWidth, Height = photoWidth / ratio,
                                     Stretch = Stretch.Uniform, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
-                                var radius = Math.Clamp(Math.Min(image.Width, image.Height) * .075, 6, 18);
+                                var radius = Math.Clamp(Math.Min(image.Width, image.Height) * .12, 10, 28);
                                 image.Clip = new RectangleGeometry(new Rect(0, 0, image.Width, image.Height), radius, radius);
                                 picture.Children.Add(image);
                                 picture.Children.Add(credit);
@@ -116,6 +126,11 @@ public sealed class AircraftView : Border
                                     flight.RowDefinitions.Add(new() { Height = new GridLength(8) });
                                     flight.RowDefinitions.Add(new() { Height = new GridLength(layout.PhotoHeight) });
                                     Grid.SetRow(picture, 2);
+                                    if (selected.Length > 1)
+                                    {
+                                        picture.VerticalAlignment = VerticalAlignment.Top;
+                                        photoRows.Add((flight, column, layout.TextWidth, layout.TextHeight));
+                                    }
                                 }
                                 flight.Children.Add(picture);
                             }
@@ -123,6 +138,13 @@ public sealed class AircraftView : Border
                     }
                     else if (!task.IsCompleted && _pendingPhotos.Add(task)) _ = PhotoReady(task);
                 }
+            }
+            // Share the actual visible text height, rather than leaving unused text space above photos.
+            if (photoRows.Count > 0)
+            {
+                foreach (var row in photoRows) row.Text.Measure(new System.Windows.Size(row.Width, row.Budget));
+                var textHeight = photoRows.Max(row => row.Text.DesiredSize.Height);
+                foreach (var row in photoRows) row.Flight.RowDefinitions[0].Height = new GridLength(textHeight);
             }
         }
         Line((freshness == "stale" ? "Outdated · " : "") + "ADSB.lol · ODbL · adsbdb" + (nearby.Any(a => a.DetailsSource == "FAA") ? " · FAA" : ""), 10, 95);
