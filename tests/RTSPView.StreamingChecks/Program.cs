@@ -4,6 +4,9 @@ using RTSPView.Infrastructure;
 using System.IO;
 
 var origin = Environment.GetEnvironmentVariable("RTSPVIEW_STREAM_FIXTURE") ?? throw new Exception("Run tests/stream-playback.checks.py to start the local media fixture.");
+var fixtureDirectory = Environment.GetEnvironmentVariable("RTSPVIEW_DATA_DIR") ?? throw new Exception("An isolated fixture data directory is required.");
+var fixtureStore = new JsonSettingsStore(Path.Combine(fixtureDirectory, "settings.json"));
+await fixtureStore.SaveAsync((await fixtureStore.LoadAsync()) with { Plugins = Plugins.ForNewInstall with { YtDlp = true, Streamlink = true } });
 Console.WriteLine("Initializing LibVLC");
 Core.Initialize(Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64"));
 using var engine = new LibVLC("--vout=dummy", "--aout=dummy", "--avcodec-hw=none", "--no-video-title-show");

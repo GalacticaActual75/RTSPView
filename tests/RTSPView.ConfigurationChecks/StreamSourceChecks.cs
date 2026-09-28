@@ -35,8 +35,20 @@ internal static class StreamSourceChecks
         Check(imported.Cameras[0].RtspUrl == website.RtspUrl, "Full export/import changed source URL");
         var legacy = JsonSerializer.Deserialize<CameraSettings>("{\"RtspUrl\":\"rtsp://camera.example/live\"}")!;
         Check(legacy.SourceMode == StreamSourceMode.Auto && !StreamSource.NeedsResolver(legacy), "Legacy RTSP defaults changed");
-        try { await StreamResolver.ResolveAsync(website, CancellationToken.None, Path.Combine(root, "missing.exe")); throw new Exception("Missing helper accepted"); }
-        catch (InvalidOperationException error) { Check(error.Message.Contains("helper missing"), "Missing helper has no actionable error"); }
+        var priorDirectory = Environment.GetEnvironmentVariable("RTSPVIEW_DATA_DIR");
+        var resolverDirectory = Path.Combine(root, "resolver-host");
+        try
+        {
+            Environment.SetEnvironmentVariable("RTSPVIEW_DATA_DIR", resolverDirectory);
+            var hostStore = new JsonSettingsStore(Path.Combine(resolverDirectory, "settings.json"));
+            await hostStore.SaveAsync(new() { Plugins = Plugins.ForNewInstall });
+            try { await StreamResolver.ResolveAsync(website, CancellationToken.None, Path.Combine(root, "missing.exe")); throw new Exception("Disabled resolver accepted"); }
+            catch (InvalidOperationException error) { Check(error.Message.Contains("plugin is disabled"), "Disabled plugin has no actionable error"); }
+            await hostStore.SaveAsync((await hostStore.LoadAsync()) with { Plugins = Plugins.ForNewInstall with { YtDlp = true } });
+            try { await StreamResolver.ResolveAsync(website, CancellationToken.None, Path.Combine(root, "missing.exe")); throw new Exception("Missing helper accepted"); }
+            catch (InvalidOperationException error) { Check(error.Message.Contains("helper missing"), "Missing helper has no actionable error"); }
+        }
+        finally { Environment.SetEnvironmentVariable("RTSPVIEW_DATA_DIR", priorDirectory); }
         Console.WriteLine("PASS direct/web routing, protocol-specific options, validation, legacy settings, linked overlays and source persistence");
     }
 }

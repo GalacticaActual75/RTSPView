@@ -57,6 +57,9 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   assert.equal((await request(a,'/api/cameras/1','PUT',website)).status,200);
   const websiteSaved=(await request(a,'/api/config')).json.cameras[0];assert.equal(websiteSaved.sourceMode,3);assert.equal(websiteSaved.maximumHeight,1080);
   assert.equal((await request(a,'/api/cameras/1','PUT',config.cameras[0])).status,200);
+  const freshPlugins=(await request(a,'/api/plugins')).json;
+  assert(Object.values(freshPlugins).every(value=>value===false),'Fresh plugins are opt-in');
+  assert.equal((await request(a,'/api/plugins','PUT',{...freshPlugins,weather:true,aircraft:true,automations:true,pictureInPicture:true})).status,200);
   const weather={location:'Seattle',latitude:47.6062,longitude:-122.3321,preset:'compact',units:'imperial',fields:['temperature','condition','highLow']};
   const weatherOverlay={hostCameraSlot:1,enabled:true,weather,widthPercent:40,x:0,y:100,margin:12};
   assert.equal((await request(a,'/api/weather/overlays/1','PUT',weatherOverlay)).status,200,'weather overlay saves');

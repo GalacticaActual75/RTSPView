@@ -17,6 +17,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   const admin='test-'+crypto.randomUUID();
   assert.equal((await request('/api/auth/password','POST',{currentPassword:'admin',newPassword:admin})).status,200);
   assert.equal((await request('/api/auth/login','POST',{password:admin})).status,200);await session();
+  const freshPlugins=(await request('/api/plugins')).data;
+  assert(Object.values(freshPlugins).every(value=>value===false),'Fresh-install plugins must be disabled');
+  assert.equal((await request('/api/plugins','PUT',{...freshPlugins,automations:true,pictureInPicture:true})).status,200);
   const initial=(await request('/api/tapo')).data;assert.equal(initial.hasPassword,false);
   const config=(await request('/api/config')).data;
   const mainSource={...config.cameras[0],rtspUrl:'rtsp://camera.example/shared',enabled:true};
