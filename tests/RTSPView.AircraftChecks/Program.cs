@@ -15,7 +15,24 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 3 && args[0] == "--photo-source-smoke")
+        {
+            var key = "model/" + Uri.EscapeDataString(args[2]) + "|";
+            var photo = RepresentativeAircraftPhotos.Parse(File.ReadAllText(args[1]), key);
+            Check(photo is { IsValid: true }, "real Commons response supplies licensed representative photo");
+            var downloadedBitmap = AircraftPhotoImages.Get(photo!).GetAwaiter().GetResult();
+            Check(downloadedBitmap is not null, "real photo downloads and decodes through native image loader");
+            var time = DateTimeOffset.UtcNow; var settings = new AircraftOptions { Latitude=47.6062, Longitude=-122.3321, Fields=["type","owner","altitude"] };
+            var card = new AircraftView { Width=640, Height=360 };
+            card.Update(settings, new AircraftSnapshot { Key=settings.CacheKey, FetchedAt=time, Aircraft=[Track(time) with { Callsign="N5555U", Registration="N5555U", Type="CC11", ResolvedModel="CubCrafters Carbon Cub (CCK-1865)", RegisteredOwner="Private Owner", Photo=photo }] });
+            card.Measure(new Size(640,360)); card.Arrange(new Rect(0,0,640,360)); card.UpdateLayout();
+            Check(VisualImages(card).Any(i=>i.Source is not null && i.ActualWidth >= 90 && i.ActualHeight >= 50), "real downloaded photo receives visible card area");
+            var capture = new RenderTargetBitmap(640,360,96,96,PixelFormats.Pbgra32); capture.Render(card);
+            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(capture));
+            using var output = File.Create("artifacts/aircraft/real-photo-native.png"); encoder.Save(output); return;
+        }
         if (args.Contains("--metadata-only")) { AircraftMetadataChecks.Run().GetAwaiter().GetResult(); return; }
+        if (args.Contains("--photo-fallback-only")) { AircraftPhotoFallbackChecks.Run().GetAwaiter().GetResult(); return; }
         if (args.Length == 2 && args[0] == "--registry-smoke")
         {
             var registry = FaaAircraftDetails.Parse(File.ReadAllText(args[1]), "A71518");
@@ -232,6 +249,7 @@ internal static class Program
     private static async Task Backend()
     {
         await PhotoFallback();
+        await AircraftPhotoFallbackChecks.Run();
         await NativePhotoDownload();
         Check(new AircraftTrack { Type = "SR22" }.ModelName == "Cirrus SR22", "short type expands to full model name");
         Check(RepresentativeAircraftPhotos.Identity(RepresentativeAircraftPhotos.Key(new AircraftTrack { Type = "SR22" })!).Model == "Cirrus SR22", "private SR22 receives representative photo lookup");

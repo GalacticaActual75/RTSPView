@@ -1,5 +1,13 @@
 # Aircraft widgets and tiles
 
+## Beta.18 photo fallback and diagnostics
+
+HTTP 404 from the exact-photo providers is a normal missing-photo result, not an outage that pauses other aircraft lookups. After exact and model-specific misses, recognized Carbon Cub, Cessna 182 and Naval Aircraft Factory N3N variants can use a licensed family photo marked **Representative**. Exact registration photos still take priority. Cockpit, diagram and three-view search results are excluded. Coverage remains dependent on available photos; no 99% guarantee is made.
+
+The normal rotating application log now includes `AIRCRAFT_PHOTO` events for lookup-ready, no-photo and failed results, including provider, lookup key and HTTP status. Successful native decoding and download/decode failures include a matching image fingerprint and decoded dimensions. Full image URLs are not logged. These events distinguish missing provider photos from download/decode failures; they do not claim that a decoded photo is visible on the physical wall.
+
+Validation includes an actual licensed Carbon Cub thumbnail downloaded and rendered through the WPF loader/card, plus offline regressions for the complete exact-miss → family-photo chain, HTTP 404 cooldown behavior, attribution and diagnostic correlation.
+
 ## Beta.17 metadata fallback
 
 When adsbdb is missing the owner or model for a US registration, the Controller checks the public FAA aircraft registry. It accepts only a valid record with the same hexadecimal aircraft address. An Individual registration supplies **Private Owner**; missing, corporate, expired or mismatched records are never assumed to be privately owned. Existing known adsbdb details take priority. Registry-derived fields add FAA to the card attribution.

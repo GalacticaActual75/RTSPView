@@ -15,6 +15,16 @@ public static class RepresentativeAircraftPhotos
         var airline = modelOnly || !AircraftSelection.HasDetailValue(track.Airline) ? "" : track.Airline.Trim();
         return "model/" + Uri.EscapeDataString(model) + "|" + Uri.EscapeDataString(airline);
     }
+    public static string? FamilyKey(AircraftTrack track)
+    {
+        var name = Compact(track.ModelName);
+        // Registry kit/variant suffixes rarely appear in photo titles. A family photo is
+        // explicitly representative; it never replaces an available exact-aircraft photo.
+        var family = name.Contains("carboncub") && !name.Contains("sportcub") ? "Carbon Cub"
+            : Regex.IsMatch(name, @"^(cessna)?[rt]?182") ? "Cessna 182"
+            : name.Contains("navalaircraftfactoryn3n") ? "Naval Aircraft Factory N3N" : null;
+        return family is null ? null : "model/" + Uri.EscapeDataString(family) + "|";
+    }
     public static (string Model, string Airline) Identity(string key)
     {
         var parts = key[6..].Split('|'); return (Uri.UnescapeDataString(parts[0]), Uri.UnescapeDataString(parts[1]));
@@ -41,6 +51,8 @@ public static class RepresentativeAircraftPhotos
             string Value(string name) => Plain(Text(Child(meta,name),"value"));
             var description = Compact(Text(page.Value,"title") + " " + Value("ObjectName") + " " + Value("ImageDescription"));
             if(!description.Contains(Compact(model)) || (airline.Length>0 && !description.Contains(Compact(airline)))) continue;
+            var title = Text(page.Value,"title").ToLowerInvariant();
+            if (new[] { "cockpit", "instrument panel", "line drawing", "3-view", "three-view", "logo", "diagram" }.Any(title.Contains)) continue;
             var license = Value("LicenseShortName"); var artist = Value("Artist");
             if(!(license.StartsWith("CC BY") || license is "CC0" or "Public domain") || artist.Length is 0 or >160) continue;
             var photo = new AircraftPhoto(Text(info,"thumburl"),Text(info,"descriptionurl"),artist)

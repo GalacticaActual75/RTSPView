@@ -5,7 +5,7 @@ using RTSPView.Core;
 namespace RTSPView.Infrastructure;
 
 // Independent, bounded metadata cache. Missing photos are cached too.
-public sealed class AircraftPhotos(HttpClient http)
+public sealed class AircraftPhotos(HttpClient http, Action<string>? log = null)
 {
     private readonly ConcurrentDictionary<string, (AircraftPhoto? Photo, DateTimeOffset Until, bool Empty)> _cache = new();
     private readonly ConcurrentDictionary<string, DateTimeOffset> _pending = new();
@@ -19,7 +19,7 @@ public sealed class AircraftPhotos(HttpClient http)
     private AircraftPhoto? Cached(string key) => _cache.TryGetValue(key, out var entry) && entry.Until > DateTimeOffset.UtcNow ? entry.Photo : null;
     public AircraftPhoto? Find(string hex, string? registration = null) => Cached("hex/" + hex.ToLowerInvariant()) ?? (RegistrationKey(registration) is { } key ? Cached(key) : null);
     private static string AirportKey(AircraftTrack track) => "airport/" + track.Hex.ToLowerInvariant() + "/" + (RegistrationKey(track.Registration)?[4..] ?? "");
-    public AircraftPhoto? Find(AircraftTrack track) => Find(track.Hex,track.Registration) ?? Cached(AirportKey(track)) ?? (RepresentativeAircraftPhotos.Key(track) is { } key ? Cached(key) : null) ?? (RepresentativeAircraftPhotos.Key(track, true) is { } model ? Cached(model) : null);
+    public AircraftPhoto? Find(AircraftTrack track) => Find(track.Hex,track.Registration) ?? Cached(AirportKey(track)) ?? (RepresentativeAircraftPhotos.Key(track) is { } key ? Cached(key) : null) ?? (RepresentativeAircraftPhotos.Key(track, true) is { } model ? Cached(model) : null) ?? (RepresentativeAircraftPhotos.FamilyKey(track) is { } family ? Cached(family) : null);
     public void Request(AircraftTrack track)
     {
         Request(track.Hex,track.Registration);
@@ -31,10 +31,13 @@ public sealed class AircraftPhotos(HttpClient http)
         if (!_cache.TryGetValue(airportKey, out var airport) || airport.Until <= DateTimeOffset.UtcNow)
         { if (_pending.Count < 32) _pending.TryAdd(airportKey, DateTimeOffset.UtcNow); return; }
         if (airport.Photo is not null) return;
-        if (RepresentativeAircraftPhotos.Key(track) is not { } key || _pending.Count >= 32) return;
-        if (!_cache.TryGetValue(key, out var entry) || entry.Until <= DateTimeOffset.UtcNow) _pending.TryAdd(key, DateTimeOffset.UtcNow);
-        else if (entry.Photo is null && entry.Empty && RepresentativeAircraftPhotos.Key(track, true) is { } model && model != key &&
-                 (!_cache.TryGetValue(model, out var generic) || generic.Until <= DateTimeOffset.UtcNow)) _pending.TryAdd(model, DateTimeOffset.UtcNow);
+        foreach (var key in new[] { RepresentativeAircraftPhotos.Key(track), RepresentativeAircraftPhotos.Key(track, true), RepresentativeAircraftPhotos.FamilyKey(track) }.OfType<string>().Distinct())
+        {
+            if (_pending.Count >= 32) return;
+            if (!_cache.TryGetValue(key, out var entry) || entry.Until <= DateTimeOffset.UtcNow)
+            { _pending.TryAdd(key, DateTimeOffset.UtcNow); return; }
+            if (entry.Photo is not null || !entry.Empty) return;
+        }
     }
     public void Request(string hex, string? registration = null)
     {
@@ -63,14 +66,19 @@ public sealed class AircraftPhotos(HttpClient http)
                     request.Headers.UserAgent.ParseAdd("RTSPView/1.0.47 (+https://github.com/GalacticaActual75/RTSPView/issues)");
                     using var response = await http.SendAsync(request, token);
                     if ((int)response.StatusCode == 429) providerRetry[Provider(hex)] = DateTimeOffset.UtcNow + (response.Headers.RetryAfter?.Delta ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow) ?? TimeSpan.FromMinutes(1));
-                    response.EnsureSuccessStatusCode();
-                    var json = await response.Content.ReadAsStringAsync(token);
-                    photo = hex.StartsWith("airport/") ? AirportAircraftPhotos.Parse(json) : hex.StartsWith("model/") ? RepresentativeAircraftPhotos.Parse(json,hex) : Parse(json);
+                    if (response.StatusCode != System.Net.HttpStatusCode.NotFound)
+                    {
+                        response.EnsureSuccessStatusCode();
+                        var json = await response.Content.ReadAsStringAsync(token);
+                        photo = hex.StartsWith("airport/") ? AirportAircraftPhotos.Parse(json) : hex.StartsWith("model/") ? RepresentativeAircraftPhotos.Parse(json,hex) : Parse(json);
+                    }
                     empty = photo is null;
+                    log?.Invoke($"lookup={hex} provider={Provider(hex)} result={(empty ? "no-photo" : "ready")} status={(int)response.StatusCode}" + (photo is null ? "" : $" image={photo.DiagnosticId} representative={photo.Representative}"));
                 }
                 catch (Exception e) when (e is HttpRequestException or JsonException or OperationCanceledException)
                 {
                     if (token.IsCancellationRequested) return;
+                    log?.Invoke($"lookup={hex} provider={Provider(hex)} result=failed error={e.GetType().Name} status={(e is HttpRequestException h ? (int?)h.StatusCode : null)}");
                     retry = TimeSpan.FromMinutes(1);
                     if (!providerRetry.TryGetValue(Provider(hex), out var until) || until <= DateTimeOffset.UtcNow) providerRetry[Provider(hex)] = DateTimeOffset.UtcNow.AddSeconds(30);
                 }
