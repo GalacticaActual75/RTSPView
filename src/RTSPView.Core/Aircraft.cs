@@ -26,6 +26,7 @@ public sealed record AircraftOptions
     public string Accent { get; init; } = "#F2C75C";
     public string? BackgroundColor { get; init; }
     public int BackgroundOpacity { get; init; } = 80;
+    public int ContentOpacity { get; init; } = 100;
     public int FontSize { get; init; } = 24;
     public Dictionary<string, int> TextSizes { get; init; } = [];
     public static readonly string[] TextSizeFields = ["location", "owner", "type", "registration", "callsign", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate", "photoCredit", "footer", "status"];
@@ -45,7 +46,7 @@ public sealed record AircraftOptions
     // Filters and presentation share one query for the same area.
     public string CacheKey => FormattableString.Invariant($"{Latitude:F4},{Longitude:F4},{RadiusMiles:F1}");
     [System.Text.Json.Serialization.JsonIgnore]
-    public WeatherOptions Appearance => new() { Theme = Theme, Accent = Accent, BackgroundColor = BackgroundColor, BackgroundOpacity = BackgroundOpacity,
+    public WeatherOptions Appearance => new() { Theme = Theme, Accent = Accent, BackgroundColor = BackgroundColor, BackgroundOpacity = BackgroundOpacity, ContentOpacity = ContentOpacity,
         FontSize = FontSize, IconSize = IconSize, Padding = Padding, CornerRadius = CornerRadius, Alignment = Alignment };
     public void Validate()
     {

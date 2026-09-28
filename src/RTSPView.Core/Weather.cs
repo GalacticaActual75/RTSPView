@@ -15,6 +15,7 @@ public sealed record WeatherOptions
     public string Accent { get; init; } = "#F2C75C";
     public string? BackgroundColor { get; init; }
     public int BackgroundOpacity { get; init; } = 80;
+    public int ContentOpacity { get; init; } = 100;
     public int FontSize { get; init; } = 24;
     public int IconSize { get; init; } = 36;
     public int Padding { get; init; } = 14;
@@ -31,7 +32,7 @@ public sealed record WeatherOptions
             Theme is not ("auto" or "dark" or "light") || Alignment is not ("left" or "center" or "right") ||
             Accent is not { Length: 7 } || Accent[0] != '#' || Accent.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") >= 0 ||
             (BackgroundColor is not null && (BackgroundColor.Length != 7 || BackgroundColor[0] != '#' || BackgroundColor.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") >= 0)) ||
-            BackgroundOpacity is < 0 or > 100 || FontSize is < 12 or > 64 || IconSize is < 16 or > 96 || Padding is < 0 or > 48 || CornerRadius is < 0 or > 48 ||
+            BackgroundOpacity is < 0 or > 100 || ContentOpacity is < 0 or > 100 || FontSize is < 12 or > 64 || IconSize is < 16 or > 96 || Padding is < 0 or > 48 || CornerRadius is < 0 or > 48 ||
             Fields is null || Fields.Length > AllowedFields.Length || Fields.Any(f => !AllowedFields.Contains(f)) || Fields.Distinct().Count() != Fields.Length)
             throw new InvalidDataException("Weather settings contain an invalid location, appearance, or field selection.");
     }
@@ -96,7 +97,7 @@ public static class WeatherConfiguration
         {
             WeatherOverlays = [],
             AircraftOverlays = [],
-            Plugins = settings.Plugins with { Weather = true, Aircraft = true },
+            Plugins = settings.Plugins with { Weather = true, Aircraft = true, SystemStats = true, DateTime = true },
             Layouts = settings.Layouts.Select(layout => layout with
             {
                 Widgets = [],

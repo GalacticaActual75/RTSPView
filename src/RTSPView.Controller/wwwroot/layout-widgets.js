@@ -1,6 +1,6 @@
 const layoutWidgetsUi=(()=>{
   const observers=new Map();
-  const ui=kind=>kind==='aircraft'?aircraftUi:weatherUi;
+  const ui=kind=>kind==='aircraft'?aircraftUi:kind==='weather'?weatherUi:systemWidgetsUi[kind];
   function region(widget,layout,width,height){return {left:0,top:0,width,height};}
   function grid(layout){return typeof wallProportions==='function'?wallProportions(layout):{rows:Array(layout.rows||3).fill(1/(layout.rows||3)),columns:Array(layout.columns||3).fill(1/(layout.columns||3))};}
   function bounds(widget,layout,width,height){
@@ -54,7 +54,7 @@ const margin=Math.min(widget.margin,width/2,height/2),aw=Math.max(0,width-2*marg
   }
   function edit(widget,layout,cameras,onSave,onDelete){
     const extension=(controls,placement,dialog,paint)=>{
-      dialog.querySelector('h2').textContent=(widget.kind==='aircraft'?'Aircraft':'Weather')+' widget';dialog.querySelector('form > p').textContent='This widget belongs only to this layout. Save or apply the layout to persist changes.';
+      dialog.querySelector('h2').textContent=systemWidgetsUi.names[widget.kind]+' widget';dialog.querySelector('form > p').textContent='This widget belongs only to this layout. Save or apply the layout to persist changes.';
       placement.hostCameraSlot=0;
       for(const group of controls.querySelectorAll('details'))if(group.querySelector('summary')?.textContent==='Position and size')group.remove();
       const positionNote=document.createElement('p');positionNote.className='weather-note';positionNote.textContent='Move and resize this widget on the Layouts canvas, or select a tile size in the content panel.';controls.append(positionNote);
@@ -89,7 +89,7 @@ const margin=Math.min(widget.margin,width/2,height/2),aw=Math.max(0,width-2*marg
       const logicalWidth=layout.outputWidth||(layout.aspectRatio==='9:16'?1080:1920),logicalHeight=layout.outputHeight||(layout.aspectRatio==='9:16'?1920:1080);
       const place=()=>{const card=host.firstElementChild;if(!card)return;const scale=board.clientWidth/logicalWidth,b=bounds(widget,layout,logicalWidth,logicalHeight),content=contentScale(widget,b);if(!b){host.hidden=true;return;}host.hidden=false;card.dataset.widgetShape=b.height>b.width*1.25?'portrait':'landscape';Object.assign(host.style,{left:b.left*scale+'px',top:b.top*scale+'px',width:b.width*scale+'px',height:b.height*scale+'px'});Object.assign(card.style,{width:b.width/content+'px',height:b.height/content+'px',transformOrigin:'top left',transform:'scale('+(scale*content)+')'});if(onChange)card.style.pointerEvents='none';requestAnimationFrame(()=>ui(widget.kind).fit?.(card));};place();const observer=new ResizeObserver(()=>{if(!host.isConnected){observer.disconnect();return;}place();});observer.observe(board);observers.set(host,observer);
       if(!onChange){host.style.pointerEvents='none';continue;}
-      host.tabIndex=0;host.setAttribute('role','button');host.setAttribute('aria-label','Edit '+widget.kind+' widget');host.style.cursor='move';card.style.pointerEvents='none';
+      host.tabIndex=0;host.setAttribute('role','button');host.setAttribute('aria-label','Edit '+(systemWidgetsUi.names[widget.kind]||widget.kind).toLowerCase()+' widget');host.style.cursor='move';card.style.pointerEvents='none';
       for(const edge of ['n','s','e','w','nw','ne','sw','se']){const handle=document.createElement('span');handle.className='widget-resize widget-resize-'+edge;handle.dataset.widgetEdge=edge;handle.title='Drag to resize freely; content adapts to the tile';handle.setAttribute('aria-hidden','true');host.append(handle);}
       const open=()=>{selection.onSelect?.(widget.id);edit(widget,layout,cameras,value=>{layout.widgets=layout.widgets.map(w=>w.id===widget.id?value:w);onChange();},()=>{layout.widgets=layout.widgets.filter(w=>w.id!==widget.id);onChange();});};
 

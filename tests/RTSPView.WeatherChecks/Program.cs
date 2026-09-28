@@ -23,6 +23,7 @@ internal static class Program
         }
         DataChecks().GetAwaiter().GetResult();
         var app = new Application();
+        SystemWidgetChecks.Run();
         var now = DateTimeOffset.UtcNow;
         var data = new WeatherSnapshot { Key = "47.6062,-122.3321", Temperature = 22.2, Code = 2, FetchedAt = now, ValidAt = now, TimeZone = "America/Los_Angeles", Humidity = 48, Wind = 2.7,
             Daily = [new(WeatherFormatting.LocalTime(now,"America/Los_Angeles").ToString("yyyy-MM-dd"),24.4,12.2,2,null,null)],
@@ -137,7 +138,7 @@ internal static class Program
             var legacySettings = settings with { SchemaVersion=20, Layouts=[settings.Layouts[0] with { Widgets=[legacy] }] };
             await File.WriteAllTextAsync(path,JsonSerializer.Serialize(legacySettings));
             var upgraded=await store.LoadAsync();
-            Check(upgraded.SchemaVersion==21 && upgraded.Layouts[0].Widgets[0].Cell is null && upgraded.Layouts[0].Widgets[0].Weather!.Density=="auto","schema 20 keeps floating placement and defaults to responsive Auto");
+            Check(upgraded.SchemaVersion==AppSettings.CurrentSchemaVersion && upgraded.Layouts[0].Widgets[0].Cell is null && upgraded.Layouts[0].Widgets[0].Weather!.Density=="auto","schema 20 keeps floating placement and defaults to responsive Auto");
             Check(upgraded.Layouts[0].Widgets[0].Bounds(1920,1080)==legacy.Bounds(1920,1080),"legacy geometry survives responsive migration exactly");
             await store.SaveAsync(upgraded);
             Check(File.Exists(path+".before-responsive-widgets.json"),"responsive migration retains rollback backup");

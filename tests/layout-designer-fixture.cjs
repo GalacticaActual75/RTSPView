@@ -10,7 +10,7 @@ let config = {schemaVersion:15,cameraCount:9,cameras:slots.map((slot,i)=>camera(
 config.automationViewLayouts = [{id:'focus',name:'One large camera',rows:3,columns:3,focusSlots:[-1],tiles:[{cameraSlot:-1,row:0,column:0,rowSpan:2,columnSpan:2},{cameraSlot:2,row:0,column:2,rowSpan:1,columnSpan:1},{cameraSlot:3,row:1,column:2,rowSpan:1,columnSpan:1}]}];
 config.deletedOverlaySlots=[]; config.deletedCameraSlots=[];
 if(process.env.RTSPVIEW_WIDGET_FIXTURE==='1'){
-  config.plugins={weather:true,aircraft:true};
+  config.plugins={weather:true,aircraft:true,systemStats:true,dateTime:true};
   const appearance={density:'auto',theme:'dark',accent:'#F2C75C',backgroundOpacity:90,fontSize:24,iconSize:36,padding:14,cornerRadius:10,alignment:'left',units:'imperial',location:'Test city',latitude:0,longitude:0};
   config.layouts[0].widgets=[{id:'weather-test',kind:'weather',enabled:true,hostCameraSlot:0,margin:0,widthPercent:33,heightPercent:33,x:0,y:0,cell:{row:0,column:1,rowSpan:2,columnSpan:2},weather:{...appearance,timeZone:'auto',preset:'compact',fields:['location','temperature','condition','highLow']}},{id:'aircraft-test',kind:'aircraft',enabled:true,hostCameraSlot:0,margin:0,widthPercent:33,heightPercent:33,x:100,y:100,cell:{row:2,column:2,rowSpan:1,columnSpan:1},aircraft:{...appearance,radiusMiles:10,preset:'featured',cardDesign:'compact',maximumAircraft:2,textSizes:{},showPhoto:true,fields:['type','owner','altitude','speed','distance']}}];
 }
@@ -18,7 +18,8 @@ const schedules=Object.fromEntries(['viewer','host'].map(action=>[action,{settin
 http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');res.setHeader('Cache-Control','no-store');
   const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
-  if(url.pathname==='/api/plugins')return json(config.plugins||{});
+  if(url.pathname==='/api/plugins'){if(req.method==='PUT'){let text='';for await(const chunk of req)text+=chunk;config.plugins=JSON.parse(text);}return json(config.plugins||{});}
+  if(url.pathname==='/api/widget-data')return json({timestamp:new Date().toISOString(),timeZone:'America/Los_Angeles',system:{timestamp:new Date().toISOString(),cpuPercent:37,gpuPercent:24,ramPercent:62,ramUsedGb:19.8,ramTotalGb:32,cpuTemperatureC:58,gpuTemperatureC:64}});
   if(url.pathname==='/api/weather/search'||url.pathname==='/api/aircraft/search')return json({results:[{name:'Test city',latitude:0,longitude:0,timezone:'UTC'}]});
   if(url.pathname==='/api/weather')return json([{key:'0.0000,0.0000',fetchedAt:new Date().toISOString(),validAt:new Date().toISOString(),temperature:22,code:2,timeZone:'UTC',daily:[{date:new Date().toISOString().slice(0,10),high:25,low:15}]}]);
   if(url.pathname==='/api/aircraft')return json([{key:'0.0000,0.0000,10.0',fetchedAt:new Date().toISOString(),aircraft:[{hex:'abc123',callsign:'TEST123',registration:'N123EX',type:'B738',modelName:'Boeing 737-800',registeredOwner:'Example owner',latitude:.01,longitude:.01,altitudeFeet:12000,speedKnots:280,positionAt:new Date().toISOString()}]}]);

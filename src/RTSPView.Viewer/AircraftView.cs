@@ -42,7 +42,7 @@ public sealed class AircraftView : Border
         var viewport = WidgetViewport.For(ActualWidth, ActualHeight, o.Density);
         var appearance = o.Appearance with { Padding = (int)viewport.Padding };
         WidgetAppearance.Apply(this, appearance);
-        var flow = new WidgetFlow(); Child = flow;
+        var flow = new WidgetFlow { Opacity = o.ContentOpacity / 100d }; Child = flow;
         void Line(string text, double size, int priority) => flow.Add(WidgetFlow.Text(text, size, appearance), priority);
         if (o.ShowHeading && viewport.DetailLevel > 0) Line(o.Location + " · Nearby aircraft", viewport.Font, 35);
         if (freshness == "unavailable")

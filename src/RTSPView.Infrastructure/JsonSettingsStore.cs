@@ -16,7 +16,7 @@ public sealed class JsonSettingsStore
 
     private async Task<AppSettings> LoadCoreAsync(CancellationToken cancellationToken, bool writeLockHeld)
     {
-        if (!File.Exists(_path) && !File.Exists(BackupPath)) return new AppSettings { StorageRevision = "" };
+        if (!File.Exists(_path) && !File.Exists(BackupPath)) return new AppSettings { StorageRevision = "", Plugins = Plugins.ForNewInstall };
         try
         {
             return await ReadAndValidateAsync(_path, cancellationToken);
@@ -132,6 +132,12 @@ public sealed class JsonSettingsStore
             using var original = JsonDocument.Parse(await File.ReadAllTextAsync(_path, cancellationToken));
             if (original.RootElement.TryGetProperty("SchemaVersion", out var oldSchema) && oldSchema.GetInt32() < 17)
                 File.Copy(_path, aircraftBackup, false);
+        }
+        var systemBackup = _path + ".before-system-widgets.json";
+        if (File.Exists(_path) && !File.Exists(systemBackup))
+        {
+            using var original = JsonDocument.Parse(await File.ReadAllTextAsync(_path, cancellationToken));
+            if (!original.RootElement.TryGetProperty("SchemaVersion", out var oldSchema) || oldSchema.GetInt32() < 22) File.Copy(_path, systemBackup, false);
         }
         var responsiveBackup = _path + ".before-responsive-widgets.json";
         if (File.Exists(_path) && !File.Exists(responsiveBackup))

@@ -66,6 +66,8 @@ builder.Services.AddSingleton(provider => new TemperatureMonitor(dataDirectory, 
     message => provider.GetRequiredService<RollingFileLogger>().Write("TEMPERATURE", message)));
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService(provider => provider.GetRequiredService<TemperatureMonitor>());
+builder.Services.AddSingleton(provider => new SystemStatsService(dataDirectory, provider.GetRequiredService<SystemMetricsCollector>(), provider.GetRequiredService<TemperatureMonitor>(), provider.GetRequiredService<RollingFileLogger>()));
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService(provider => provider.GetRequiredService<SystemStatsService>());
 builder.Services.AddSingleton(new WeatherService(dataDirectory));
 builder.Services.AddSingleton(new AircraftService(dataDirectory));
 builder.Services.AddSingleton(new StartupService(builder.Environment.IsEnvironment("Testing")));
@@ -295,6 +297,13 @@ app.MapGet("/api/status", () => Results.Ok(new
     processMemoryMb = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1024d / 1024d, 1),
     currentTime = DateTimeOffset.Now
 })).RequireAuthorization();
+app.MapGet("/api/widget-data", async (SystemStatsService stats) =>
+{
+    var plugins = (await settingsStore.LoadAsync()).Plugins;
+    var zone = TimeZoneInfo.Local.Id;
+    if (TimeZoneInfo.TryConvertWindowsIdToIanaId(zone, out var iana)) zone = iana;
+    return Results.Ok(new { timestamp = DateTimeOffset.UtcNow, timeZone = zone, system = plugins.SystemStats ? stats.Latest : null });
+}).RequireAuthorization();
 app.MapGet("/api/telemetry", (ViewerRuntimeState runtime, ViewerLauncher launcher) =>
 {
     var viewer = viewerTelemetry.Latest;

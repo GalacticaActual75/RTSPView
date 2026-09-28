@@ -14,6 +14,8 @@ public sealed record WallWidget
     public int Margin { get; init; } = 12;
     public WeatherOptions? Weather { get; init; }
     public AircraftOptions? Aircraft { get; init; }
+    public SystemStatsOptions? SystemStats { get; init; }
+    public DateTimeOptions? DateTime { get; init; }
     public WidgetCell? Cell { get; init; }
     public (double Width, double Height, double Left, double Top) Bounds(WallLayout layout)
     {
@@ -32,7 +34,7 @@ public sealed record WallWidget
         var w = availableWidth * WidthPercent / 100;
         var natural = Kind == "aircraft"
             ? AircraftGeometry.Bounds(new AircraftOverlay { Aircraft = Aircraft!, WidthPercent = 100, Margin = 0 }, w, availableHeight).Height
-            : WeatherGeometry.Bounds(new WeatherOverlay { Weather = Weather!, WidthPercent = 100, Margin = 0 }, w, availableHeight).Height;
+            : Kind == "weather" ? WeatherGeometry.Bounds(new WeatherOverlay { Weather = Weather!, WidthPercent = 100, Margin = 0 }, w, availableHeight).Height : Math.Min(availableHeight, w * .5625);
         var h = HeightPercent is { } percent ? availableHeight * percent / 100 : natural;
         return (w, h, margin + (availableWidth - w) * X / 100, margin + (availableHeight - h) * Y / 100);
     }
@@ -47,9 +49,12 @@ public sealed record WallWidget
         if (!double.IsFinite(ContentScale) || ContentScale is < .05 or > 20 || string.IsNullOrWhiteSpace(Id) || Id.Length > 64 || (!double.IsFinite(WidthPercent) || WidthPercent is < 1 or > 100) || (!double.IsFinite(X) || X is < 0 or > 100) || (!double.IsFinite(Y) || Y is < 0 or > 100) || (HeightPercent is { } h && (!double.IsFinite(h) || h is <= 0 or > 100)) || Margin is < 0 or > 80 ||
             (HostCameraSlot != 0 && !layout.Tiles.Any(t => t.Kind == "camera" && t.CameraSlot == HostCameraSlot)))
             throw new InvalidDataException("Widget placement must fit its layout and reference an existing tile or the whole layout.");
-        if (Kind == "weather" && Weather is not null && Aircraft is null) Weather.Validate();
-        else if (Kind == "aircraft" && Aircraft is not null && Weather is null) Aircraft.Validate();
-        else throw new InvalidDataException("Choose weather or aircraft settings for each widget.");
+        if (new object?[] { Weather, Aircraft, SystemStats, DateTime }.Count(o => o is not null) != 1) throw new InvalidDataException("Choose exactly one widget's settings.");
+        if (Kind == "weather" && Weather is not null) Weather.Validate();
+        else if (Kind == "aircraft" && Aircraft is not null) Aircraft.Validate();
+        else if (Kind == "systemStats" && SystemStats is not null) SystemStats.Validate();
+        else if (Kind == "dateTime" && DateTime is not null) DateTime.Validate();
+        else throw new InvalidDataException("Choose valid settings for this widget.");
     }
 }
 
