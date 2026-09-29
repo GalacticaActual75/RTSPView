@@ -30,7 +30,7 @@ The Windows **Viewer** plays the video. The **Controller** runs web administrati
 
 **[Download the latest stable release](https://github.com/GalacticaActual75/RTSPView/releases/latest)** · [All releases](https://github.com/GalacticaActual75/RTSPView/releases) · [Feedback](https://github.com/GalacticaActual75/RTSPView/issues) · [Buy Me a Coffee](https://buymeacoffee.com/galacticaactual75)
 
-This guide describes **[1.0.47-beta.26](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.47-beta.26)** and the complete 1.0.47 beta series. Scrypted is optional: compatible sources can be used directly, without MQTT or Home Assistant.
+This guide describes **[1.0.47](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.47)** and the complete 1.0.47 beta series. Scrypted is optional: compatible sources can be used directly, without MQTT or Home Assistant.
 
 [Install](#requirements-and-installation) · [First setup](#first-login-and-first-camera-wall) · [Streams and layouts](#streams-and-layouts) · [Automation](#automation-and-weather) · [Backups and updates](#configuration-backups-and-updates) · [Troubleshooting](#troubleshooting)
 
@@ -105,12 +105,12 @@ This section consolidates the complete beta run, including the final padding-con
 
 The desktop application has no Docker deployment or native Android client in this repository. A phone or Android browser can administer the Windows host after LAN access is enabled; it does not replace the Windows Viewer.
 
-1. Download the Windows installer and matching `.sha256.txt` asset from the release page. For 1.0.47-beta.26 they are `RTSPView-Setup-1.0.47-beta.26-win-x64.exe` and `RTSPView-Setup-1.0.47-beta.26-win-x64.sha256.txt`.
+1. Download the Windows installer and matching `.sha256.txt` asset from the release page. For 1.0.47 they are `RTSPView-Setup-1.0.47-win-x64.exe` and `RTSPView-Setup-1.0.47-win-x64.sha256.txt`.
 2. In PowerShell, from the download directory, compute the installer hash and compare it with the checksum file:
 
    ```powershell
-   Get-FileHash -LiteralPath .\RTSPView-Setup-1.0.47-beta.26-win-x64.exe -Algorithm SHA256
-   Get-Content -LiteralPath .\RTSPView-Setup-1.0.47-beta.26-win-x64.sha256.txt
+   Get-FileHash -LiteralPath .\RTSPView-Setup-1.0.47-win-x64.exe -Algorithm SHA256
+   Get-Content -LiteralPath .\RTSPView-Setup-1.0.47-win-x64.sha256.txt
    ```
 
 3. Run the installer and approve Windows elevation. The default installation directory is `%ProgramFiles%\RTSPView`; upgrades reuse the existing installation directory.
@@ -345,7 +345,7 @@ Build from the tag corresponding to the version you intend to run. Release tags 
 ```powershell
 git clone https://github.com/GalacticaActual75/RTSPView.git
 Set-Location RTSPView
-git switch --detach v1.0.47-beta.26
+git switch --detach v1.0.47
 dotnet restore RTSPView.sln -r win-x64
 dotnet build RTSPView.sln -c Release --no-restore
 dotnet run --project tests/RTSPView.ConfigurationChecks -c Release
