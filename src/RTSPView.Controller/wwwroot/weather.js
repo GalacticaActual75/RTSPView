@@ -113,8 +113,7 @@ const weatherUi = (() => {
     const select=(label,name,choices,parent=controls)=>{const n=el('select');choices.forEach(([value,text])=>n.add(new Option(text,value)));n.value=o[name];n.onchange=()=>{o[name]=n.value;paint();};field(label,n,parent);return n;};
     function toggle(label,key){const n=el('input');n.type='checkbox';n.checked=o[key];n.onchange=()=>{o[key]=n.checked;paint();};field(label,n);}
     toggle('Weather background','conditionBackground');toggle('Animate weather background','animateBackground');
-    const paddingControl=input('Content padding','padding','range',controls,0,48);
-    controls.append(el('p','Lower padding makes the card more compact. Weather background off uses your plain background; set background opacity to 0 for no background.','weather-note'));
+    controls.append(el('p','Weather background off uses your plain background; set background opacity to 0 for no background.','weather-note'));
     const alignment=select('Text alignment','alignment',[['left','Left'],['center','Center'],['right','Right']]);
     select('Units','units',[['imperial','Fahrenheit · mph'],['metric','Celsius · km/h']]);
     select('Information density','density',[['auto','Auto · adapt to tile'],['minimal','Minimal'],['standard','Standard'],['detailed','Detailed when space allows']]);
@@ -123,6 +122,8 @@ const weatherUi = (() => {
     function fieldsUi(){for(const n of [...fields.children].slice(1))n.remove();for(const [id,label] of Object.entries(labels)){const check=el('input');check.type='checkbox';check.checked=o.fields.includes(id);check.onchange=()=>{o.fields=check.checked?[...o.fields,id]:o.fields.filter(f=>f!==id);paint();};field(label,check,fields);}}
     preset.onchange=()=>{o.preset=preset.value;o.fields=[...presets[o.preset]];fieldsUi();paint();};fieldsUi();
     const appearance=el('details');appearance.append(el('summary','Advanced appearance'));controls.append(appearance);
+    const paddingControl=input('Content padding','padding','range',appearance,0,48);
+    appearance.append(el('p','Sets the minimum space between content and the card edges. Content stays vertically centered, so padding may not change the space above and below it. Reduce the card height to remove extra vertical space.','weather-note'));
     select('Theme','theme',[['auto','Automatic (RTSPView dark)'],['dark','Dark'],['light','Light']],appearance);
 
     input('Accent color','accent','color',appearance);

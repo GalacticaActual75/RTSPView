@@ -30,7 +30,7 @@ The Windows **Viewer** plays the video. The **Controller** runs web administrati
 
 **[Download the latest stable release](https://github.com/GalacticaActual75/RTSPView/releases/latest)** · [All releases](https://github.com/GalacticaActual75/RTSPView/releases) · [Feedback](https://github.com/GalacticaActual75/RTSPView/issues) · [Buy Me a Coffee](https://buymeacoffee.com/galacticaactual75)
 
-This guide describes **[1.0.46](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.46)**, published September 24, 2026 UTC. See its [release notes](docs/release-1.0.46.md). Scrypted is optional: compatible sources can be used directly, without MQTT or Home Assistant.
+This guide describes **[1.0.47-beta.26](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.47-beta.26)** and the complete 1.0.47 beta series. Scrypted is optional: compatible sources can be used directly, without MQTT or Home Assistant.
 
 [Install](#requirements-and-installation) · [First setup](#first-login-and-first-camera-wall) · [Streams and layouts](#streams-and-layouts) · [Automation](#automation-and-weather) · [Backups and updates](#configuration-backups-and-updates) · [Troubleshooting](#troubleshooting)
 
@@ -42,11 +42,59 @@ This guide describes **[1.0.46](https://github.com/GalacticaActual75/RTSPView/re
 | Layouts | Up to 32 saved standard layouts, separate automation templates, up to 16 tiles per layout on a 12×12 grid, landscape/portrait or custom output proportions, presets, drag/resize, undo/redo, custom track sizing, framing, borders and colors. |
 | Picture in picture | Independent or linked stream sources, host-tile placement, shape presets, drawn/SVG masks, opacity, zoom and pan; always-visible or automation-only display. |
 | Automation | MQTT person detection, zone filters, temporary fullscreen/focus layouts, and Tapo contact-sensor actions, with shared rule priorities and recent activity. |
-| Weather | Standard-layout weather tiles and camera Weather Widgets, configurable locations, units, fields and appearance. |
+| Widgets | Up to 64 independent layout widgets: weather, nearby aircraft, host system stats and date/time; grid or floating placement, responsive content and independent background/content opacity. |
+| Weather | Configurable locations, units, fields and alignment; larger readings, small attribution, optional condition backgrounds and animation. |
+| Aircraft | Radius/altitude filtering, one or two rotating aircraft, enriched model/owner data, attributed photos, field ordering, optional photo wait and fade transitions. |
+| Plugins | Categorized host switches for widgets, streaming, discovery, picture in picture and automation; disabled by default on new installations. |
 | Dedicated display | Monitor selection and identification, fullscreen, always-on-top, idle cursor hiding, manual focus, stream recovery and intentional Full exit. |
 | Administration | Stream health, snapshots, diagnostics/logs, temperature warnings, backup/import, optional LAN access, application updates, automatic streaming-component updates and scheduled restarts. |
 
 Capacity limits are configuration limits, not a promise that every machine can decode that many high-resolution feeds. Enabled main streams and configured picture-in-picture feeds continue decoding when hidden; resolution, frame rate, codec and source connection limits matter.
+
+## Changes across the 1.0.47 beta series
+
+This section consolidates the complete beta run, including the final padding-control adjustment.
+
+### Plugins and new widgets
+
+- The Plugins page groups related capabilities and explains each switch. Weather, Aircraft, System stats, Date & time, Streamlink, yt-dlp, ONVIF, Picture in picture and Automations are all opt-in on new installations. Upgrades preserve existing plugin behavior; the new system and clock plugins start disabled.
+- Disabling a plugin stops its runtime work and hides its controls while retaining saved settings. Direct camera streams do not require website resolver plugins. Auto source mode uses only enabled resolvers. MQTT and Tapo rules share the Automations switch.
+- System stats displays this Windows host's CPU/GPU utilization, RAM use and available CPU/GPU temperatures, with temperature-unit and heading controls. Missing or stale measurements remain unavailable rather than appearing as zero; temperature availability depends on the host's sensors.
+- Date & time adds a live clock with a selected time zone, 12/24-hour display, optional seconds, date and weekday, and long, short or ISO date formats. Time-zone conversion respects daylight saving.
+
+### Layout editing and responsive presentation
+
+- Weather and aircraft are independent layout content rather than being tied to a camera. Layouts support up to 64 widgets, including system stats and clocks. Removing a camera does not delete independent widgets.
+- **Add content** combines camera and enabled-widget choices. The layout toolbar uses available desktop width; selection, the content inspector, Enter to edit, keyboard movement/resizing, Delete, Undo and Redo support the editing workflow.
+- New widgets use grid placement with row/column spans, weighted tracks and orientation changes. Floating placement supports edge/corner resizing, positioning presets and precise placement. Existing floating geometry is preserved during migration.
+- Dialogs preview the actual target dimensions over the layout's camera snapshots. Monitor and native Live View follow shared responsive sizing rules. Content uses available width and height, with lower-priority rows omitted before primary readings become unreadable. Platform rendering is not guaranteed to be pixel-identical.
+- Background color/opacity and content opacity are independent. Text, images and credits follow content opacity; the background can remain visible or be made fully transparent.
+- Settings migration retains existing widgets and creates rollback backups, including `settings.json.before-independent-widgets.json` and `settings.json.before-responsive-widgets.json` when their respective migrations apply. Use the appropriate older backup when rolling back to an older binary.
+
+### Aircraft
+
+- ADSB.lol supplies nearby traffic, filtered by location, radius and optional altitude limits. Persistent widgets and conditional camera replacements support empty/stale/unavailable states; conditional replacements return to the camera when eligible traffic is absent.
+- Cards display at most two aircraft. Responsive/photo-emphasis views and two-aircraft boards retain a stable selection during ordinary updates and rotate through nearby traffic every 20 seconds. Departure, expiry and empty-feed handling prevent stale aircraft lingering.
+- Callsign/tail identifiers remain readable, two-aircraft columns align at the top, and the optional **Nearby aircraft** heading can be hidden to reclaim space. Unknown detail rows are omitted. Full model names and registered owners use adsbdb and verified FAA records when available; lookup data can differ from other flight-tracking services.
+- Users can reorder aircraft detail fields and toggle optional information. Earlier fields take priority when space is limited. The primary identifier remains fixed, and the aircraft photo control is grouped with information choices but is not reorderable.
+- Photo lookup uses Planespotters, Airport-Data and attributed Wikimedia Commons fallbacks, including representative model/family images where available. Representative photos are labelled; a different livery may appear. Coverage is provider-dependent and is not guaranteed for every aircraft.
+- Native image requests follow validated provider redirects, identify the application and retry failures after a cooldown. Diagnostic logs trace photo lookup/download/decode outcomes. Loaded photos use available space, preserve aspect ratio and have rounded corners; missing or failed images do not reserve an empty image box.
+- Two-aircraft cards allocate remaining height to photos, keep both columns aligned and place small photo/source credits at the bottom. Photo and ADS-B attribution remain visible when their associated content fits.
+- **Wait for aircraft photo** optionally holds an aircraft until its image is ready. A configurable 1–60 second timeout (10 seconds by default) or a failed download permits a text-only card; a later image does not pop into that encounter after fallback.
+- Fade transitions cover appearance, disappearance, one/two-plane changes, rotation between pairs and arriving photos. Old content fades out before new content fades in. Routine reading updates do not restart the transition. Entrance and exit durations are independent, 0–5,000 ms; zero is instant. Try 800 ms each for gentler transitions.
+
+### Weather
+
+- Temperature and supporting readings grow with the card while source attribution stays small. Wide cards can distribute information across two columns; smaller cards prioritize temperature, high/low and condition. Left, center and right text alignment work in preview and Live View.
+- Optional backgrounds cover all 29 documented API condition codes: clear/partly cloudy/overcast, fog/rime fog, drizzle/rain/showers, freezing precipitation, snow/snow grains/snow showers, thunderstorms and hail. Related codes share effects while retaining their exact condition labels. Unknown or unavailable conditions use a plain fallback.
+- **Weather background** and **Animate weather background** are separate switches. Clear scenes distinguish day/night. Background opacity controls the effect independently of content opacity, and animation can be disabled for a quiet display.
+- **Content padding** is under **Advanced appearance**. It controls minimum edge spacing and can reach zero, with responsive limits for small cards. Content remains vertically centered: reducing padding does not resize the card or necessarily remove the space above/below the text. Reduce card height to remove that extra vertical space.
+
+### Administration, startup and validation
+
+- Refreshing administration restores the selected section and subtab instead of always returning to Monitor. Unsaved drafts still require saving before a reload.
+- Windows startup can be inspected, enabled, disabled or repaired through **Settings → Display → Windows startup**. The installer and web setting use the same helper for the intended interactive Windows account, a 20-second sign-in delay and battery operation. A new sign-in resumes Live View despite an earlier intentional stop; watchdog recovery within the same session still respects that stop. This does not configure automatic Windows login.
+- Regression coverage includes plugin gating, migration/persistence, native/browser sizing and weather-code parity, aircraft metadata and photo fallbacks, fade timing/cancellation, real native overlays, and synthetic streaming playback. Browser fixtures exercise responsive sizes, editing and photo/transition states. These checks do not guarantee third-party feed or hardware sensor availability.
 
 ## Requirements and installation
 
@@ -57,12 +105,12 @@ Capacity limits are configuration limits, not a promise that every machine can d
 
 The desktop application has no Docker deployment or native Android client in this repository. A phone or Android browser can administer the Windows host after LAN access is enabled; it does not replace the Windows Viewer.
 
-1. Download the Windows installer and matching `.sha256.txt` asset from the release page. For 1.0.46 they are `RTSPView-Setup-1.0.46-win-x64.exe` and `RTSPView-Setup-1.0.46-win-x64.sha256.txt`.
+1. Download the Windows installer and matching `.sha256.txt` asset from the release page. For 1.0.47-beta.26 they are `RTSPView-Setup-1.0.47-beta.26-win-x64.exe` and `RTSPView-Setup-1.0.47-beta.26-win-x64.sha256.txt`.
 2. In PowerShell, from the download directory, compute the installer hash and compare it with the checksum file:
 
    ```powershell
-   Get-FileHash -LiteralPath .\RTSPView-Setup-1.0.46-win-x64.exe -Algorithm SHA256
-   Get-Content -LiteralPath .\RTSPView-Setup-1.0.46-win-x64.sha256.txt
+   Get-FileHash -LiteralPath .\RTSPView-Setup-1.0.47-beta.26-win-x64.exe -Algorithm SHA256
+   Get-Content -LiteralPath .\RTSPView-Setup-1.0.47-beta.26-win-x64.sha256.txt
    ```
 
 3. Run the installer and approve Windows elevation. The default installation directory is `%ProgramFiles%\RTSPView`; upgrades reuse the existing installation directory.
@@ -100,7 +148,7 @@ RTSP/media ports belong to the source server. MQTT uses the configured broker po
 
 All screenshots in this guide use **synthetic camera images and demo data**. Names, addresses, locations and status readings are examples; no personal streams or settings are shown. [Browse all admin previews](assets/admin-preview/README.md).
 
-The current interface has a collapsible sidebar and six destinations:
+The current interface has a collapsible sidebar with these destinations; disabled plugins hide their associated controls:
 
 | Destination | Main tasks |
 | --- | --- |
@@ -109,11 +157,12 @@ The current interface has a collapsible sidebar and six destinations:
 | **Layouts** | Edit standard layouts or automation templates, tile framing, canvas appearance and weather. |
 | **Picture in picture** | Configure overlay sources, hosts, visibility and appearance. |
 | **Automation** | Configure MQTT, Tapo and **Automation Priority**. |
+| **Plugins** | Enable or disable categorized host capabilities; also accessible from Settings. |
 | **Settings** | Display and snapshots; Network & security; Updates; Backups; Maintenance; Diagnostics; About. |
 
-**Save scope matters:** stream and picture-in-picture **Save & apply** affect that source wherever used. Weather Widget saves affect its camera across layouts. MQTT and Tapo save their own integration settings and rules. **Save layout** saves inactive drafts without switching the wall; changes to the active standard layout require **Apply to wall**. **Save automation layouts** saves templates without selecting a standard wall. A weather tile's **Use in layout draft** does not persist the layout by itself.
+**Save scope matters:** stream and picture-in-picture **Save & apply** affect that source wherever used. Independent widgets belong to their layout. MQTT and Tapo save their own integration settings and rules. **Save layout** saves inactive drafts without switching the wall; changes to the active standard layout require **Apply to wall**. **Save automation layouts** saves templates without selecting a standard wall. A widget's **Use in layout draft** does not persist the layout by itself.
 
-In-app navigation retains unsaved drafts. Closing or reloading the browser discards them without a browser warning. Concurrent edits can be rejected as stale; reload the affected editor before retrying.
+In-app navigation retains unsaved drafts. Refresh restores the selected section and subtab, but closing or reloading the browser discards unsaved drafts without a browser warning. Concurrent edits can be rejected as stale; reload the affected editor before retrying.
 
 ## Streams and layouts
 
@@ -213,9 +262,9 @@ Rules can show/hide an overlay or temporarily activate standard/automation layou
 
 ![Weather Widget editor with a synthetic location and sample weather](assets/admin-preview/weather.png)
 
-In **Layouts**, use **Add weather** for a standard-layout tile, or select a main camera and choose **Weather Widget**. Choose a city or coordinates, units, fields, preset, colors, opacity and placement. Widgets save across that camera's standard and automation appearances; weather tiles remain part of the layout draft until saved/applied.
+Enable Weather in **Plugins**, then use **Layouts → Add content → Weather**. Choose a city or coordinates, units, fields, preset, alignment, optional condition backgrounds and placement. Advanced appearance contains color, opacity and content-padding controls. The widget remains part of its layout draft until saved/applied.
 
-There is at most one widget per main camera and up to 32 distinct locations across saved layouts/widgets. Weather is unconfigured by default. It uses cached Open-Meteo readings without another video player. It does not provide official severe-weather alerts; small cards omit details that do not fit.
+Layouts support multiple independent widgets and up to 32 distinct weather locations across saved layouts/widgets. Weather is disabled and unconfigured on new installations. It uses cached Open-Meteo readings without another video player. It does not provide official severe-weather alerts; small cards omit details that do not fit.
 
 The Controller sends location searches and configured coordinates to Open-Meteo. The implementation uses its free non-commercial endpoint and has no paid-endpoint/API-key setting. Review [Open-Meteo's terms and privacy](https://open-meteo.com/en/terms) before deployment; a subscription alone does not change RTSPView's endpoint.
 
@@ -289,14 +338,14 @@ See [privacy guidance](docs/privacy.md). Do not attach raw configuration exports
 
 ## Development and contributing
 
-The beta branch adds [aircraft widgets and flight-board tiles](docs/aircraft.md), with the same appearance controls as weather, and [Live View startup settings and repair](docs/windows-startup.md). See [1.0.47-beta.1 notes](docs/releases/1.0.47-beta.1.md) for the current local beta work.
+The [complete 1.0.47 changes](#changes-across-the-1047-beta-series) above consolidate the beta series. Earlier beta notes and design reviews describe intermediate implementations; use this guide for current behavior. See [Live View startup settings and repair](docs/windows-startup.md) for startup details.
 
 Build from the tag corresponding to the version you intend to run. Release tags and the default branch can differ. Use Windows x64, the .NET 8 SDK selected by [global.json](global.json), Node.js 22 and PowerShell 7 for the check runner. Native rendering checks need an interactive Windows desktop.
 
 ```powershell
 git clone https://github.com/GalacticaActual75/RTSPView.git
 Set-Location RTSPView
-git switch --detach v1.0.46
+git switch --detach v1.0.47-beta.26
 dotnet restore RTSPView.sln -r win-x64
 dotnet build RTSPView.sln -c Release --no-restore
 dotnet run --project tests/RTSPView.ConfigurationChecks -c Release
