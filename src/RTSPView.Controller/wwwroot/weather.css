@@ -43,3 +43,24 @@
 
 .weather-card[data-composition="columns"] .weather-current{width:100%}
 .weather-card[data-composition="columns"] .weather-current strong{min-width:0}
+/* Local, non-interactive condition backgrounds; opacity is independent of content. */
+.weather-card[data-sky]{position:relative;isolation:isolate;color:#eef3f8}
+.weather-card[data-sky]>*{position:relative;z-index:1}
+.weather-card[data-sky]::before,.weather-card[data-sky]::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:0;opacity:var(--sky-opacity,.8)}
+.weather-card[data-sky]::before{background:linear-gradient(90deg,#101f32d9,#101f3244),radial-gradient(ellipse at 83% 32%,#8296aa 0 14%,transparent 15%),radial-gradient(ellipse at 68% 38%,#8296aa 0 22%,transparent 23%),linear-gradient(140deg,#21384d,#647d91)}
+.weather-card[data-sky=clear]::before{background:linear-gradient(90deg,#101f32cc,#101f3233),radial-gradient(circle at 82% 22%,#fff0b8 0 9%,#eecb6c33 10%,transparent 32%),linear-gradient(135deg,#244961,#8e895f)}
+.weather-card[data-sky=partly]::before{background:linear-gradient(90deg,#101f32cc,transparent),radial-gradient(ellipse at 74% 40%,#bcc9d9 0 20%,transparent 21%),radial-gradient(circle at 82% 22%,#fff0b8 0 9%,transparent 10%),linear-gradient(135deg,#244961,#8e997f)}
+.weather-card[data-day=night]::before{filter:brightness(.55) saturate(.7)}
+.weather-card[data-sky=clear][data-day=night]::before{filter:none;background:linear-gradient(90deg,#101c30cc,transparent),radial-gradient(circle at 78% 19%,#233b5d 0 8%,transparent 8.5%),radial-gradient(circle at 82% 22%,#e8edda 0 9%,transparent 9.5%),linear-gradient(130deg,#101b30,#334e78)}
+.weather-card[data-sky=rain]::after,.weather-card[data-sky=ice]::after,.weather-card[data-sky=storm]::after{background-image:repeating-linear-gradient(105deg,transparent 0 36px,#d7eaff55 37px,transparent 39px 70px);background-size:140px 90px;mask-image:repeating-linear-gradient(transparent 0 18px,#000 22px 40px,transparent 45px 90px)}
+.weather-card[data-sky=snow]::after,.weather-card[data-sky=hail]::after{background-image:radial-gradient(circle,#eefaffb3 1.7px,transparent 2.5px),radial-gradient(circle,#eefaff80 1px,transparent 2px);background-size:64px 75px,95px 115px;background-position:0 0,28px 45px}
+.weather-card[data-sky=ice]::before{filter:hue-rotate(15deg)}
+.weather-card[data-sky=fog]::after{background:repeating-linear-gradient(0deg,transparent 0 28px,#beced955 50px,transparent 80px);filter:blur(10px)}
+.weather-card[data-sky=storm]::before,.weather-card[data-sky=hail]::before{background:linear-gradient(90deg,#10172dd9,#10172d33),radial-gradient(ellipse at 80% 28%,#ada8d1 0 5%,#666580 20%,transparent 55%),linear-gradient(140deg,#192036,#484962)}
+.weather-card[data-motion=on][data-sky=rain]::after,.weather-card[data-motion=on][data-sky=ice]::after,.weather-card[data-motion=on][data-sky=storm]::after{animation:weather-rain var(--sky-speed) linear infinite}
+.weather-card[data-motion=on][data-sky=snow]::after{animation:weather-snow 8s linear infinite}
+.weather-card[data-motion=on][data-sky=hail]::after{animation:weather-snow 1.8s linear infinite}
+.weather-card[data-motion=on][data-sky=fog]::after{animation:weather-fog 18s ease-in-out infinite alternate}
+.weather-card[data-motion=on][data-sky=storm]::before,.weather-card[data-motion=on][data-sky=hail]::before{animation:weather-lightning 9s ease-in-out infinite}
+@keyframes weather-rain{to{background-position:-140px 90px}}@keyframes weather-snow{to{background-position:64px 150px,123px 275px}}@keyframes weather-fog{to{translate:20px 6px}}@keyframes weather-lightning{0%,75%,100%{filter:brightness(.8)}83%{filter:brightness(1.3)}}
+@media(prefers-reduced-motion:reduce){.weather-card[data-sky]::before,.weather-card[data-sky]::after{animation:none!important}}

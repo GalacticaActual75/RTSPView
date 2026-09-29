@@ -21,3 +21,8 @@ assert.deepEqual(JSON.parse(JSON.stringify(transpose(transpose(original)))),orig
 console.log('PASS native/browser responsive policy parity, readable typography, 1x1/2x2/3x3 grid tiles and mixed multi-cell spans.');
 
 assert(view.weatherMeasure(1280,720).wide);assert(view.weatherMeasure(1280,720).font>view.weatherMeasure(640,360).font);assert(view.weatherMeasure(1280,720).reading>view.weatherMeasure(640,360).reading);
+
+const weather=vm.runInContext('weatherUi',context);
+for(const [code,native] of Object.entries(JSON.parse(fs.readFileSync('artifacts/widgets/weather-conditions.json','utf8')))){assert.equal(weather.condition(Number(code)),native.Label);assert.equal(weather.conditions[code][1],native.Scene);assert.equal(weather.conditions[code][2],native.Intensity);}
+assert.equal(weather.condition(999),'Conditions unavailable');
+console.log('PASS all 29 native/browser weather condition labels, scenes and intensities match.');

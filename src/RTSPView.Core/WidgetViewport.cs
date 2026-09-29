@@ -18,10 +18,10 @@ public sealed record WidgetViewport(double Width, double Height, double Padding,
     public static WidgetViewport WeatherFor(double width, double height, string density = "auto")
     {
         var v = For(width, height, density);
-        if (width < 600 || height < 260 || width < height * 1.3) return v with { Wide = false };
-        var font = Math.Clamp(Math.Min(width / 24, height / 12), 12, 72);
+        if (width < 600 || height < 260 || width < height * 1.3) return v with { Wide = false, Font = Math.Clamp(Math.Min(width / 16, height / 11), 12, 48), Heading = Math.Clamp(Math.Min(width / 16, height / 11), 12, 48) * 1.35, Reading = Math.Clamp(Math.Min(width * .32, height * .4), 24, 240) };
+        var font = Math.Clamp(Math.Min(width / 22, height / 10), 12, 80);
         return v with { Wide = true, Font = font, Heading = font * 1.35,
-            Reading = Math.Clamp(Math.Min(width * .15, height * .4), 24, 320) };
+            Reading = Math.Clamp(Math.Min(width * .19, height * .46), 24, 360) };
     }
     public static void ValidateDensity(string value)
     {

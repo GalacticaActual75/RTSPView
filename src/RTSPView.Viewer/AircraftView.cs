@@ -20,6 +20,8 @@ public sealed class AircraftView : Border
     private bool _takeover;
     private bool? _shown;
     private int _fadeGeneration;
+    private string? _contentKey;
+    private bool _changingContent;
     private string? _lastUpdate;
     public AircraftView() { ClipToBounds = true; IsHitTestVisible = false; SizeChanged += (_, _) => Render(); }
     public void Update(AircraftOptions options, AircraftSnapshot? snapshot, bool overlay = false, bool takeover = false)
@@ -56,8 +58,37 @@ public sealed class AircraftView : Border
         }
         var freshness = _snapshot?.Freshness(now) ?? "unavailable";
         var show = !((_takeover || _overlay && o.HideWhenEmpty) && (freshness != "fresh" || nearby.Length == 0)) && !((_overlay || _takeover) && waiting && nearby.Length == 0);
+        var count = (o.CardDesign == "board" || o.Preset == "board") && ActualWidth >= 600 && ActualHeight >= 240 ? 2 : 1;
+        var selected = _rotation.Select(nearby, count, now);
+        var contentKey = selected.Length == 0 ? freshness + ":" + waiting : string.Join("|", selected.Select(a =>
+            a.Hex + ":" + (o.ShowPhoto && a.Photo is { IsValid: true } photo && AircraftPhotoImages.Get(photo) is { IsCompletedSuccessfully: true, Result: not null } ? photo.Url : "")));
+        if (!show || !o.FadeEnabled)
+        {
+            _changingContent = false;
+            _contentKey = null;
+        }
+        if (show && o.FadeEnabled && _shown == true && _contentKey != null && _contentKey != contentKey)
+        {
+            if (!_changingContent)
+            {
+                _changingContent = true;
+                var generation = ++_fadeGeneration;
+                var animation = new System.Windows.Media.Animation.DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(o.FadeOutMilliseconds));
+                animation.Completed += (_, _) =>
+                {
+                    if (generation != _fadeGeneration) return;
+                    BeginAnimation(OpacityProperty, null); Opacity = 0;
+                    _changingContent = false; _contentKey = null; _shown = false;
+                    Render(); // Render the latest snapshot only after the old content has faded away.
+                };
+                BeginAnimation(OpacityProperty, animation);
+            }
+            return;
+        }
+        if (_changingContent) return;
         SetVisible(show);
         if (!show) return;
+        _contentKey = contentKey;
         var viewport = WidgetViewport.For(ActualWidth, ActualHeight, o.Density);
         var appearance = o.Appearance with { Padding = (int)viewport.Padding };
         WidgetAppearance.Apply(this, appearance);
@@ -72,8 +103,6 @@ public sealed class AircraftView : Border
         else if (nearby.Length == 0) Line(waiting ? "Waiting for aircraft photo" : freshness == "stale" ? "Waiting for fresh positions" : "No aircraft nearby", viewport.Heading, 100);
         else
         {
-            var count = (o.CardDesign == "board" || o.Preset == "board") && ActualWidth >= 600 && ActualHeight >= 240 ? 2 : 1;
-            var selected = _rotation.Select(nearby, count, now);
             var board = new System.Windows.Controls.Primitives.UniformGrid { Columns = selected.Length };
             flow.Add(board, 100);
             var photoRows = new List<(Grid Flight, WidgetFlow Text, double Width, double Budget, double Height, System.Windows.Controls.Image Image, TextBlock Credit)>();

@@ -15,6 +15,8 @@ public sealed record WeatherOptions
     public string Accent { get; init; } = "#F2C75C";
     public string? BackgroundColor { get; init; }
     public int BackgroundOpacity { get; init; } = 80;
+    public bool ConditionBackground { get; init; }
+    public bool AnimateBackground { get; init; } = true;
     public int ContentOpacity { get; init; } = 100;
     public int FontSize { get; init; } = 24;
     public int IconSize { get; init; } = 36;
@@ -79,7 +81,7 @@ public sealed record WeatherSnapshot
 public static class WeatherFormatting
 {
     public static string Temperature(double? celsius, string units) => celsius.HasValue ? Math.Round(units == "imperial" ? celsius.Value * 1.8 + 32 : celsius.Value).ToString(CultureInfo.InvariantCulture) + "°" : "—";
-    public static string Condition(int? code) => code switch { 0 => "Clear", 1 => "Mostly clear", 2 => "Partly cloudy", 3 => "Overcast", 45 or 48 => "Fog", >= 51 and <= 57 => "Drizzle", >= 61 and <= 67 => "Rain", >= 71 and <= 77 => "Snow", >= 80 and <= 82 => "Rain showers", 85 or 86 => "Snow showers", >= 95 and <= 99 => "Thunderstorms", _ => "Conditions unavailable" };
+    public static string Condition(int? code) => WeatherConditions.For(code).Label;
     public static string Icon(int? code, bool day = true) => code switch { 0 => day ? "☀" : "☾", 1 or 2 => "⛅", 3 or 45 or 48 => "☁", >= 71 and <= 77 or 85 or 86 => "❄", >= 95 and <= 99 => "ϟ", >= 51 and <= 82 => "☂", _ => "◇" };
     public static DateTimeOffset LocalTime(DateTimeOffset time, string zone)
     {

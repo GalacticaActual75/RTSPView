@@ -68,6 +68,29 @@ fadeAnimations[1].onfinish();assert.equal(fadeNode.style.visibility,'hidden');
 ui.setVisible(fadeNode,fadeEntry,true);assert.equal(fadeNode.style.visibility,'visible');
 console.log('PASS quick entrance, slower exit, and no animation restart on refresh.');
 
+fadeEntry.contentKey='a:';fadeEntry.shown=true;
+let swaps=0;
+const swap=()=>{swaps++;ui.setVisible(fadeNode,fadeEntry,true);};
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'a:',true,swap),false);
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'a:|b:',true,swap),true);
+const outgoing=fadeAnimations.at(-1);
+assert.equal(outgoing.settings.duration,800);assert.equal(swaps,0);
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'c:|d:',true,swap),true);
+assert.equal(fadeAnimations.at(-1),outgoing);
+outgoing.onfinish();assert.equal(swaps,1);assert.equal(fadeAnimations.at(-1).settings.duration,200);
+for(const [oldKey,newKey] of [['a:|b:','c:|d:'],['a:','a:photo'],['a:|b:','a:']]){
+ fadeEntry.contentKey=oldKey;
+ assert.equal(ui.changeContent(fadeNode,fadeEntry,newKey,true,swap),true);
+ fadeAnimations.at(-1).onfinish();
+}
+fadeEntry.contentKey='a:';ui.changeContent(fadeNode,fadeEntry,'b:',true,swap);
+const interrupted=fadeAnimations.at(-1),beforeHide=swaps;
+ui.changeContent(fadeNode,fadeEntry,'',false,swap);ui.setVisible(fadeNode,fadeEntry,false);
+interrupted.onfinish();assert.equal(swaps,beforeHide);
+fadeEntry.options.fadeEnabled=false;
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'c:',true,swap),false);
+console.log('PASS count changes, pair rotation, photo arrival, refresh coalescing, hide cancellation and disabled fades.');
+
 assert.deepEqual(Array.from(ui.orderedFields({fieldOrder:['owner','type','altitude']})).slice(0,3),['owner','type','altitude']);
 assert.equal(new Set(ui.orderedFields({fieldOrder:['type','type','photo']})).size,10);
 assert.equal(ui.orderedFields({}).includes('registration'),true);

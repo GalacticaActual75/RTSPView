@@ -83,7 +83,7 @@ Owner headings wrap to at most two lines, with the full name retained in the too
 
 Live View image downloads identify the app, follow only validated provider redirects, and retry failed image loads after a one-minute cooldown rather than caching failures for the whole session.
 
-Optional fade transitions provide separate entrance and exit durations (0–5000 ms), defaulting to 200 ms in and 800 ms out when enabled. The last populated card remains during fade-out; polling does not restart an active transition.
+Optional fade transitions provide separate entrance and exit durations (0–5000 ms), defaulting to 200 ms in and 800 ms out when enabled. They cover appearing, disappearing, one/two-aircraft changes, rotation between pairs, and arriving photos. The last populated card remains during fade-out; the latest content replaces it at zero opacity and then fades in. Polling does not restart an active transition, and routine readings update without a fade. For gentler changes, use 800 ms for both durations; zero explicitly means instant. Waiting for aircraft photos avoids an additional photo transition.
 
 ### Layout widgets and appearance
 

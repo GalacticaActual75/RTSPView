@@ -114,6 +114,23 @@ const aircraftUi = (() => {
     const animation=node.animate([{opacity:from},{opacity:show?1:0}],{duration,easing:'ease-out'});entry.animation=animation;
     animation.onfinish=()=>{if(entry.animation!==animation)return;entry.animation=null;node.style.visibility=show?'visible':'hidden';};
   }
+  function changeContent(node,entry,key,show,render){
+    if(!show||!entry.options.fadeEnabled||entry.sampleAllowed){entry.changingContent=false;entry.contentKey=null;return false;}
+    if(entry.changingContent)return true;
+    if(entry.shown===true&&entry.contentKey!=null&&entry.contentKey!==key){
+      entry.changingContent=true;
+      const from=Number(getComputedStyle(node).opacity);entry.animation?.cancel();
+      node.style.opacity='0';
+      const animation=node.animate([{opacity:from},{opacity:0}],{duration:entry.options.fadeOutMilliseconds,easing:'ease-out'});entry.animation=animation;
+      animation.onfinish=()=>{
+        if(entry.animation!==animation)return;
+        entry.animation=null;entry.changingContent=false;entry.contentKey=null;entry.shown=false;entry.renderKey=null;
+        render();
+      };
+      return true;
+    }
+    return false;
+  }
   function photoDecision(states,id,ready,failed,now,seconds){
     const state=states.get(id)||{started:now,decision:'waiting'};
     if(state.decision==='waiting')state.decision=ready?'photo':failed||now-state.started>=seconds*1000?'withoutPhoto':'waiting';
@@ -144,9 +161,14 @@ const aircraftUi = (() => {
     return candidates;
   }
   function paint(node,entry){const o=entry.options,actual=snapshots.find(s=>s.key===key(o)),s=actual||(entry.sampleAllowed?sample(o):null),state=freshness(s),matches=nearby(o,s),all=entry.sampleAllowed&&!actual?matches:photoCandidates(node,entry,matches),waiting=matches.length>0&&all.length===0;
-    const show=(entry.sampleAllowed||!shouldHide(o,state,all.length,entry.overlay,entry.takeover))&&!((entry.overlay||entry.takeover)&&waiting);setVisible(node,entry,show);if(!show)return;
+    const show=(entry.sampleAllowed||!shouldHide(o,state,all.length,entry.overlay,entry.takeover))&&!((entry.overlay||entry.takeover)&&waiting);
     const requested=(o.cardDesign==='board'||o.preset==='board')&&node.clientWidth>=600&&node.clientHeight>=240?2:1;
     const selected=selectFlights(entry,all,requested);
+    const loaded=new Set([...node.querySelectorAll('.aircraft-photo img'),...entry.photoLoads?.values()||[]].filter(img=>img.complete&&img.naturalWidth>0).map(img=>img.getAttribute('src')));
+    const contentKey=selected.length?selected.map(a=>a.hex+':'+(o.showPhoto&&a.photo&&loaded.has(a.photo.url)?a.photo.url:'')).join('|'):state+':'+waiting;
+    if(changeContent(node,entry,contentKey,show,()=>{if(node.isConnected)paint(node,entry);}))return;
+    setVisible(node,entry,show);if(!show)return;
+    entry.contentKey=contentKey;
     const renderKey=JSON.stringify([o,state,all,s?.lastError,!!actual,selected.map(a=>a.hex),Math.floor(Date.now()/65000)]);if(entry.renderKey===renderKey)return;entry.renderKey=renderKey;
     const oldImages=new Map();for(const img of node.querySelectorAll('.aircraft-photo img')){const url=img.getAttribute('src');if(!oldImages.has(url))oldImages.set(url,[]);oldImages.get(url).push(img);}
     node.replaceChildren();node.dataset.theme=o.theme;node.dataset.preset=o.preset;node.dataset.design=o.cardDesign||'compact';
@@ -170,7 +192,7 @@ const aircraftUi = (() => {
           const p=a.photo,figure=el('div',undefined,'aircraft-photo'),image=oldImages.get(p.url)?.shift()||entry.photoLoads?.get(p.url)||el('img');
           image.alt='Aircraft photo';image.referrerPolicy='no-referrer';figure.hidden=true;figure.dataset.photoState='pending';
           const ready=()=>{const loaded=image.complete&&image.naturalWidth>0;figure.dataset.photoState=loaded?'loaded':'pending';figure.hidden=!loaded;body.classList.toggle('has-photo',loaded);requestAnimationFrame(()=>fit(node));};
-          image.onerror=()=>{image._retryAt=Date.now()+65000;figure.dataset.photoState='failed';figure.hidden=true;delete figure.dataset.responsiveHidden;body.classList.remove('has-photo');requestAnimationFrame(()=>fit(node));};image.onload=ready;
+          image.onerror=()=>{image._retryAt=Date.now()+65000;entry.renderKey=null;if(node.isConnected)paint(node,entry);};image.onload=()=>{entry.renderKey=null;if(node.isConnected)paint(node,entry);};
           const credit=el('a',(p.representative?'Representative · ':'')+'Photo © '+p.photographer+' · '+(p.source||'Planespotters.net')+(p.license?' · '+p.license:''));credit.href=p.link;credit.target='_blank';credit.rel='noopener noreferrer';
           figure.append(image,sized(credit,o,'photoCredit'));body.append(figure);
           if(image.getAttribute('src')!==p.url||image.complete&&!image.naturalWidth&&Date.now()>=(image._retryAt||0))image.src=p.url;ready();
@@ -232,10 +254,10 @@ const aircraftUi = (() => {
     toggle('Show location heading','showHeading');
 
     const fades=el('details');fades.append(el('summary','Fade transitions'));controls.append(fades);
-    toggle('Fade when appearing or disappearing','fadeEnabled',o,fades);
+    toggle('Fade aircraft and photo changes','fadeEnabled',o,fades);
     slider('Fade-in duration (ms)','fadeInMilliseconds',fades,0,5000);
     slider('Fade-out duration (ms)','fadeOutMilliseconds',fades,0,5000);
-    fades.append(el('p','Suggested: 200 ms in, 800 ms out. Fades apply when the card appears or hides, not on each data refresh.','weather-note'));
+    fades.append(el('p','Fades cover appearing, disappearing, aircraft count changes, rotation, and arriving photos. Old content fades out before new content fades in. Routine readings update without restarting the fade. For gentler transitions, try 800 ms in and 800 ms out; zero is instant. Enable “Wait for aircraft photo” to avoid a separate photo transition.','weather-note'));
     if(placement){toggle('Hide when no aircraft nearby','hideWhenEmpty');controls.append(el('p','Off keeps the widget visible like weather. On shows it only while fresh aircraft positions match your radius and altitude filters. Waiting, empty, stale and unavailable states stay hidden.','weather-note'));}
     const fields=el('details');fields.append(el('summary','Choose aircraft information'));controls.append(fields);
     fields.append(el('p','Move information up or down to choose its order. When space is limited, items nearer the top take priority.','weather-note'));
@@ -264,5 +286,5 @@ const aircraftUi = (() => {
     const observer=new ResizeObserver(paintPreview);observer.observe(stage);dialog.onclose=()=>{observer.disconnect();dialog.remove();if(opener?.isConnected)opener.focus();};document.body.append(dialog);dialog.showModal();paintPreview();inputs.location.focus();refresh();
   }
   async function overlayEditor(slot){try{const config=await api('/api/config'),existing=(config.aircraftOverlays||[]).find(o=>o.hostCameraSlot===slot)||{hostCameraSlot:slot,enabled:true,widthPercent:40,x:100,y:100,margin:12,aircraft:{...defaults(),fields:["type","owner","airline","altitude","speed","distance"]}};editor(existing.aircraft,async(_,overlay)=>{const saved=await api('/api/aircraft/overlays/'+slot,{method:'PUT',body:JSON.stringify(overlay)});window.dispatchEvent(new CustomEvent('aircraft-overlay-saved',{detail:saved}));},existing,slot);}catch(e){uiDialogs.toast(e.message,'error');}}
-  return {photoDecision,orderedFields,fit,setVisible,hasDetailValue,textSize,balancedTextSizes,selectFlights,defaults,preview,editor,overlayEditor,overlayBounds,refresh,nearby,metric,shouldHide,status,replacementState};
+  return {changeContent,photoDecision,orderedFields,fit,setVisible,hasDetailValue,textSize,balancedTextSizes,selectFlights,defaults,preview,editor,overlayEditor,overlayBounds,refresh,nearby,metric,shouldHide,status,replacementState};
 })();

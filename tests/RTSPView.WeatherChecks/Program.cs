@@ -23,6 +23,7 @@ internal static class Program
         }
         DataChecks().GetAwaiter().GetResult();
         var app = new Application();
+        AircraftFadeChecks.Run();
         SystemWidgetChecks.Run();
         var now = DateTimeOffset.UtcNow;
         var data = new WeatherSnapshot { Key = "47.6062,-122.3321", Temperature = 22.2, Code = 2, FetchedAt = now, ValidAt = now, TimeZone = "America/Los_Angeles", Humidity = 48, Wind = 2.7,
@@ -103,6 +104,19 @@ internal static class Program
         detailed.Width=180;detailed.Height=100;detailed.Measure(new Size(180,100));detailed.Arrange(new Rect(0,0,180,100));detailed.UpdateLayout();
         Check(FindText(detailed).Where(t=>t.Opacity>0).All(t=>t.FontSize>=10),"adaptive small cards keep readable type instead of warning clutter");
         Directory.CreateDirectory("artifacts/widgets");
+        Check(WeatherConditions.All.Count==29,"all documented weather codes have a scene and exact label");
+        File.WriteAllText("artifacts/widgets/weather-conditions.json",JsonSerializer.Serialize(WeatherConditions.All));
+        foreach(var code in WeatherConditions.All.Keys)
+        foreach(var padding in new[]{0,14,48})
+        {
+            var effectCard=new WeatherView {Width=320,Height=240};
+            effectCard.Update(new WeatherOptions {ConditionBackground=true,AnimateBackground=false,Padding=padding,Fields=["temperature","condition","highLow"]},data with {Code=code});
+            effectCard.Measure(new Size(320,240));effectCard.Arrange(new Rect(0,0,320,240));effectCard.UpdateLayout();
+            var image=new RenderTargetBitmap(320,240,96,96,PixelFormats.Pbgra32);image.Render(effectCard);
+            Check(FindText(effectCard).Any(t=>t.Text.Contains(WeatherConditions.For(code).Label)),"native condition remains exact: "+code);
+            Check(FindText(effectCard).Single(t=>t.Text.Contains("Open-Meteo")).FontSize==10,"source credit stays small with weather effects");
+        }
+        Check(WeatherConditions.For(999).Scene=="none","unknown weather code uses plain fallback");
         var contracts = (from size in new[] {new Size(160,96),new Size(180,400),new Size(640,120),new Size(320,180),new Size(640,360),new Size(960,540),new Size(1920,1080)}
                          from density in new[] {"auto","minimal","standard","detailed"}
                          select new { Density=density, Viewport=WidgetViewport.For(size.Width,size.Height,density), Weather=WidgetViewport.WeatherFor(size.Width,size.Height,density), Photo=AircraftPhotoViewport.For(size.Width,size.Height), PhotoEmphasis=AircraftPhotoViewport.For(size.Width,size.Height,true), PhotoPair=AircraftPhotoViewport.For(size.Width,size.Height,false,true) }).ToArray();

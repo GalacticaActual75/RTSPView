@@ -11,7 +11,7 @@ using HorizontalAlignment = System.Windows.HorizontalAlignment;
 
 namespace RTSPView.Viewer;
 
-// Pure WPF content: no browser, video callbacks, network calls or animations.
+// Pure WPF content with optional native weather effects; no browser, video callbacks or network calls.
 public sealed class WeatherView : Border
 {
     public bool IndependentWidget { get; set; }
@@ -29,6 +29,7 @@ public sealed class WeatherView : Border
     {
         var original = _options; var snapshot = _snapshot; var now = DateTimeOffset.UtcNow;
         var viewport = WidgetViewport.WeatherFor(ActualWidth, ActualHeight, original.Density);
+        viewport = viewport with { Padding = Math.Min(Math.Min(ActualWidth / 4, ActualHeight / 4), viewport.Padding * original.Padding / 14d) };
         var o = original with { Padding = (int)viewport.Padding };
         WidgetAppearance.Apply(this, o);
         var flow = new WidgetFlow(); Child = flow;
@@ -44,6 +45,7 @@ public sealed class WeatherView : Border
             primary = new WidgetFlow(); grid.Children.Add(primary); grid.Children.Add(flow); Grid.SetColumn(flow, 2); Child = grid;
         }
         Child.Opacity = o.ContentOpacity / 100d;
+        if (o.ConditionBackground && snapshot is not null && WeatherConditions.For(snapshot.Code).Scene != "none" && snapshot.Freshness(now) != "unavailable") o = o with { Theme = "dark" };
         var primaryOptions = o;
         bool Has(string field) => o.Fields.Contains(field);
         void Line(string text, double size, int priority) => flow.Add(WidgetFlow.Text(text, size, o), priority);
@@ -86,7 +88,16 @@ public sealed class WeatherView : Border
         }
         if (Has("clock") && viewport.DetailLevel > 0) Line(WeatherFormatting.LocalTime(now, snapshot?.TimeZone ?? o.TimeZone).ToString("ddd, MMM d · HH:mm"), viewport.Font, 30);
         var warning = state is "stale" or "retrying" ? (state == "stale" ? "Outdated · " : "Refresh failed · ") : "";
-        Line(warning + "Open-Meteo.com · CC BY 4.0", Math.Max(10, viewport.Font * .75), 95);
+        Line(warning + "Open-Meteo.com · CC BY 4.0", 10, 95);
+        var scene = WeatherConditions.For(snapshot?.Code);
+        if (o.ConditionBackground && state != "unavailable" && scene.Scene != "none" && snapshot is not null)
+        {
+            var content = (FrameworkElement)Child; Child = null;
+            var canvas = new Grid { Margin = new Thickness(-o.Padding) };
+            canvas.Children.Add(new WeatherBackdrop(scene, snapshot.IsDay, o.AnimateBackground, o.CornerRadius) { Opacity = o.BackgroundOpacity / 100d });
+            content.Margin = new Thickness(o.Padding); canvas.Children.Add(content); Child = canvas;
+        }
+
 
     }
 }

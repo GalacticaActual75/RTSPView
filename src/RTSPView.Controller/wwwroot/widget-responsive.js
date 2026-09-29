@@ -11,11 +11,13 @@ const widgetViewport = (() => {
   }
   function weatherMeasure(width,height,density='auto') {
     const v=measure(width,height,density);v.wide=width>=600&&height>=260&&width>=height*1.3;
-    if(v.wide){v.font=clamp(Math.min(width/24,height/12),12,72);v.heading=v.font*1.35;v.reading=clamp(Math.min(width*.15,height*.4),24,320);}
+    if(v.wide){v.font=clamp(Math.min(width/22,height/10),12,80);v.heading=v.font*1.35;v.reading=clamp(Math.min(width*.19,height*.46),24,360);}
+    else{v.font=clamp(Math.min(width/16,height/11),12,48);v.heading=v.font*1.35;v.reading=clamp(Math.min(width*.32,height*.4),24,240);}
     return v;
   }
   function apply(node,options,weather=false) {
     const v=(weather?weatherMeasure:measure)(node.clientWidth,node.clientHeight,options.density);
+    if(weather)v.padding=Math.min(v.width/4,v.height/4,v.padding*(options.padding??14)/14);
     node.dataset.responsive='true';node.dataset.density=String(v.detailLevel);node.style.padding=v.padding+'px';
     node.style.setProperty('--weather-font',v.font+'px');node.style.setProperty('--weather-icon',v.heading+'px');
     return v;
