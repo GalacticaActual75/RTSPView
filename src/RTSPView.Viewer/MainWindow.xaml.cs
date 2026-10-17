@@ -118,6 +118,7 @@ public partial class MainWindow : Window
         _settingsPath = Path.Combine(_dataDirectory, "settings.json");
         _settingsStore = new JsonSettingsStore(_settingsPath);
         _logger = new RollingFileLogger(Path.Combine(_dataDirectory, "logs"));
+        AircraftPhotoImages.Log = message => _logger.Write("AIRCRAFT_PHOTO", message);
         _libVlc = new LibVLC("--no-video-title-show", "--no-osd", "--no-snapshot-preview");
         _libVlc.Log += (_, eventArgs) =>
         {

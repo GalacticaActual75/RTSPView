@@ -4,6 +4,7 @@ namespace RTSPView.Core;
 
 public sealed record WeatherOptions
 {
+    public string Density { get; init; } = "auto";
     public string Location { get; init; } = "Home";
     public double Latitude { get; init; }
     public double Longitude { get; init; }
@@ -14,6 +15,9 @@ public sealed record WeatherOptions
     public string Accent { get; init; } = "#F2C75C";
     public string? BackgroundColor { get; init; }
     public int BackgroundOpacity { get; init; } = 80;
+    public bool ConditionBackground { get; init; }
+    public bool AnimateBackground { get; init; } = true;
+    public int ContentOpacity { get; init; } = 100;
     public int FontSize { get; init; } = 24;
     public int IconSize { get; init; } = 36;
     public int Padding { get; init; } = 14;
@@ -24,12 +28,13 @@ public sealed record WeatherOptions
     public string CacheKey => Latitude.ToString("F4", CultureInfo.InvariantCulture) + "," + Longitude.ToString("F4", CultureInfo.InvariantCulture);
     public void Validate()
     {
+        WidgetViewport.ValidateDensity(Density);
         if (string.IsNullOrWhiteSpace(Location) || Location.Length > 80 || !double.IsFinite(Latitude) || !double.IsFinite(Longitude) || Latitude is < -90 or > 90 || Longitude is < -180 or > 180 ||
             TimeZone is null || TimeZone.Length > 100 || Preset is not ("minimal" or "compact" or "overlay" or "detailed" or "forecast" or "dashboard") || Units is not ("metric" or "imperial") ||
             Theme is not ("auto" or "dark" or "light") || Alignment is not ("left" or "center" or "right") ||
             Accent is not { Length: 7 } || Accent[0] != '#' || Accent.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") >= 0 ||
             (BackgroundColor is not null && (BackgroundColor.Length != 7 || BackgroundColor[0] != '#' || BackgroundColor.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") >= 0)) ||
-            BackgroundOpacity is < 0 or > 100 || FontSize is < 12 or > 64 || IconSize is < 16 or > 96 || Padding is < 0 or > 48 || CornerRadius is < 0 or > 48 ||
+            BackgroundOpacity is < 0 or > 100 || ContentOpacity is < 0 or > 100 || FontSize is < 12 or > 64 || IconSize is < 16 or > 96 || Padding is < 0 or > 48 || CornerRadius is < 0 or > 48 ||
             Fields is null || Fields.Length > AllowedFields.Length || Fields.Any(f => !AllowedFields.Contains(f)) || Fields.Distinct().Count() != Fields.Length)
             throw new InvalidDataException("Weather settings contain an invalid location, appearance, or field selection.");
     }
@@ -76,7 +81,7 @@ public sealed record WeatherSnapshot
 public static class WeatherFormatting
 {
     public static string Temperature(double? celsius, string units) => celsius.HasValue ? Math.Round(units == "imperial" ? celsius.Value * 1.8 + 32 : celsius.Value).ToString(CultureInfo.InvariantCulture) + "°" : "—";
-    public static string Condition(int? code) => code switch { 0 => "Clear", 1 => "Mostly clear", 2 => "Partly cloudy", 3 => "Overcast", 45 or 48 => "Fog", >= 51 and <= 57 => "Drizzle", >= 61 and <= 67 => "Rain", >= 71 and <= 77 => "Snow", >= 80 and <= 82 => "Rain showers", 85 or 86 => "Snow showers", >= 95 and <= 99 => "Thunderstorms", _ => "Conditions unavailable" };
+    public static string Condition(int? code) => WeatherConditions.For(code).Label;
     public static string Icon(int? code, bool day = true) => code switch { 0 => day ? "☀" : "☾", 1 or 2 => "⛅", 3 or 45 or 48 => "☁", >= 71 and <= 77 or 85 or 86 => "❄", >= 95 and <= 99 => "ϟ", >= 51 and <= 82 => "☂", _ => "◇" };
     public static DateTimeOffset LocalTime(DateTimeOffset time, string zone)
     {
@@ -94,7 +99,7 @@ public static class WeatherConfiguration
         {
             WeatherOverlays = [],
             AircraftOverlays = [],
-            Plugins = settings.Plugins with { Weather = true, Aircraft = true },
+            Plugins = settings.Plugins with { Weather = true, Aircraft = true, SystemStats = true, DateTime = true },
             Layouts = settings.Layouts.Select(layout => layout with
             {
                 Widgets = [],

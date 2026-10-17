@@ -5,6 +5,8 @@ public sealed record AircraftPhoto(string Url, string Link, string Photographer)
     public bool Representative { get; init; }
     public string Source { get; init; } = "Planespotters.net";
     public string License { get; init; } = "";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DiagnosticId => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Url)))[..12];
     public string Credit => "Photo © " + Photographer + " · " + Source + (License.Length > 0 ? " · " + License : "");
     public bool IsValid => ((Source == "Planespotters.net" && IsUrl(Url, "t.plnspttrs.net") && IsUrl(Link, "www.planespotters.net")) ||
         (Source == "Airport-Data.com" && (IsUrl(Url, "airport-data.com") || IsUrl(Url, "www.airport-data.com")) && (IsUrl(Link, "airport-data.com") || IsUrl(Link, "www.airport-data.com"))) ||

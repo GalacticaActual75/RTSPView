@@ -21,7 +21,8 @@ public sealed class AircraftService(string directory, IAircraftProvider? provide
     private async Task RunEnabledAsync(CancellationToken token)
     {
         _next.Clear();
-        _photos = new AircraftPhotos(_http);
+        var photoLog = new RollingFileLogger(Path.Combine(directory, "logs"));
+        _photos = new AircraftPhotos(_http, message => photoLog.Write("AIRCRAFT_PHOTO", message));
         _details = new AircraftDetails(_http);
         await Task.WhenAll(FeedAsync(token), _photos.RunAsync(token), _details.RunAsync(token));
     }

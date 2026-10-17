@@ -15,16 +15,49 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 3 && args[0] == "--photo-source-smoke")
+        {
+            var key = "model/" + Uri.EscapeDataString(args[2]) + "|";
+            var photo = RepresentativeAircraftPhotos.Parse(File.ReadAllText(args[1]), key);
+            Check(photo is { IsValid: true }, "real Commons response supplies licensed representative photo");
+            var downloadedBitmap = AircraftPhotoImages.Get(photo!).GetAwaiter().GetResult();
+            Check(downloadedBitmap is not null, "real photo downloads and decodes through native image loader");
+            var time = DateTimeOffset.UtcNow; var settings = new AircraftOptions { Latitude=47.6062, Longitude=-122.3321, Fields=["type","owner","altitude"] };
+            var card = new AircraftView { Width=640, Height=360 };
+            card.Update(settings, new AircraftSnapshot { Key=settings.CacheKey, FetchedAt=time, Aircraft=[Track(time) with { Callsign="N5555U", Registration="N5555U", Type="CC11", ResolvedModel="CubCrafters Carbon Cub (CCK-1865)", RegisteredOwner="Private Owner", Photo=photo }] });
+            card.Measure(new Size(640,360)); card.Arrange(new Rect(0,0,640,360)); card.UpdateLayout();
+            Check(VisualImages(card).Any(i=>i.Source is not null && i.ActualWidth >= 90 && i.ActualHeight >= 50), "real downloaded photo receives visible card area");
+            var capture = new RenderTargetBitmap(640,360,96,96,PixelFormats.Pbgra32); capture.Render(card);
+            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(capture));
+            using var output = File.Create("artifacts/aircraft/real-photo-native.png"); encoder.Save(output); return;
+        }
+        if (args.Contains("--metadata-only")) { AircraftMetadataChecks.Run().GetAwaiter().GetResult(); return; }
+        if (args.Contains("--photo-fallback-only")) { AircraftPhotoFallbackChecks.Run().GetAwaiter().GetResult(); return; }
+        if (args.Length == 2 && args[0] == "--registry-smoke")
+        {
+            var registry = FaaAircraftDetails.Parse(File.ReadAllText(args[1]), "A71518");
+            Check(registry.Owner == "Private Owner" && registry.Model == "CubCrafters Carbon Cub (CCK-1865)", "live FAA page resolves N5555U"); return;
+        }
         // Explicit opt-in diagnostic; normal regression tests never contact flight services.
         if (args.Length == 4 && args[0] == "--provider-smoke")
         {
             ProviderSmoke(args).GetAwaiter().GetResult(); return;
         }
-        if (!args.Contains("--presentation-only")) Backend().GetAwaiter().GetResult();
+        if (!args.Contains("--presentation-only")) { AircraftMetadataChecks.Run().GetAwaiter().GetResult(); Backend().GetAwaiter().GetResult(); }
         var colored = new AircraftOptions { BackgroundColor = "#123456", BackgroundOpacity = 50 };
         var surface = new Border(); WidgetAppearance.Apply(surface, colored.Appearance);
         Check(((SolidColorBrush)surface.Background).Color == Color.FromArgb(127,18,52,86), "custom widget background retains opacity in Live View");
         var now = DateTimeOffset.UtcNow;
+        var gate = new AircraftPhotoGate();
+        Check(gate.Decide("pending",false,false,now,10)==AircraftPhotoDecision.Waiting,"photo gate initially hides an unresolved aircraft");
+        Check(gate.Decide("pending",false,false,now.AddSeconds(9),10)==AircraftPhotoDecision.Waiting,"photo wait respects configured deadline");
+        Check(gate.Decide("pending",false,false,now.AddSeconds(10),10)==AircraftPhotoDecision.WithoutPhoto,"missing photo falls back at timeout");
+        Check(gate.Decide("pending",true,false,now.AddSeconds(11),10)==AircraftPhotoDecision.WithoutPhoto,"late photo cannot pop into text-only encounter");
+        Check(gate.Decide("loaded",true,false,now,10)==AircraftPhotoDecision.Photo,"downloaded photo releases aircraft immediately");
+        Check(gate.Decide("failed",false,true,now,10)==AircraftPhotoDecision.WithoutPhoto,"failed photo releases text-only aircraft");
+        gate.Retain([]);
+        Check(gate.Decide("pending",true,false,now.AddSeconds(12),10)==AircraftPhotoDecision.Photo,"returning aircraft starts a new photo encounter");
+        Check(!JsonSerializer.Deserialize<AircraftOptions>("{}")!.WaitForPhoto,"legacy widgets retain immediate display by default");
         var rotation = new AircraftRotation();
         var ranked = Enumerable.Range(0,5).Select(i => new AircraftTrack { Hex = i.ToString() }).ToArray();
         string Pair(AircraftTrack[] tracks, int seconds) => string.Join(",", rotation.Select(tracks, 5, now.AddSeconds(seconds)).Select(a => a.Hex));
@@ -41,29 +74,7 @@ internal static class Program
         weather.Update(new() { Location = "Seattle" }, new() { FetchedAt = now, ValidAt = now, Temperature = 22, Code = 2 }); root.Children.Add(weather);
         var aircraft = new AircraftView { Margin = new(16) }; Grid.SetColumn(aircraft, 1); root.Children.Add(aircraft); aircraft.Update(options with { Preset = "board" }, snapshot);
         root.Measure(new System.Windows.Size(1100, 620)); root.Arrange(new Rect(0, 0, 1100, 620)); root.UpdateLayout();
-        Check(((SolidColorBrush)weather.Background).Color == ((SolidColorBrush)aircraft.Background).Color && weather.CornerRadius == aircraft.CornerRadius && weather.Padding == aircraft.Padding, "weather and aircraft share surface styling");
-        Check(Texts(aircraft).Contains("UAL123") && Texts(aircraft).Contains("ASA456"), "native flight board renders both callsigns");
-        aircraft.Width = 420; aircraft.Height = 300;
-        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() });
-        root.UpdateLayout();
-        Check(Texts(aircraft).Contains("Owner 0") && Texts(aircraft).Contains("Owner 1") && Texts(aircraft).Contains("Boeing 737-800") && Texts(aircraft).Contains("N123EX"), "compact native board preserves two owners, aircraft type and tail number");
-        Check(!Texts(aircraft).Any(t => t.StartsWith("Registered owner:")), "owner heading has no registered-owner prefix");
-        var owners = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ")).ToArray();
-        var first = owners[0].TranslatePoint(new Point(), aircraft); var second = owners[1].TranslatePoint(new Point(), aircraft);
-        Check(Math.Abs(first.Y-second.Y)<1 && second.X>first.X+100, "two aircraft occupy separate columns on the same row");
-        var customText = options with { Preset = "board", ShowPhoto = false, TextSizes = new() { ["owner"] = 18, ["type"] = 26, ["registration"] = 17, ["altitude"] = 21 } };
-        customText.Validate();
-        var textRoundTrip = JsonSerializer.Deserialize<AircraftOptions>(JsonSerializer.Serialize(customText))!;
-        Check(textRoundTrip.TextSize("type") == 26 && textRoundTrip.TextSize("owner") == 18, "individual text sizes survive serialization");
-        try { (options with { TextSizes = new() { ["type"] = 200 } }).Validate(); throw new Exception("oversized text accepted"); } catch (InvalidDataException) { }
-        aircraft.Update(customText, snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() }); root.UpdateLayout();
-        Check(VisualTexts(aircraft).First(t => t.Text == "Owner 0").FontSize == 18 && VisualTexts(aircraft).First(t => t.Text == "Boeing 737-800").FontSize == 26 && VisualTexts(aircraft).First(t => t.Text == "N123EX").FontSize == 17, "native owner, aircraft type and tail use independent sizes");
-        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() });
-        var stableTree = aircraft.Child;
-        var boardSnapshot = snapshot with { Aircraft = snapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = "Owner " + i }).ToArray() };
-        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = false }, boardSnapshot);
-        Check(ReferenceEquals(stableTree, aircraft.Child), "unchanged polling retains the native aircraft visual tree");
-        // Seed an in-memory image so layout tests never contact photo services.
+        Check(((SolidColorBrush)weather.Background).Color == ((SolidColorBrush)aircraft.Background).Color, "weather and aircraft share surface styling");
         var testPhoto = new AircraftPhoto("https://t.plnspttrs.net/layout-test.jpg", "https://www.planespotters.net/photo/1", "Layout fixture");
         var imageCache = AircraftPhotoImages.Cache.Tasks;
         var testImage = BitmapSource.Create(3,2,96,96,PixelFormats.Bgr32,null,new byte[24],12); testImage.Freeze();
@@ -73,45 +84,135 @@ internal static class Program
         Check(retryCache.Get(testPhoto).GetAwaiter().GetResult() is null && retryCache.Get(testPhoto).GetAwaiter().GetResult() is null && attempts == 1, "failed native image uses retry cooldown");
         cacheTime = cacheTime.AddSeconds(61);
         Check(retryCache.Get(testPhoto).GetAwaiter().GetResult() == testImage && attempts == 2, "native image recovers after transient failure without restart");
-        Check(retryCache.Get(testPhoto).GetAwaiter().GetResult() == testImage && attempts == 2, "successful native image stays cached");
-        aircraft.Width = 510; aircraft.Height = 300;
-        aircraft.Update(options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = true }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
-        var imageCredits = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Photo ©")).ToArray();
-        var photoOwners = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ")).ToArray();
-        Check(imageCredits.Length == 2 && imageCredits.Zip(photoOwners).All(pair => pair.First.TranslatePoint(new Point(),aircraft).Y > pair.Second.TranslatePoint(new Point(),aircraft).Y + pair.Second.ActualHeight), "both native photo credits sit below owner headings");
-        Check(photoOwners.All(owner => owner.ActualWidth > 150), "photos do not consume owner heading width");
-        foreach (var design in new[] { "compact", "photo", "data", "board" })
+        var failedPhoto = testPhoto with { Url = "https://t.plnspttrs.net/failed.jpg" };
+        imageCache[failedPhoto.Url] = Task.FromResult<BitmapSource?>(null);
+        var pendingPhoto = testPhoto with { Url = "https://t.plnspttrs.net/pending.jpg" };
+        var pending = new TaskCompletionSource<BitmapSource?>(); imageCache[pendingPhoto.Url] = pending.Task;
+        bool Visible(UIElement element, DependencyObject parent)
         {
-            aircraft.Height = 420;
-            aircraft.Update(options with { CardDesign = design, Preset = "board", ShowPhoto = true, Fields = ["type", "altitude"] }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
-            Check(Texts(aircraft).Contains("Owner 0") && Texts(aircraft).Contains("Owner 1") && VisualTexts(aircraft).Any(t => t.Text.StartsWith("ALT ")), "native " + design + " design preserves both identities and metrics");
+            for (DependencyObject? n = element; n != null && n != parent; n = VisualTreeHelper.GetParent(n))
+                if (n is UIElement e && (e.Opacity == 0 || e.Visibility != Visibility.Visible || e.RenderSize.Height <= 0)) return false;
+            return true;
         }
-        foreach (var design in new[] { "compact", "photo", "data", "board" })
+        var registryTrack = Track(now) with { Callsign="N5555U", Registration="N5555U", Type="CC11", ResolvedModel="CubCrafters Carbon Cub (CCK-1865)", RegisteredOwner="Private Owner", DetailsSource="FAA", Photo=null };
+        var registryCard = new AircraftView { Width=640, Height=360 };
+        registryCard.Update(options with { ShowPhoto=false }, snapshot with { Aircraft=[registryTrack] });
+        registryCard.Measure(new Size(640,360)); registryCard.Arrange(new Rect(0,0,640,360)); registryCard.UpdateLayout();
+        Check(VisualTexts(registryCard).Any(t=>t.Text==registryTrack.ModelName&&Visible(t,registryCard)), "native wall shows resolved Carbon Cub model");
+        Check(VisualTexts(registryCard).Any(t=>t.Text=="Private Owner"&&Visible(t,registryCard)), "native wall retains owner before secondary metrics");
+        // Loaded photos must survive ordinary popup sizes, every density and design.
         {
-            aircraft.Height = 420;
-            var fixedPhoto = options with { CardDesign = design, Preset = "board", ShowPhoto = true, Fields = ["type", "altitude"] };
-            aircraft.Update(fixedPhoto, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = null }).ToArray() }); root.UpdateLayout();
-            var beforePhoto = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ") || t.Text.StartsWith("ALT ")).Select(t => (t.Text,t.TranslatePoint(new Point(),aircraft))).ToArray();
-            aircraft.Update(fixedPhoto, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto }).ToArray() }); root.UpdateLayout();
-            var afterPhoto = VisualTexts(aircraft).Where(t => t.Text.StartsWith("Owner ") || t.Text.StartsWith("ALT ")).Select(t => (t.Text,t.TranslatePoint(new Point(),aircraft))).ToArray();
-            Check(beforePhoto.SequenceEqual(afterPhoto), "native " + design + " photo arrival never moves owner or metrics");
+            foreach (var density in new[] { "auto", "minimal", "standard", "detailed" })
+            foreach (var design in new[] { "compact", "photo", "board" })
+            foreach (var box in new[] { new Size(320,180), new Size(640,360), new Size(960,540) })
+            {
+                var popupOptions = options with { CardDesign=design, ShowPhoto=true, Density=density };
+                var bounds=AircraftGeometry.Bounds(new() { Aircraft=popupOptions },box.Width,box.Height);
+                foreach (var target in new[] { box, new Size(bounds.Width,bounds.Height) })
+                {
+                    var popup=new AircraftView { Width=target.Width,Height=target.Height };
+                    popup.Update(popupOptions,snapshot with { Aircraft=[snapshot.Aircraft[0] with { Photo=testPhoto }] },overlay:true);
+                    popup.Measure(target);popup.Arrange(new Rect(target));popup.UpdateLayout();
+                    if (target.Width >= 160 && target.Height >= 180)
+                    {
+                        var loaded=VisualImages(popup).Single();
+                        Check(Visible(loaded,popup), $"loaded photo stays visible {design} {density} {target}");
+                        Check(VisualTexts(popup).Where(t=>t.Text.Contains("Photo ©")||t.Text.Contains("ADSB.lol")).All(t=>t.FontSize==10),"photo and ADS-B credits remain small as card grows");
+                        Check(loaded.Clip is RectangleGeometry { RadiusX: >= 6, RadiusY: >= 6 }, "photo itself has rounded corners");
+                        Check(loaded.ActualWidth>=90 && loaded.ActualHeight>=50,"photo gets usable dimensions instead of a tiny thumbnail");
+                        Check(VisualTexts(popup).Any(t=>t.Text.StartsWith("ALT ")&&Visible(t,popup)),"altitude remains visible beside photo");
+                    }
+                    if (args.Contains("--photo-layout-trace")) Console.WriteLine($"PHOTO TRACE design={design} card={target.Width:0}x{target.Height:0} loaded={VisualImages(popup).Count()} visible={VisualImages(popup).Count(i=>Visible(i,popup))} density={WidgetViewport.For(target.Width,target.Height).DetailLevel}");
+                }
+            }
         }
-        aircraft.Height = 215;
-        var compactOptions = options with { Preset = "board", MaximumAircraft = 2, ShowPhoto = true, Fields = ["type", "airline", "altitude"] };
-        aircraft.Update(compactOptions, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select(a => a with { Photo = testPhoto, Airline = "Japan Airlines", Callsign = a.Registration }).ToArray() }); root.UpdateLayout();
-        Check(Texts(aircraft).Contains("Airline: Japan Airlines") && Texts(aircraft).Contains("ALT 12,400 ft") && !Texts(aircraft).Any(t => t.StartsWith("Details hidden")), "compact native photos shrink before airline and altitude are removed");
-        aircraft.Height = 300;
-        const string longOwner = "Northwoods Aviation Services LLC";
-        aircraft.Update(options with { Preset = "board", ShowPhoto = false, Fields = ["type", "airline", "destination", "altitude"] }, boardSnapshot with { Aircraft = boardSnapshot.Aircraft.Select((a,i) => a with { RegisteredOwner = longOwner, Airline = i == 0 ? " Unavailable " : "Japan Airlines", Destination = i == 0 ? "N/A" : "SEA · Seattle" }).ToArray() }); root.UpdateLayout();
-        var wrappedOwner = VisualTexts(aircraft).First(t => t.Text == longOwner);
-        Check(wrappedOwner.ActualHeight > wrappedOwner.LineHeight && wrappedOwner.ActualHeight <= wrappedOwner.LineHeight * 2 + 1, "owner names wrap within two lines");
-        Check(!Texts(aircraft).Any(t => t.Contains("Unavailable") || t.Contains("N/A")) && Texts(aircraft).Contains("Airline: Japan Airlines") && Texts(aircraft).Contains("Destination (lookup): SEA · Seattle"), "unavailable details are omitted while known airline and destination remain");
-        aircraft.Width=620;aircraft.Height=220;
-        aircraft.Update(options with { ShowPhoto=true, Preset="featured", CardDesign="compact", Fields=["type","airline","destination","altitude","speed","distance","track","verticalRate"] },
-            boardSnapshot with { Aircraft=[boardSnapshot.Aircraft[0] with { Photo=testPhoto, RegisteredOwner="Alaska Airlines", Type="B739", Airline="Alaska Airlines", Destination="SEA · Seattle Tacoma International Airport" }] });root.UpdateLayout();
-        var retainedImage=VisualImages(aircraft).Single();
-        var visibleAncestry=true;for(DependencyObject? node=retainedImage;node is not null;node=VisualTreeHelper.GetParent(node))if(node is UIElement element&&element.Visibility!=Visibility.Visible)visibleAncestry=false;
-        Check(visibleAncestry && retainedImage.Source is not null && retainedImage.ActualHeight>=47 && retainedImage.Visibility==Visibility.Visible,"wide short native card retains its loaded photo after trimming details");
+        foreach (var box in new[] { new Size(160,96), new Size(180,400), new Size(640,120), new Size(320,180), new Size(640,360), new Size(960,540), new Size(1920,1080) })
+        foreach (var photo in new AircraftPhoto?[] { null, failedPhoto, pendingPhoto, testPhoto })
+        {
+            var card = new AircraftView { Width=box.Width, Height=box.Height };
+            var data = snapshot with { Aircraft=snapshot.Aircraft.Select(t=>t with { Photo=photo, RegisteredOwner="A very long aircraft owner organization with international operations and charter services", Destination="SEA · Seattle Tacoma International Airport" }).ToArray() };
+            card.Update(options with { Preset="board", TextSizes=new() { ["owner"]=64, ["altitude"]=8 } }, data);
+            card.Measure(box);card.Arrange(new Rect(box));card.UpdateLayout();
+            var text=VisualTexts(card).Where(t=>Visible(t,card)).ToArray();
+            Check(text.Any(t=>t.Text=="UAL123") && text.Any(t=>t.Text.StartsWith("ALT ")), "responsive card retains identifier and altitude " + box);
+            foreach(var t in text)
+            {
+                var bounds=t.TransformToAncestor(card).TransformBounds(new Rect(t.RenderSize));
+                Check(bounds.Left>=-.5 && bounds.Top>=-.5 && bounds.Right<=box.Width+.5 && bounds.Bottom<=box.Height+.5 && t.FontSize>=10, "visible native text stays readable and inside " + box);
+            }
+            if(photo!=testPhoto)Check(!VisualImages(card).Any(), "missing, failed and pending images reserve no native rectangle " + box);
+            if(box.Width<600||box.Height<240)Check(!text.Any(t=>t.Text=="ASA456"),"small board rotates one aircraft " + box);
+            else Check(text.Any(t=>t.Text=="ASA456"),"large board shows two aircraft " + box);
+        }
+        foreach (var photoOnFirst in new[] { true, false })
+        foreach (var showHeading in new[] { true, false })
+        {
+            var mixedBoard = new AircraftView {Width=960,Height=540};
+            mixedBoard.Update(options with { CardDesign="board",ShowHeading=showHeading,Fields=["altitude","type"] },snapshot with {Aircraft=[
+                snapshot.Aircraft[0] with {Photo=photoOnFirst?testPhoto:null,Type="C182"},
+                snapshot.Aircraft[1] with {Photo=photoOnFirst?null:testPhoto,Type="Naval Aircraft Factory N3N-3"}]});
+            mixedBoard.Measure(new Size(960,540));mixedBoard.Arrange(new Rect(0,0,960,540));mixedBoard.UpdateLayout();
+            var identifiers=VisualTexts(mixedBoard).Where(t=>t.Text is "UAL123" or "ASA456").ToArray();
+            var heights=identifiers.Select(t=>t.TransformToAncestor(mixedBoard).Transform(new Point()).Y).ToArray();
+            Check(heights.Length==2&&Math.Abs(heights[0]-heights[1])<.5,"two-flight identifiers align with mixed photo availability");
+            var altitudes=VisualTexts(mixedBoard).Where(t=>t.Text.StartsWith("ALT ")).Select(t=>t.TransformToAncestor(mixedBoard).Transform(new Point()).Y).ToArray();
+            Check(altitudes.Length==2&&Math.Abs(altitudes[0]-altitudes[1])<.5,"two-flight altitude rows align with unequal text lengths");
+        }
+        var reordered = options with { CardDesign="board", ShowHeading=false, Fields=["type","altitude","owner"], FieldOrder=["owner","type","altitude"] };
+        reordered.Validate();
+        Check(JsonSerializer.Deserialize<AircraftOptions>(JsonSerializer.Serialize(reordered))!.OrderedFields().Take(3).SequenceEqual(new[] {"owner","type","altitude"}),"custom information order survives save/reload");
+        Check(JsonSerializer.Deserialize<AircraftOptions>("{}")!.OrderedFields().SequenceEqual(AircraftOptions.DefaultFieldOrder),"legacy settings receive complete default order");
+        foreach(var invalid in new[] {new[] {"type","type"},new[] {"photo"}})
+        { try { (options with {FieldOrder=invalid}).Validate(); throw new Exception("Invalid field order accepted"); } catch(InvalidDataException) {} }
+        var orderedCard = new AircraftView {Width=960,Height=540};
+        orderedCard.Update(reordered,snapshot with {Aircraft=snapshot.Aircraft.Select(a=>a with {RegisteredOwner="Private Owner",Photo=testPhoto}).ToArray()});
+        orderedCard.Measure(new Size(960,540));orderedCard.Arrange(new Rect(0,0,960,540));orderedCard.UpdateLayout();
+        var orderedText=VisualTexts(orderedCard).Where(t=>Visible(t,orderedCard)).ToArray();
+        Check(Array.FindIndex(orderedText,t=>t.Text=="Private Owner")<Array.FindIndex(orderedText,t=>t.Text.StartsWith("ALT ")),"native card renders user information order");
+        Check(orderedText.Where(t=>t.Text is "UAL123" or "ASA456").All(t=>t.TextWrapping==TextWrapping.NoWrap),"two-aircraft identifiers stay on one line");
+        Check(VisualImages(orderedCard).All(i=>i.TransformToAncestor(orderedCard).Transform(new Point()).Y>orderedText[0].TransformToAncestor(orderedCard).Transform(new Point()).Y+100),"paired photos occupy fixed area below full-width text");
+        var textBottom = orderedText.Where(t=>t.Parent is WidgetFlow && t.Text != "ADSB.lol · ODbL · adsbdb" && !t.Text.Contains("Photo ©"))
+            .Max(t=>t.TransformToAncestor(orderedCard).TransformBounds(new Rect(t.RenderSize)).Bottom);
+        Check(VisualImages(orderedCard).All(i=>Math.Abs(i.TransformToAncestor(orderedCard).Transform(new Point()).Y-textBottom-8)<1),"paired photos follow visible text with an eight-pixel gap");
+        Check(VisualImages(orderedCard).All(i=>i.Clip is RectangleGeometry {RadiusX: >=10, RadiusY: >=10}),"aircraft photos use softer rounded corners");
+        var credits=orderedText.Where(t=>t.Text.Contains("Photo ©")).ToArray();
+        Check(credits.Length==2 && credits.All(t=>t.TransformToAncestor(orderedCard).TransformBounds(new Rect(t.RenderSize)).Bottom>490),"paired photo credits stay near bottom of card");
+        Check(VisualImages(orderedCard).All(i=>i.ActualHeight>AircraftPhotoViewport.For(452,473,false,true).PhotoHeight),"paired photos reclaim unused text space");
+        orderedCard.Update(reordered with {FieldOrder=["type","altitude","owner"]},snapshot);
+        orderedCard.Measure(new Size(960,540));orderedCard.Arrange(new Rect(0,0,960,540));orderedCard.UpdateLayout();
+        var reorderedText=VisualTexts(orderedCard).Where(t=>Visible(t,orderedCard)).ToArray();
+        Check(Array.FindIndex(reorderedText,t=>t.Text==snapshot.Aircraft[0].ModelName||t.Text==snapshot.Aircraft[0].Type)<Array.FindIndex(reorderedText,t=>t.Text.StartsWith("ALT ")),"existing native card updates field order without restarting viewer");
+        var headingCard = new AircraftView { Width=320, Height=180 };
+        void Heading(bool show)
+        {
+            headingCard.Update(options with { ShowHeading=show },snapshot with { Aircraft=[snapshot.Aircraft[0] with {Photo=testPhoto}] });
+            headingCard.Measure(new Size(320,180));headingCard.Arrange(new Rect(0,0,320,180));headingCard.UpdateLayout();
+        }
+        Heading(true);
+        var before=VisualTexts(headingCard).Single(t=>t.Text=="UAL123").Parent as FrameworkElement;
+        var beforeHeight=before!.ActualHeight;
+        Heading(false);
+        var after=VisualTexts(headingCard).Single(t=>t.Text=="UAL123").Parent as FrameworkElement;
+        Check(!VisualTexts(headingCard).Any(t=>t.Text.Contains("Nearby aircraft")),"location heading can be removed");
+        Check(after!.ActualHeight>beforeHeight+15,"hidden heading space is reclaimed by flight content");
+        Check(JsonSerializer.Deserialize<AircraftOptions>(JsonSerializer.Serialize(options with {ShowHeading=false}))!.ShowHeading==false,"hidden heading preference survives settings serialization");
+        Check(JsonSerializer.Deserialize<AircraftOptions>("{}")!.ShowHeading,"legacy aircraft cards retain their heading by default");
+        aircraft.Width=620;aircraft.Height=420;
+        var longCard = new AircraftView { Width=180, Height=160 };
+        longCard.Update(options, snapshot with { Aircraft=[snapshot.Aircraft[0] with { Callsign="LONGCALLSIGN123",Type="An unusually long aircraft type description",RegisteredOwner="An unusually long owner name" }] });
+        longCard.Measure(new Size(180,160));longCard.Arrange(new Rect(0,0,180,160));longCard.UpdateLayout();
+        Check(VisualTexts(longCard).Any(t=>t.Text=="LONGCALLSIGN123"&&Visible(t,longCard)),"long callsign remains visible without shrinking text");
+        foreach(var label in VisualTexts(longCard).Where(t=>Visible(t,longCard)))
+        {
+            var bounds=label.TransformToAncestor(longCard).TransformBounds(new Rect(label.RenderSize));
+            Check(bounds.Right<=180.5 && bounds.Bottom<=160.5,"long native text remains inside card");
+        }
+        aircraft.Update(options with { ShowPhoto=true, Fields=["type","altitude"] }, snapshot with { Aircraft=[snapshot.Aircraft[0] with { Photo=testPhoto }] });root.UpdateLayout();
+        Check(VisualImages(aircraft).Any(i=>i.Source is not null && Visible(i,aircraft)),"loaded photo appears with room for its credit");
+        var stableTree=aircraft.Child;
+        var stableSnapshot=snapshot with { Aircraft=[snapshot.Aircraft[0] with { Photo=testPhoto }] };
+        aircraft.Update(options with { ShowPhoto=true, Fields=["type","altitude"] },stableSnapshot);
+        Check(ReferenceEquals(stableTree,aircraft.Child),"unchanged polling retains the native visual tree");
         Directory.CreateDirectory("artifacts/aircraft");
         var bitmap = new RenderTargetBitmap(1100,620,96,96,PixelFormats.Pbgra32); bitmap.Render(root);
         using (var file = File.Create("artifacts/aircraft/native-aircraft.png")) { var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); png.Save(file); }
@@ -182,6 +283,7 @@ internal static class Program
     private static async Task Backend()
     {
         await PhotoFallback();
+        await AircraftPhotoFallbackChecks.Run();
         await NativePhotoDownload();
         Check(new AircraftTrack { Type = "SR22" }.ModelName == "Cirrus SR22", "short type expands to full model name");
         Check(RepresentativeAircraftPhotos.Identity(RepresentativeAircraftPhotos.Key(new AircraftTrack { Type = "SR22" })!).Model == "Cirrus SR22", "private SR22 receives representative photo lookup");

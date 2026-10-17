@@ -77,6 +77,12 @@ internal static class AircraftReplacementChecks
                 settingsField.SetValue(viewer, original with { Layouts = [widgetLayout], ActiveLayoutId = widgetLayout.Id, Plugins = new() { Aircraft = false, Weather = false } }); sync.Invoke(viewer, null);
                 if (widgetLayer.Children.Count != 0) throw new Exception("Disabled plugins left free widgets visible");
                 Console.WriteLine("PASS native independent widgets: bounded geometry, layout isolation and plugin gating.");
+                var utilityLayout = layout with { Widgets = [new() { Id = "stats", Kind = "systemStats", SystemStats = new() }, new() { Id = "clock", Kind = "dateTime", DateTime = new() }] };
+                settingsField.SetValue(viewer, original with { Layouts = [utilityLayout], ActiveLayoutId = layout.Id, Plugins = Plugins.ForNewInstall with { SystemStats = true, DateTime = true } }); sync.Invoke(viewer, null);
+                if (widgetLayer.Children.OfType<SystemWidgetView>().Count() != 2) throw new Exception("Native system widgets require unrelated plugins to render.");
+                settingsField.SetValue(viewer, original with { Layouts = [utilityLayout], ActiveLayoutId = layout.Id, Plugins = Plugins.ForNewInstall }); sync.Invoke(viewer, null);
+                if (widgetLayer.Children.Count != 0) throw new Exception("Disabled system widgets remain on the wall.");
+                Console.WriteLine("PASS native system and clock widgets render independently and disappear when their plugins are disabled.");
             }
             finally { widgetLayer.SetBinding(FrameworkElement.WidthProperty, widthBinding); widgetLayer.SetBinding(FrameworkElement.HeightProperty, heightBinding); }
             Console.WriteLine("PASS disabled aircraft removes native presentation while preserving tile configuration.");
@@ -114,7 +120,7 @@ internal static class AircraftReplacementChecks
     }
     private static void AssertCallsign(AircraftView view)
     {
-        var label = Descendants(view).OfType<TextBlock>().SingleOrDefault(t => t.Text == "Example Airlines" && t.FontWeight == FontWeights.SemiBold);
+        var label = Descendants(view).OfType<TextBlock>().SingleOrDefault(t => t.Text == "TEST27" && t.FontWeight == FontWeights.SemiBold);
         if (label is null || !label.IsVisible || label.ActualWidth < 10 || label.ActualHeight < 10)
             throw new Exception("Aircraft replacement has no visibly laid-out callsign");
         var bounds = label.TransformToAncestor(view).TransformBounds(new Rect(label.RenderSize));

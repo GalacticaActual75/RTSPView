@@ -19,6 +19,8 @@ internal static class TileChecks
             Environment.SetEnvironmentVariable("RTSPVIEW_DATA_DIR", directory);
             try
             {
+                new JsonSettingsStore(Path.Combine(directory, "settings.json")).SaveAsync(new AppSettings
+                { Plugins = Plugins.ForNewInstall with { YtDlp = true, Streamlink = true } }).GetAwaiter().GetResult();
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"/{typeof(CameraTile).Assembly.GetName().Name};component/ProductTheme.xaml", UriKind.Relative) });
                 using var engine = new LibVLC("--no-video-title-show", "--no-audio");

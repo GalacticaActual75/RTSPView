@@ -1,5 +1,25 @@
 # Aircraft widgets and tiles
 
+## Beta.18 photo fallback and diagnostics
+
+HTTP 404 from the exact-photo providers is a normal missing-photo result, not an outage that pauses other aircraft lookups. After exact and model-specific misses, recognized Carbon Cub, Cessna 182 and Naval Aircraft Factory N3N variants can use a licensed family photo marked **Representative**. Exact registration photos still take priority. Cockpit, diagram and three-view search results are excluded. Coverage remains dependent on available photos; no 99% guarantee is made.
+
+The normal rotating application log now includes `AIRCRAFT_PHOTO` events for lookup-ready, no-photo and failed results, including provider, lookup key and HTTP status. Successful native decoding and download/decode failures include a matching image fingerprint and decoded dimensions. Full image URLs are not logged. These events distinguish missing provider photos from download/decode failures; they do not claim that a decoded photo is visible on the physical wall.
+
+Validation includes an actual licensed Carbon Cub thumbnail downloaded and rendered through the WPF loader/card, plus offline regressions for the complete exact-miss → family-photo chain, HTTP 404 cooldown behavior, attribution and diagnostic correlation.
+
+## Beta.17 metadata fallback
+
+When adsbdb is missing the owner or model for a US registration, the Controller checks the public FAA aircraft registry. It accepts only a valid record with the same hexadecimal aircraft address. An Individual registration supplies **Private Owner**; missing, corporate, expired or mismatched records are never assumed to be privately owned. Existing known adsbdb details take priority. Registry-derived fields add FAA to the card attribution.
+
+Kit aircraft use the kit manufacturer/model instead of the amateur builder's name. N5555U resolves to **CubCrafters Carbon Cub (CCK-1865)** from its registry record; this does not claim an EX-2 variant. The broad CC11 fallback names the Sport Cub / Carbon Cub family. Model enrichment is stored separately from the original aircraft type code and shared by the wall, preview and representative-photo lookup.
+
+New camera overlays include owner and airline fields. Existing field selections remain unchanged; enable **Registered owner** under **Choose aircraft information** if it was disabled. Model and owner rows have priority over secondary flight metrics when space is limited. Minimal density still omits those details.
+
+FAA queries send the US registration, run in the bounded metadata queue independently of position updates, and share the metadata cache. Successful aircraft lookups normally last 24 hours, empty results one hour and transient failures five minutes. A failed lookup no longer sleeps the entire queue for an extra 30 seconds. Callsigns equal to the registration skip the airline-route lookup.
+
+Validation: synthetic registry/HTTP tests cover successful fallback, primary-provider failure, ownership classification, record mismatch/expiry, known-field preservation, cache reuse and raw-type preservation. The actual N5555U registry page was checked separately. Native wall and browser size-matrix checks verify the owner and resolved name remain visible at ordinary card sizes.
+
 Aircraft views show airborne traffic around a configured location using ADSB.lol. They share the weather widget's dark/light surface, opacity, corners, padding, accent, font and icon controls.
 
 ## Add to a camera
@@ -63,7 +83,7 @@ Owner headings wrap to at most two lines, with the full name retained in the too
 
 Live View image downloads identify the app, follow only validated provider redirects, and retry failed image loads after a one-minute cooldown rather than caching failures for the whole session.
 
-Optional fade transitions provide separate entrance and exit durations (0–5000 ms), defaulting to 200 ms in and 800 ms out when enabled. The last populated card remains during fade-out; polling does not restart an active transition.
+Optional fade transitions provide separate entrance and exit durations (0–5000 ms), defaulting to 200 ms in and 800 ms out when enabled. They cover appearing, disappearing, one/two-aircraft changes, rotation between pairs, and arriving photos. The last populated card remains during fade-out; the latest content replaces it at zero opacity and then fades in. Polling does not restart an active transition, and routine readings update without a fade. For gentler changes, use 800 ms for both durations; zero explicitly means instant. Waiting for aircraft photos avoids an additional photo transition.
 
 ### Layout widgets and appearance
 

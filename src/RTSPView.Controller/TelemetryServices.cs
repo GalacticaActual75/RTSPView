@@ -57,11 +57,12 @@ public sealed class SystemMetricsCollector : IDisposable
         (_lastReceived, _lastSent) = ReadNetworkBytes();
     }
 
+    private SystemTelemetry? _cached;
     public SystemTelemetry GetSnapshot()
     {
         // HTTP requests overlap, especially while a viewer restart changes GPU instances.
         // Discovery disposes/rebuilds these lists; serialize it with sampling and shutdown.
-        lock (_gate) return CollectSnapshot();
+        lock (_gate) return _cached is { } sample && DateTimeOffset.UtcNow - sample.Timestamp < TimeSpan.FromSeconds(1) ? sample : (_cached = CollectSnapshot());
     }
 
     private SystemTelemetry CollectSnapshot()

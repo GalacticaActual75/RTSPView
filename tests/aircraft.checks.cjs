@@ -14,6 +14,8 @@ assert.equal(ui.metric('speed',track,{...options,units:'metric'}),'SPD 185 km/h'
 assert.equal(ui.metric('verticalRate',track,options),'V/S — ft/min');
 assert.equal(ui.metric('track',track,options),'TRK 0° N');
 assert.equal(ui.metric('type',{...track,type:'',registration:''},options),'');
+assert.equal(ui.metric('type',{...track,type:'CC11',modelName:'CubCrafters Carbon Cub (CCK-1865)',registration:'N5555U'},options),'CubCrafters Carbon Cub (CCK-1865) · N5555U');
+assert.equal(ui.metric('owner',{...track,registeredOwner:'Private Owner'},options),'Private Owner');
 for(const width of [120,320,640,1920])for(const fontSize of [12,24,64]){
  const overlay={widthPercent:40,x:100,y:100,margin:12,aircraft:{...options,fontSize,padding:14,iconSize:36,preset:'featured'}};
  const bounds=ui.overlayBounds(overlay,width,width*9/16);
@@ -65,3 +67,40 @@ ui.setVisible(fadeNode,fadeEntry,false);assert.equal(fadeAnimations[1].settings.
 fadeAnimations[1].onfinish();assert.equal(fadeNode.style.visibility,'hidden');
 ui.setVisible(fadeNode,fadeEntry,true);assert.equal(fadeNode.style.visibility,'visible');
 console.log('PASS quick entrance, slower exit, and no animation restart on refresh.');
+
+fadeEntry.contentKey='a:';fadeEntry.shown=true;
+let swaps=0;
+const swap=()=>{swaps++;ui.setVisible(fadeNode,fadeEntry,true);};
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'a:',true,swap),false);
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'a:|b:',true,swap),true);
+const outgoing=fadeAnimations.at(-1);
+assert.equal(outgoing.settings.duration,800);assert.equal(swaps,0);
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'c:|d:',true,swap),true);
+assert.equal(fadeAnimations.at(-1),outgoing);
+outgoing.onfinish();assert.equal(swaps,1);assert.equal(fadeAnimations.at(-1).settings.duration,200);
+for(const [oldKey,newKey] of [['a:|b:','c:|d:'],['a:','a:photo'],['a:|b:','a:']]){
+ fadeEntry.contentKey=oldKey;
+ assert.equal(ui.changeContent(fadeNode,fadeEntry,newKey,true,swap),true);
+ fadeAnimations.at(-1).onfinish();
+}
+fadeEntry.contentKey='a:';ui.changeContent(fadeNode,fadeEntry,'b:',true,swap);
+const interrupted=fadeAnimations.at(-1),beforeHide=swaps;
+ui.changeContent(fadeNode,fadeEntry,'',false,swap);ui.setVisible(fadeNode,fadeEntry,false);
+interrupted.onfinish();assert.equal(swaps,beforeHide);
+fadeEntry.options.fadeEnabled=false;
+assert.equal(ui.changeContent(fadeNode,fadeEntry,'c:',true,swap),false);
+console.log('PASS count changes, pair rotation, photo arrival, refresh coalescing, hide cancellation and disabled fades.');
+
+assert.deepEqual(Array.from(ui.orderedFields({fieldOrder:['owner','type','altitude']})).slice(0,3),['owner','type','altitude']);
+assert.equal(new Set(ui.orderedFields({fieldOrder:['type','type','photo']})).size,10);
+assert.equal(ui.orderedFields({}).includes('registration'),true);
+console.log('PASS user information ordering, missing legacy fields and fixed photo exclusion.');
+const states=new Map();
+assert.equal(ui.photoDecision(states,'a',false,false,0,10),'waiting');
+assert.equal(ui.photoDecision(states,'a',false,false,9999,10),'waiting');
+assert.equal(ui.photoDecision(states,'a',false,false,10000,10),'withoutPhoto');
+assert.equal(ui.photoDecision(states,'a',true,false,11000,10),'withoutPhoto');
+assert.equal(ui.photoDecision(states,'b',true,false,0,10),'photo');
+assert.equal(ui.photoDecision(states,'c',false,true,0,10),'withoutPhoto');
+assert.equal(ui.defaults().waitForPhoto,false);
+console.log('PASS optional photo wait: ready, pending, timeout, failure and no late image pop-in.');

@@ -4,6 +4,7 @@ namespace RTSPView.Core;
 
 public sealed record AircraftOptions
 {
+    public string Density { get; init; } = "auto";
     public string Location { get; init; } = "Home";
     public double Latitude { get; init; }
     public double Longitude { get; init; }
@@ -18,12 +19,16 @@ public sealed record AircraftOptions
     public bool FadeEnabled { get; init; }
     public int FadeInMilliseconds { get; init; } = 200;
     public int FadeOutMilliseconds { get; init; } = 800;
+    public bool ShowHeading { get; init; } = true;
     public bool ShowPhoto { get; init; } = true;
+    public bool WaitForPhoto { get; init; }
+    public int PhotoWaitSeconds { get; init; } = 10;
     public string CardDesign { get; init; } = "compact";
     public string Theme { get; init; } = "auto";
     public string Accent { get; init; } = "#F2C75C";
     public string? BackgroundColor { get; init; }
     public int BackgroundOpacity { get; init; } = 80;
+    public int ContentOpacity { get; init; } = 100;
     public int FontSize { get; init; } = 24;
     public Dictionary<string, int> TextSizes { get; init; } = [];
     public static readonly string[] TextSizeFields = ["location", "owner", "type", "registration", "callsign", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate", "photoCredit", "footer", "status"];
@@ -38,16 +43,23 @@ public sealed record AircraftOptions
     public int Padding { get; init; } = 14;
     public int CornerRadius { get; init; } = 10;
     public string Alignment { get; init; } = "left";
+    public static readonly string[] DefaultFieldOrder = ["altitude", "type", "registration", "owner", "airline", "distance", "speed", "destination", "track", "verticalRate"];
+    public string[] FieldOrder { get; init; } = [.. DefaultFieldOrder];
+    public string[] OrderedFields() => FieldOrder.Concat(DefaultFieldOrder).Distinct().ToArray();
     public string[] Fields { get; init; } = ["type", "owner", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate"];
     public static readonly string[] AllowedFields = ["type", "owner", "airline", "destination", "altitude", "speed", "distance", "track", "verticalRate"];
     // Filters and presentation share one query for the same area.
     public string CacheKey => FormattableString.Invariant($"{Latitude:F4},{Longitude:F4},{RadiusMiles:F1}");
     [System.Text.Json.Serialization.JsonIgnore]
-    public WeatherOptions Appearance => new() { Theme = Theme, Accent = Accent, BackgroundColor = BackgroundColor, BackgroundOpacity = BackgroundOpacity,
+    public WeatherOptions Appearance => new() { Theme = Theme, Accent = Accent, BackgroundColor = BackgroundColor, BackgroundOpacity = BackgroundOpacity, ContentOpacity = ContentOpacity,
         FontSize = FontSize, IconSize = IconSize, Padding = Padding, CornerRadius = CornerRadius, Alignment = Alignment };
     public void Validate()
     {
+        WidgetViewport.ValidateDensity(Density);
         Appearance.Validate();
+        if (PhotoWaitSeconds is < 1 or > 60) throw new InvalidDataException("Photo wait must be between 1 and 60 seconds.");
+        if (FieldOrder is null || FieldOrder.Length > DefaultFieldOrder.Length || FieldOrder.Any(f => !DefaultFieldOrder.Contains(f)) || FieldOrder.Distinct().Count() != FieldOrder.Length)
+            throw new InvalidDataException("Choose a unique order of supported aircraft information fields.");
         if (CardDesign is not ("compact" or "photo" or "data" or "board")) throw new InvalidDataException("Choose a supported aircraft card design.");
         if (FadeInMilliseconds is < 0 or > 5000 || FadeOutMilliseconds is < 0 or > 5000) throw new InvalidDataException("Aircraft fades must be between 0 and 5000 milliseconds.");
         if (TextSizes is null || TextSizes.Count > TextSizeFields.Length || TextSizes.Any(p => !TextSizeFields.Contains(p.Key) || p.Value is < 8 or > 64))
@@ -69,7 +81,7 @@ public sealed record AircraftOverlay
     public int X { get; init; } = 100;
     public int Y { get; init; } = 100;
     public int Margin { get; init; } = 12;
-    public AircraftOptions Aircraft { get; init; } = new() { Fields = ["type", "altitude", "speed", "distance"] };
+    public AircraftOptions Aircraft { get; init; } = new() { Fields = ["type", "owner", "airline", "altitude", "speed", "distance"] };
     public void Validate()
     {
         if (Aircraft is null) throw new InvalidDataException("Aircraft settings are required.");
@@ -88,7 +100,9 @@ public sealed record AircraftTrack
     public string Callsign { get; init; } = "";
     public string Registration { get; init; } = "";
     public string Type { get; init; } = "";
-    public string ModelName => AircraftModels.Name(Type);
+    public string ResolvedModel { get; init; } = "";
+    public string DetailsSource { get; init; } = "";
+    public string ModelName => AircraftSelection.HasDetailValue(ResolvedModel) ? ResolvedModel : AircraftModels.Name(Type);
     public double Latitude { get; init; }
     public double Longitude { get; init; }
     public double? AltitudeFeet { get; init; }

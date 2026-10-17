@@ -1,5 +1,7 @@
 # Widget layout review
 
+Historical review of the beta.12 implementation. The subsequent [responsive widget redesign](responsive-widgets.md) replaces reference-canvas scaling, per-field typography controls, and reserved empty photo rectangles. See that document for current behavior and validation.
+
 ## Findings
 
 - The native weather reading used two equal columns. A large temperature could exceed its half of the row and lose leading digits even though the browser preview showed the full value.

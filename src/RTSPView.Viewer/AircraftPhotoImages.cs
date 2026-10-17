@@ -9,6 +9,7 @@ internal static class AircraftPhotoImages
 {
     private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15), MaxResponseContentBufferSize = 2_000_000 };
     internal static readonly AircraftImageCache Cache = new(Load);
+    internal static Action<string>? Log { get; set; }
     private static readonly SemaphoreSlim Slots = new(2);
     public static Task<BitmapSource?> Get(AircraftPhoto photo) => Cache.Get(photo);
     private static async Task<BitmapSource?> Load(AircraftPhoto photo)
@@ -17,14 +18,17 @@ internal static class AircraftPhotoImages
         try
         {
             var bytes = await Download(Http, photo, CancellationToken.None);
-            return await Task.Run<BitmapSource?>(() =>
+            var decoded = await Task.Run<BitmapSource?>(() =>
             {
                 using var stream = new MemoryStream(bytes);
                 var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
                 image.DecodePixelWidth = 420; image.StreamSource = stream; image.EndInit(); image.Freeze(); return image;
             });
+            Log?.Invoke($"image={photo.DiagnosticId} source={photo.Source} result=decoded width={decoded!.PixelWidth} height={decoded.PixelHeight}");
+            return decoded;
         }
-        catch (Exception e) when (e is HttpRequestException or OperationCanceledException or NotSupportedException or IOException or ArgumentException or FormatException or InvalidOperationException or System.Runtime.InteropServices.COMException) { System.Diagnostics.Trace.TraceWarning("Aircraft photo download failed: {0}", e.Message); return null; }
+        catch (Exception e) when (e is HttpRequestException or OperationCanceledException or NotSupportedException or IOException or ArgumentException or FormatException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { Log?.Invoke($"image={photo.DiagnosticId} source={photo.Source} result=failed error={e.GetType().Name} status={(e is HttpRequestException h ? (int?)h.StatusCode : null)}"); return null; }
         finally { Slots.Release(); }
     }
     internal static async Task<byte[]> Download(HttpClient http, AircraftPhoto photo, CancellationToken token)

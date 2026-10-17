@@ -14,6 +14,11 @@ if(process.env.PIP_REFERENCE_FIXTURE==='1'){
   config.garageOverlay.camera.rtspUrl='rtsp://camera.example.test/garage';
   config.layouts[0].tiles[0].cameraSlot=34;
 }
+if(process.env.RTSPVIEW_WIDGET_FIXTURE==='1'){
+  config.plugins={weather:true,aircraft:true,systemStats:true,dateTime:true};
+  const appearance={density:'auto',theme:'dark',accent:'#F2C75C',backgroundOpacity:90,fontSize:24,iconSize:36,padding:14,cornerRadius:10,alignment:'left',units:'imperial',location:'Test city',latitude:0,longitude:0};
+  config.layouts[0].widgets=[{id:'weather-test',kind:'weather',enabled:true,hostCameraSlot:0,margin:0,widthPercent:33,heightPercent:33,x:0,y:0,cell:{row:0,column:1,rowSpan:2,columnSpan:2},weather:{...appearance,timeZone:'auto',preset:'compact',fields:['location','temperature','condition','highLow']}},{id:'aircraft-test',kind:'aircraft',enabled:true,hostCameraSlot:0,margin:0,widthPercent:33,heightPercent:33,x:100,y:100,cell:{row:2,column:2,rowSpan:1,columnSpan:1},aircraft:{...appearance,radiusMiles:10,preset:'featured',cardDesign:'compact',maximumAircraft:2,textSizes:{},showPhoto:true,fields:['type','owner','altitude','speed','distance']}}];
+}
 const schedules=Object.fromEntries(['viewer','host'].map(action=>[action,{settings:{enabled:action==='host',action,mode:'weekly',intervalHours:24,time:'03:00',days:[0]},nextRun:'2026-10-01T03:00:00Z',result:'Schedule saved.'}]));
 let patchStatus={installedVersion:'1.0.47-beta.12',availableVersion:'1.0.47-beta.12-patch.1',autoInstall:false,message:'A synthetic patch is available for this preview.'};
 http.createServer(async(req,res)=>{
@@ -30,6 +35,11 @@ http.createServer(async(req,res)=>{
     if(related.length){res.statusCode=400;return json({error:'This overlay is in use. Remove these references before deleting it.',related});}
     config.deletedOverlaySlots.push(slot);return json({deleted:slot});
   }
+  if(url.pathname==='/api/plugins'){if(req.method==='PUT'){let text='';for await(const chunk of req)text+=chunk;config.plugins=JSON.parse(text);}return json(config.plugins||{});}
+  if(url.pathname==='/api/widget-data')return json({timestamp:new Date().toISOString(),timeZone:'America/Los_Angeles',system:{timestamp:new Date().toISOString(),cpuPercent:37,gpuPercent:24,ramPercent:62,ramUsedGb:19.8,ramTotalGb:32,cpuTemperatureC:58,gpuTemperatureC:64}});
+  if(url.pathname==='/api/weather/search'||url.pathname==='/api/aircraft/search')return json({results:[{name:'Test city',latitude:0,longitude:0,timezone:'UTC'}]});
+  if(url.pathname==='/api/weather')return json([{key:'0.0000,0.0000',fetchedAt:new Date().toISOString(),validAt:new Date().toISOString(),temperature:22,code:2,timeZone:'UTC',daily:[{date:new Date().toISOString().slice(0,10),high:25,low:15}]}]);
+  if(url.pathname==='/api/aircraft')return json([{key:'0.0000,0.0000,10.0',fetchedAt:new Date().toISOString(),aircraft:[{hex:'abc123',callsign:'TEST123',registration:'N123EX',type:'B738',modelName:'Boeing 737-800',registeredOwner:'Example owner',latitude:.01,longitude:.01,altitudeFeet:12000,speedKnots:280,positionAt:new Date().toISOString()}]}]);
   if(url.pathname==='/api/restart-schedule'){
     if(req.method==='PUT'){let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);if(data.settings.enabled&&data.settings.action==='host'&&!data.hostAcknowledged){res.statusCode=400;return json({error:'Acknowledgment required'});}schedules[data.settings.action].settings=data.settings;}
     return json({schedules,timeZone:'UTC',timeZoneId:'UTC',serverTime:new Date().toISOString()});

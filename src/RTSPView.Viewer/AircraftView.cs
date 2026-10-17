@@ -14,20 +14,24 @@ public sealed class AircraftView : Border
     private AircraftOptions _options = new();
     private AircraftSnapshot? _snapshot;
     private AircraftRotation _rotation = new();
+    private AircraftPhotoGate _photoGate = new();
 
     private bool _overlay;
     private bool _takeover;
     private bool? _shown;
     private int _fadeGeneration;
+    private string? _contentKey;
+    private bool _changingContent;
     private string? _lastUpdate;
     public AircraftView() { ClipToBounds = true; IsHitTestVisible = false; SizeChanged += (_, _) => Render(); }
     public void Update(AircraftOptions options, AircraftSnapshot? snapshot, bool overlay = false, bool takeover = false)
     {
         if (_options.CacheKey != options.CacheKey) _rotation = new();
+        if (_options.CacheKey != options.CacheKey || _options.WaitForPhoto != options.WaitForPhoto || _options.ShowPhoto != options.ShowPhoto || _options.PhotoWaitSeconds != options.PhotoWaitSeconds) _photoGate = new();
         _options = options; _snapshot = snapshot; _overlay = overlay; _takeover = takeover;
         var now = DateTimeOffset.UtcNow;
         var update = System.Text.Json.JsonSerializer.Serialize(new { options, snapshot, overlay, takeover,
-            Freshness = snapshot?.Freshness(now), Matching = AircraftSelection.Nearby(options, snapshot, now).Select(a => a.Hex), Rotation = _rotation.Select(AircraftSelection.Nearby(options, snapshot, now), options.CardDesign == "board" ? 2 : options.Preset == "board" ? options.MaximumAircraft : 1, now).Select(a => a.Hex) });
+            RotationTick = now.ToUnixTimeSeconds() / 20, RetryMinute = now.ToUnixTimeSeconds() / 65, PhotoTick = options.WaitForPhoto && options.ShowPhoto ? now.ToUnixTimeSeconds() : 0, Freshness = snapshot?.Freshness(now), Matching = AircraftSelection.Nearby(options, snapshot, now).Select(a => a.Hex) });
         if (update == _lastUpdate) return;
         _lastUpdate = update; Render();
     }
@@ -35,166 +39,189 @@ public sealed class AircraftView : Border
     {
         var o = _options; var now = DateTimeOffset.UtcNow;
         var nearby = AircraftSelection.Nearby(o, _snapshot, now);
+        var waiting = false;
+        _photoGate.Retain(nearby.Select(a => a.Hex));
+        if (o.WaitForPhoto && o.ShowPhoto)
+        {
+            var readyAircraft = new List<AircraftTrack>();
+            foreach (var aircraft in nearby)
+            {
+                var task = aircraft.Photo is { IsValid: true } photo ? AircraftPhotoImages.Get(photo) : null;
+                if (task is { IsCompleted: false } && _pendingPhotos.Add(task)) _ = PhotoReady(task);
+                var ready = task is { IsCompletedSuccessfully: true, Result: not null };
+                var failed = task is { IsCompleted: true } && !ready;
+                var decision = _photoGate.Decide(aircraft.Hex, ready, failed, now, o.PhotoWaitSeconds);
+                if (decision == AircraftPhotoDecision.Waiting) waiting = true;
+                else readyAircraft.Add(decision == AircraftPhotoDecision.WithoutPhoto ? aircraft with { Photo = null } : aircraft);
+            }
+            nearby = readyAircraft.ToArray();
+        }
         var freshness = _snapshot?.Freshness(now) ?? "unavailable";
-        var show = !((_takeover || _overlay && o.HideWhenEmpty) && (freshness != "fresh" || nearby.Length == 0));
+        var show = !((_takeover || _overlay && o.HideWhenEmpty) && (freshness != "fresh" || nearby.Length == 0)) && !((_overlay || _takeover) && waiting && nearby.Length == 0);
+        var count = (o.CardDesign == "board" || o.Preset == "board") && ActualWidth >= 600 && ActualHeight >= 240 ? 2 : 1;
+        var selected = _rotation.Select(nearby, count, now);
+        var contentKey = selected.Length == 0 ? freshness + ":" + waiting : string.Join("|", selected.Select(a =>
+            a.Hex + ":" + (o.ShowPhoto && a.Photo is { IsValid: true } photo && AircraftPhotoImages.Get(photo) is { IsCompletedSuccessfully: true, Result: not null } ? photo.Url : "")));
+        if (!show || !o.FadeEnabled)
+        {
+            _changingContent = false;
+            _contentKey = null;
+        }
+        if (show && o.FadeEnabled && _shown == true && _contentKey != null && _contentKey != contentKey)
+        {
+            if (!_changingContent)
+            {
+                _changingContent = true;
+                var generation = ++_fadeGeneration;
+                var animation = new System.Windows.Media.Animation.DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(o.FadeOutMilliseconds));
+                animation.Completed += (_, _) =>
+                {
+                    if (generation != _fadeGeneration) return;
+                    BeginAnimation(OpacityProperty, null); Opacity = 0;
+                    _changingContent = false; _contentKey = null; _shown = false;
+                    Render(); // Render the latest snapshot only after the old content has faded away.
+                };
+                BeginAnimation(OpacityProperty, animation);
+            }
+            return;
+        }
+        if (_changingContent) return;
         SetVisible(show);
         if (!show) return;
-        WidgetAppearance.Apply(this, o.Appearance);
-        var foreground = o.Theme == "light" ? Brushes.Black : Brushes.White;
-        var muted = new SolidColorBrush(o.Theme == "light" ? Color.FromRgb(70, 80, 95) : Color.FromRgb(160, 174, 190));
-        var accent = new SolidColorBrush((Color)ColorConverter.ConvertFromString(o.Accent));
-        var width = Math.Max(0, ActualWidth - o.Padding * 2);
-        var height = Math.Max(0, ActualHeight - o.Padding * 2);
-        var size = Math.Min(o.FontSize, Math.Max(12, width / 5));
-        var content = new Grid(); content.RowDefinitions.Add(new()); content.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true }; content.Children.Add(stack);
-        var credit = new TextBlock { Text = (freshness == "stale" ? "Outdated · " : freshness == "unavailable" ? "Unavailable · " : "") + "ADSB.lol · ODbL 1.0", FontSize = o.TextSize("footer"), Foreground = muted, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new(0, 3, 0, 0) };
-        credit.Text += " · adsbdb";
-        Grid.SetRow(credit, 1); content.Children.Add(credit);
-        TextBlock Text(string text, double font, bool secondary = false) => new() { Text = text, FontFamily = new("Segoe UI"), FontSize = font,
-            Foreground = secondary ? muted : foreground, TextTrimming = TextTrimming.CharacterEllipsis,
-            ToolTip = text, TextAlignment = o.Alignment switch { "center" => TextAlignment.Center, "right" => TextAlignment.Right, _ => TextAlignment.Left }, Margin = new(0, 1, 0, 1) };
-        stack.Children.Add(Text(o.Location + " · Nearby aircraft", o.TextSize("location"), true));
-        var flights = new System.Windows.Controls.Primitives.UniformGrid { Columns = 1, Tag = "flights" };
-        var groups = new List<StackPanel>();
+        _contentKey = contentKey;
+        var viewport = WidgetViewport.For(ActualWidth, ActualHeight, o.Density);
+        var appearance = o.Appearance with { Padding = (int)viewport.Padding };
+        WidgetAppearance.Apply(this, appearance);
+        var flow = new WidgetFlow { Opacity = o.ContentOpacity / 100d }; Child = flow;
+        void Line(string text, double size, int priority) => flow.Add(WidgetFlow.Text(text, size, appearance), priority);
+        if (o.ShowHeading && viewport.DetailLevel > 0) Line(o.Location + " · Nearby aircraft", viewport.Font, 35);
         if (freshness == "unavailable")
         {
-            stack.Children.Add(Text("Aircraft data unavailable", o.TextSize("status")));
-            if (!string.IsNullOrWhiteSpace(_snapshot?.LastError))
-            {
-                var error = Text(_snapshot.LastError, o.TextSize("status"), true); error.TextWrapping = TextWrapping.Wrap; stack.Children.Add(error);
-            }
+            Line(_snapshot is null ? "Waiting for aircraft" : "Aircraft data unavailable", viewport.Heading, 100);
+            if (!string.IsNullOrWhiteSpace(_snapshot?.LastError)) Line(_snapshot.LastError, viewport.Font, 20);
         }
-        else if (nearby.Length == 0) stack.Children.Add(Text(freshness == "stale" ? "Waiting for fresh positions" : "No aircraft nearby", o.TextSize("status")));
+        else if (nearby.Length == 0) Line(waiting ? "Waiting for aircraft photo" : freshness == "stale" ? "Waiting for fresh positions" : "No aircraft nearby", viewport.Heading, 100);
         else
         {
-            var display = _rotation.Select(nearby, o.CardDesign == "board" ? 2 : o.Preset == "board" ? o.MaximumAircraft : 1, now);
-            flights.Columns = display.Length > 1 ? 2 : 1;
-            stack.Children.Add(flights);
-            var columnWidth = Math.Max(0, width / flights.Columns - (flights.Columns > 1 ? 8 : 0));
-            foreach (var a in display)
+            var board = new System.Windows.Controls.Primitives.UniformGrid { Columns = selected.Length };
+            flow.Add(board, 100);
+            var photoRows = new List<(Grid Flight, WidgetFlow Text, double Width, double Budget, double Height, System.Windows.Controls.Image Image, TextBlock Credit)>();
+            foreach (var aircraft in selected)
             {
-                var group = new StackPanel { Margin = new(0, 4, flights.Columns > 1 ? 8 : 0, 4) };
-                var heading = new Grid(); heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); heading.ColumnDefinitions.Add(new());
-                heading.Children.Add(new TextBlock { Text = "✈", FontFamily = new("Segoe UI Symbol"), FontSize = Math.Min(o.IconSize, Math.Max(14, width * .2)), Foreground = accent, Margin = new(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-                var label = Text(string.IsNullOrWhiteSpace(a.RegisteredOwner) ? a.Label : a.RegisteredOwner, o.TextSize("owner")); label.FontWeight = FontWeights.SemiBold; label.TextWrapping = TextWrapping.Wrap; label.LineStackingStrategy = LineStackingStrategy.BlockLineHeight; label.LineHeight = label.FontSize * 1.25; label.MaxHeight = label.LineHeight * 2; Grid.SetColumn(label, 1); heading.Children.Add(label); group.Children.Add(heading);
-                var body = new Grid { Tag = "body" }; body.ColumnDefinitions.Add(new()); body.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-                var data = new StackPanel { Tag = "data" }; body.Children.Add(data); group.Children.Add(body);
-                var hasPhoto = o.ShowPhoto && columnWidth >= 220;
-                var dataWidth = hasPhoto ? (columnWidth - 10) * .62 : columnWidth;
-                var identity = new System.Windows.Controls.Primitives.UniformGrid { Columns = 1 };
-                if (o.Fields.Contains("type")) { var model = Text(string.IsNullOrWhiteSpace(a.ModelName) ? (string.IsNullOrWhiteSpace(a.Type) ? "Aircraft type unavailable" : a.Type) : a.ModelName, o.TextSize("type"), true); model.TextWrapping = TextWrapping.Wrap; identity.Children.Add(model); }
-                if (!string.IsNullOrWhiteSpace(a.Registration)) identity.Children.Add(Text(a.Registration, o.TextSize("registration"), true));
-                data.Children.Add(identity);
-                if (!string.IsNullOrWhiteSpace(a.Callsign) && a.Callsign != a.Registration && !string.IsNullOrWhiteSpace(a.RegisteredOwner)) { var callsign = Text(a.Callsign, o.TextSize("callsign"), true); callsign.Tag = "optional"; data.Children.Add(callsign); }
-                var details = new System.Windows.Controls.Primitives.UniformGrid { Columns = dataWidth >= 300 ? 2 : 1, Tag = "optional" };
-                foreach (var field in o.Fields.Where(f => (f is "airline" or "destination") && AircraftSelection.HasDetailValue(f == "airline" ? a.Airline : a.Destination))) details.Children.Add(Text(AircraftSelection.Metric(field, a, o), o.TextSize(field), true));
-                if (details.Children.Count > 0) data.Children.Add(details);
-                var metrics = new System.Windows.Controls.Primitives.UniformGrid { Columns = columnWidth >= 400 ? 3 : columnWidth >= 180 ? 2 : 1 };
-                foreach (var field in o.Fields.Where(f => f is not ("type" or "owner" or "airline" or "destination"))) metrics.Children.Add(Text(AircraftSelection.Metric(field, a, o), o.TextSize(field), true));
-                if (metrics.Children.Count > 0) { metrics.Tag = "optional"; group.Children.Add(metrics); }
-                flights.Children.Add(group); groups.Add(group);
-                // Keep the photo and its credit together; omit both when the tile is too small.
-                if (hasPhoto)
+                var reserved = (o.ShowHeading && viewport.DetailLevel > 0 ? viewport.Font * 1.25 + 3 : 0) + 10 * 1.25 + 6;
+                var column = new WidgetFlow { AlignTop = selected.Length > 1, MaxHeight = Math.Max(1, ActualHeight - viewport.Padding * 2 - reserved), Margin = new Thickness(0) };
+                var width = Math.Max(1, (ActualWidth - viewport.Padding * 2 - (selected.Length > 1 ? 8 : 0)) / selected.Length);
+                var font = selected.Length > 1 ? Math.Clamp(Math.Min(width / 16, column.MaxHeight / 13), 12, 28) : viewport.Font;
+                var flight = new Grid { Margin = new Thickness(selected.Length > 1 && board.Children.Count > 0 ? 4 : 0, 0, selected.Length > 1 && board.Children.Count == 0 ? 4 : 0, 0) }; board.Children.Add(flight); flight.Children.Add(column);
+                if (selected.Length > 1) flight.Height = column.MaxHeight;
+                void Detail(string value, double size, int priority) => column.Add(WidgetFlow.Text(value, size, appearance), priority);
+                var identity = WidgetFlow.Text(aircraft.Label, Math.Min(font * 1.35, width / (Math.Max(1, aircraft.Label.Length) * .75)), appearance);
+                identity.TextWrapping = TextWrapping.NoWrap; identity.TextTrimming = TextTrimming.CharacterEllipsis;
+                identity.FontWeight = FontWeights.SemiBold;
+                identity.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(o.Accent)); column.Add(identity, 100);
+                var order = o.OrderedFields();
+                foreach (var field in order)
                 {
-                    var photo = a.Photo is { IsValid: true } ? a.Photo : null;
-                    var photoWidth = o.CardDesign is "photo" or "board" ? columnWidth : o.CardDesign == "data" ? Math.Min(84, columnWidth / 3) : (columnWidth - 10) / 2;
-                    var picture = new StackPanel { Tag = "photo", Width = photoWidth, Margin = new(10, 0, 0, 0) };
-                    var image = new System.Windows.Controls.Image { Width = photoWidth, Height = Math.Min(120, photoWidth * 2 / 3), Stretch = Stretch.UniformToFill, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
-                    picture.Children.Add(image);
-                    var photoCredit = Text(photo is null ? "" : (photo.Representative ? "Representative photo · " : "") + photo.Credit, o.TextSize("photoCredit"), true);
-                    photoCredit.Height = o.TextSize("photoCredit") * 2.5; picture.Children.Add(photoCredit);
-
-                    image.SizeChanged += (_, _) => image.Clip = new RectangleGeometry(new Rect(0, 0, image.ActualWidth, image.ActualHeight), 6, 6);
-                    Grid.SetColumn(picture, 1); body.Children.Add(picture);
-                    if (o.CardDesign is "photo" or "board")
+                    if (field != "registration" && !o.Fields.Contains(field)) continue;
+                    if (viewport.DetailLevel == 0 && field is not ("altitude" or "distance")) continue;
+                    if (viewport.DetailLevel < 2 && field is "airline" or "destination") continue;
+                    var value = field switch
                     {
-                        body.RowDefinitions.Add(new() { Height = GridLength.Auto }); body.RowDefinitions.Add(new() { Height = GridLength.Auto });
-                        Grid.SetColumnSpan(data, 2); Grid.SetColumnSpan(picture, 2); Grid.SetColumn(picture, 0);
-                        Grid.SetRow(picture, o.CardDesign == "photo" ? 0 : 1); Grid.SetRow(data, o.CardDesign == "photo" ? 1 : 0); picture.Margin = new(0,4,0,4);
-                    }
-                    else if (o.CardDesign == "data")
-                    {
-                        body.ColumnDefinitions[0].Width = GridLength.Auto; body.ColumnDefinitions[1].Width = new GridLength(1,GridUnitType.Star);
-                        Grid.SetColumn(picture, 0); Grid.SetColumn(data, 1); picture.Margin = new(0,0,10,0);
-                    }
-                    if (photo is not null) _ = ShowPhotoAsync(image, picture, photo);
+                        "type" => string.IsNullOrWhiteSpace(aircraft.ModelName) ? aircraft.Type : aircraft.ModelName,
+                        "registration" => aircraft.Registration != aircraft.Label ? aircraft.Registration : "",
+                        "owner" => aircraft.RegisteredOwner,
+                        "airline" => AircraftSelection.HasDetailValue(aircraft.Airline) ? AircraftSelection.Metric(field, aircraft, o) : "",
+                        "destination" => AircraftSelection.HasDetailValue(aircraft.Destination) ? AircraftSelection.Metric(field, aircraft, o) : "",
+                        _ => AircraftSelection.Metric(field, aircraft, o)
+                    };
+                    if (AircraftSelection.HasDetailValue(value)) Detail(value, font, 90 - Array.IndexOf(order, field));
                 }
-            }
-        }
-        var omitted = false;
-        if (groups.Count > 0)
-        {
-            var title = (FrameworkElement)stack.Children[0]; title.Measure(new System.Windows.Size(width, double.PositiveInfinity));
-            var rows = (int)Math.Ceiling(groups.Count / (double)flights.Columns);
-            credit.Measure(new System.Windows.Size(width, double.PositiveInfinity));
-            var groupHeight = Math.Max(0, (height - title.DesiredSize.Height - credit.DesiredSize.Height) / rows);
-            var groupWidth = Math.Max(0, width / flights.Columns - (flights.Columns > 1 ? 8 : 0));
-            foreach (var group in groups)
-            {
-                var body = (Grid)group.Children[1];
-                var data = (StackPanel)body.Children[0];
-                var heading = (FrameworkElement)group.Children[0]; heading.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity));
-                if (body.Children.OfType<StackPanel>().FirstOrDefault(n => Equals(n.Tag, "photo")) is { } picture)
+                if (o.ShowPhoto && aircraft.Photo is { IsValid: true } photo)
                 {
-                    var image = picture.Children.OfType<System.Windows.Controls.Image>().Single();
-                    var creditHeight = 0d;
-                    foreach (var text in picture.Children.OfType<TextBlock>()) { text.Measure(new System.Windows.Size(picture.Width, double.PositiveInfinity)); creditHeight += text.DesiredSize.Height; }
-                    var reserved = 0d;
-                    foreach (var row in group.Children.OfType<FrameworkElement>().Skip(2)) { row.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity)); reserved += row.DesiredSize.Height; }
-                    if (o.CardDesign is "photo" or "board") { data.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity)); reserved += data.DesiredSize.Height + 8; }
-                    var available = Math.Max(0, groupHeight - group.Margin.Top - group.Margin.Bottom - heading.DesiredSize.Height - creditHeight - reserved);
-                    image.MaxHeight = image.Height;
-                    // Keep the photo until the final set of visible text rows is known.
-                    image.Height = Math.Min(image.MaxHeight, Math.Max(32, available));
-                    if (o.CardDesign is "compact" or "data" && groupWidth-picture.Width-10 < 180)
+                    var task = AircraftPhotoImages.Get(photo);
+                    if (task.IsCompletedSuccessfully && task.Result is {} bitmap)
                     {
-                        data.Measure(new System.Windows.Size(Math.Max(1,groupWidth-picture.Width-10),double.PositiveInfinity));
-                        if(data.DesiredSize.Height > groupHeight-group.Margin.Top-group.Margin.Bottom-heading.DesiredSize.Height-reserved+1)
-                        { picture.Visibility=Visibility.Collapsed;Grid.SetColumn(data,0);Grid.SetColumnSpan(data,2); }
-                    }
-                }
-                group.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity));
-                while (group.DesiredSize.Height > groupHeight + 1 && (data.Children.OfType<FrameworkElement>().LastOrDefault(n => Equals(n.Tag, "optional")) ?? group.Children.OfType<FrameworkElement>().LastOrDefault(n => Equals(n.Tag, "optional"))) is { } detail)
-                {
-                    if (data.Children.Contains(detail)) data.Children.Remove(detail); else group.Children.Remove(detail); data.InvalidateMeasure(); body.InvalidateMeasure(); group.InvalidateMeasure();
-                    group.Measure(new System.Windows.Size(groupWidth, double.PositiveInfinity)); omitted = true;
-                }
-                if (body.Children.OfType<StackPanel>().FirstOrDefault(n => Equals(n.Tag, "photo") && n.Visibility==Visibility.Visible) is { } fittedPhoto)
-                {
-                    var fittedImage = fittedPhoto.Children.OfType<System.Windows.Controls.Image>().Single();
-                    if (group.DesiredSize.Height > groupHeight + 1)
-                    {
-                        fittedPhoto.Visibility = Visibility.Collapsed; Grid.SetColumn(data,0); Grid.SetColumnSpan(data,2); omitted=true;
-                    }
-                    else
-                    {
-                        var low=fittedImage.Height; var high=fittedImage.MaxHeight;
-                        for(var attempt=0;attempt<8;attempt++)
+                        var height = column.MaxHeight;
+                        var layout = AircraftPhotoViewport.For(width, height, o.CardDesign == "photo", selected.Length > 1);
+                        if (layout.Visible)
                         {
-                            var candidate=(low+high)/2; fittedImage.Height=candidate;
-                            fittedPhoto.InvalidateMeasure();body.InvalidateMeasure();group.InvalidateMeasure();
-                            group.Measure(new System.Windows.Size(groupWidth,double.PositiveInfinity));
-                            if(group.DesiredSize.Height<=groupHeight+1)low=candidate;else high=candidate;
+                            var credit = WidgetFlow.Text((photo.Representative ? "Representative · " : "") + photo.Credit, 10, appearance);
+                            credit.Measure(new System.Windows.Size(layout.PhotoWidth, double.PositiveInfinity));
+                            var imageHeight = layout.PhotoHeight - credit.DesiredSize.Height - 3;
+                            if (imageHeight >= 32)
+                            {
+                                var picture = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                                var ratio = bitmap.PixelWidth / (double)Math.Max(1, bitmap.PixelHeight);
+                                var photoWidth = Math.Min(layout.PhotoWidth, imageHeight * ratio);
+                                var image = new System.Windows.Controls.Image { Source = bitmap, Width = photoWidth, Height = photoWidth / ratio,
+                                    Stretch = Stretch.Uniform, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+                                var radius = Math.Clamp(Math.Min(image.Width, image.Height) * .12, 10, 28);
+                                image.Clip = new RectangleGeometry(new Rect(0, 0, image.Width, image.Height), radius, radius);
+                                picture.Children.Add(image);
+                                picture.Children.Add(credit);
+                                flight.Height = height;
+                                column.Margin = new Thickness(0);
+                                column.MaxHeight = layout.TextHeight;
+                                if (layout.Columns)
+                                {
+                                    flight.ColumnDefinitions.Add(new() { Width = new GridLength(layout.TextWidth) });
+                                    flight.ColumnDefinitions.Add(new() { Width = new GridLength(8) });
+                                    flight.ColumnDefinitions.Add(new() { Width = new GridLength(layout.PhotoWidth) });
+                                    Grid.SetColumn(picture, 2);
+                                }
+                                else
+                                {
+                                    flight.RowDefinitions.Add(new() { Height = new GridLength(layout.TextHeight) });
+                                    flight.RowDefinitions.Add(new() { Height = new GridLength(8) });
+                                    flight.RowDefinitions.Add(new() { Height = new GridLength(layout.PhotoHeight) });
+                                    Grid.SetRow(picture, 2);
+                                    if (selected.Length > 1)
+                                    {
+                                        picture.VerticalAlignment = VerticalAlignment.Top;
+                                        picture.Children.Remove(credit);
+                                        flight.RowDefinitions.Add(new() { Height = new GridLength(3) });
+                                        flight.RowDefinitions.Add(new() { Height = GridLength.Auto });
+                                        Grid.SetRow(credit, 4); flight.Children.Add(credit);
+                                        photoRows.Add((flight, column, layout.TextWidth, layout.TextHeight, height, image, credit));
+                                    }
+                                }
+                                flight.Children.Add(picture);
+                            }
                         }
-                        fittedImage.Height=low;
                     }
+                    else if (!task.IsCompleted && _pendingPhotos.Add(task)) _ = PhotoReady(task);
                 }
-                group.MaxHeight = groupHeight; group.ClipToBounds = true;
+            }
+            // Share the actual visible text height, rather than leaving unused text space above photos.
+            if (photoRows.Count > 0)
+            {
+                foreach (var row in photoRows) row.Text.Measure(new System.Windows.Size(row.Width, row.Budget));
+                var textHeight = photoRows.Max(row => row.Text.DesiredSize.Height);
+                var creditHeight = photoRows.Max(row => row.Credit.DesiredSize.Height);
+                foreach (var row in photoRows)
+                {
+                    var imageHeight = Math.Max(1, row.Height - textHeight - 8 - 3 - creditHeight);
+                    row.Flight.RowDefinitions[0].Height = new GridLength(textHeight);
+                    row.Flight.RowDefinitions[2].Height = new GridLength(imageHeight);
+                    row.Flight.RowDefinitions[4].Height = new GridLength(creditHeight);
+                    row.Credit.VerticalAlignment = VerticalAlignment.Bottom;
+                    var ratio = row.Image.Width / row.Image.Height;
+                    row.Image.Width = Math.Min(row.Width, imageHeight * ratio);
+                    row.Image.Height = row.Image.Width / ratio;
+                    var radius = Math.Clamp(Math.Min(row.Image.Width, row.Image.Height) * .12, 10, 28);
+                    row.Image.Clip = new RectangleGeometry(new Rect(0, 0, row.Image.Width, row.Image.Height), radius, radius);
+                }
             }
         }
-        if (o.CardDesign == "photo") foreach (var group in groups)
-        {
-            var body = (Grid)group.Children[1];
-            if (body.Children.OfType<StackPanel>().FirstOrDefault(n => Equals(n.Tag, "photo")) is { } picture)
-            { body.Children.Remove(picture); group.Children.Insert(0, picture); }
-        }
-        if (nearby.Length > groups.Count) credit.Text = $"+{nearby.Length - groups.Count} nearby · " + credit.Text;
-        if (omitted) credit.Text = "Details hidden · " + credit.Text;
-        // Replace the completed visual tree once, retaining the previous card while it is built.
-        Child = content;
-        System.Windows.Automation.AutomationProperties.SetHelpText(this, omitted ? "Enlarge the aircraft tile or widget to show more details." : "");
+        Line((freshness == "stale" ? "Outdated · " : "") + "ADSB.lol · ODbL · adsbdb" + (nearby.Any(a => a.DetailsSource == "FAA") ? " · FAA" : ""), 10, 95);
     }
+    private readonly HashSet<Task<System.Windows.Media.Imaging.BitmapSource?>> _pendingPhotos = [];
+    private async Task PhotoReady(Task<System.Windows.Media.Imaging.BitmapSource?> task)
+    {
+        try { await task; } catch (Exception) { /* A failed photo never blocks the data card. */ } finally { _pendingPhotos.Remove(task); }
+        if (IsLoaded) Render();
+    }
+
     private void SetVisible(bool show)
     {
         var hidden = _takeover ? Visibility.Collapsed : Visibility.Hidden;
@@ -213,16 +240,5 @@ public sealed class AircraftView : Border
         var animation = new System.Windows.Media.Animation.DoubleAnimation(from, show ? 1 : 0, TimeSpan.FromMilliseconds(milliseconds));
         animation.Completed += (_, _) => { if (generation != _fadeGeneration) return; BeginAnimation(OpacityProperty, null); Opacity = show ? 1 : 0; Visibility = show ? Visibility.Visible : hidden; };
         BeginAnimation(OpacityProperty, animation);
-    }
-    private static async Task ShowPhotoAsync(System.Windows.Controls.Image image, StackPanel container, AircraftPhoto photo)
-    {
-        while (true)
-        {
-            var bitmap = await AircraftPhotoImages.Get(photo);
-            if (bitmap is not null) { image.Source = bitmap; return; }
-            // Retry even when the traffic snapshot is unchanged; never move the text on failure.
-            await Task.Delay(TimeSpan.FromSeconds(65));
-            if (!image.IsLoaded) return;
-        }
     }
 }

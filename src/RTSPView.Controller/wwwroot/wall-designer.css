@@ -133,7 +133,13 @@
 
 .designer-widget-panel{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}.designer-widget-panel[hidden]{display:none}.designer-widget-panel>*{min-width:0;max-width:100%;box-sizing:border-box}.designer-widget-panel button{white-space:normal;overflow-wrap:anywhere}.designer-widget-panel button[aria-pressed=true]{border-color:#f2c75c}.layout-widget.selected{outline:2px solid #f2c75c;outline-offset:2px}.designer-inspector input,.designer-inspector select,.designer-inspector button{max-width:100%;box-sizing:border-box}.designer-action-group{flex-wrap:wrap}.designer-popover{max-width:calc(100vw - 40px)}
 
-/* Give layout selection its own row; actions must never overlap the picker. */
-body #page-layouts .designer-toolbar{display:flex;flex-direction:column;align-items:stretch!important}body #page-layouts .designer-layout-picker{display:flex;flex-wrap:wrap;align-self:stretch;align-items:end;gap:12px;width:100%;min-width:0}body #page-layouts .designer-layout-tools{display:flex;flex-wrap:wrap;align-items:center}body #page-layouts .designer-actions{width:100%;margin-left:0;min-width:0}body #page-layouts .designer-action-group{min-width:0}
+/* Keep desktop controls together; wrap whole groups when the available width runs out. */
+body #page-layouts .designer-toolbar{display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-end!important}
+body #page-layouts .designer-layout-picker{display:flex;flex:0 1 auto;flex-wrap:wrap;align-self:flex-end;align-items:flex-end;gap:12px;width:auto;max-width:100%;min-width:0}
+body #page-layouts .designer-layout-picker>label{width:210px;min-width:100px;max-width:100%}
+body #page-layouts .designer-layout-tools{display:flex;flex-wrap:wrap;align-items:center}
+body #page-layouts .designer-actions{flex:1 1 600px;width:auto;margin-left:0;min-width:0;align-items:flex-end}
+body #page-layouts .designer-action-group{min-width:0}
+@media(max-width:760px){body #page-layouts .designer-layout-picker,body #page-layouts .designer-actions{flex-basis:100%}}
 
 .widget-dimensions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.widget-dimensions label{min-width:0;font-size:12px}.widget-dimensions input{display:block;width:100%;min-width:0;margin-top:5px}.widget-size-presets{display:flex;flex-wrap:wrap;gap:6px}.widget-size-presets button{flex:1;padding:8px;min-width:0}.widget-align{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.widget-align button{min-height:36px;font-size:18px}.designer-widget-panel h4{margin:8px 0 0}

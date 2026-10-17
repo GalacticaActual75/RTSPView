@@ -46,6 +46,7 @@ const systemTabs = (() => {
     tablist.className = 'system-tabs settings-nav'; tablist.setAttribute('aria-orientation','vertical'); tablist.setAttribute('role', 'tablist'); tablist.setAttribute('aria-label', 'System settings');
     const tabs = [], panels = [];
     function select(index, focus = false) {
+      adminLayout.remember('settingsTab',groups[index][0]);
       adminUi.collapseSections(page);
       tabs.forEach((tab, i) => {
         tab.setAttribute('aria-selected', String(i === index)); tab.tabIndex = i === index ? 0 : -1;
@@ -70,7 +71,7 @@ const systemTabs = (() => {
         event.preventDefault(); select(next, true);
       };
     }
-    page.prepend(tablist); page.append(...panels); select(0);
+    page.prepend(tablist); page.append(...panels); select(Math.max(0,groups.findIndex(group=>group[0]===adminLayout.recall('settingsTab',''))));
     compactViewerOptions();
     for (const [selector, notes, label] of [
       ['#displayForm', ':scope > p, :scope > .information-note', 'viewer behavior'],

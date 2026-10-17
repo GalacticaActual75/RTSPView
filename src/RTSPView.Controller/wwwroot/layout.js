@@ -2,6 +2,9 @@
 const adminLayout = (() => {
   let current = 'overview';
   const pages = {};
+  function remember(key,value){try{sessionStorage.setItem('rtspview.admin.'+key,value);}catch{/* Navigation still works when storage is disabled. */}}
+  function recall(key,fallback){try{return sessionStorage.getItem('rtspview.admin.'+key)||fallback;}catch{return fallback;}}
+  function restore(){select(recall('page','overview'));}
   function init() {
     const main = document.querySelector('main');
     const banner = main.previousElementSibling;
@@ -67,9 +70,11 @@ const adminLayout = (() => {
     document.body.append(document.querySelector('#controlState'));
     toggles(document.querySelector('#displayForm'));
     adminUi.init();workspace.init();
-    select('overview');
+    select('overview',false);
   }
-  function select(id) {
+  function select(id, persist = true) {
+    if(!Object.hasOwn(pages,id))id='overview';
+    if(persist)remember('page',id);
 
     current = id;
     if(id==='plugins')pages.plugins.append(pluginsUi.panel());
@@ -180,5 +185,5 @@ const adminLayout = (() => {
     return grid;
   }
   function clearExtraOverlays(){for(const grid of pages.overlays.querySelectorAll('.overlay-workspace'))grid.remove();for(const button of pages.overlays.querySelectorAll('[data-overlay-target]'))button.remove();}
-  return {init, metrics, card, release, overlayGrid, selectOverlay, clearExtraOverlays, select};
+  return {init, metrics, card, release, overlayGrid, selectOverlay, clearExtraOverlays, select, remember, recall, restore};
 })();
