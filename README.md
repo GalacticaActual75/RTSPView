@@ -32,7 +32,7 @@ The Windows **Viewer** plays the video. The **Controller** runs web administrati
 
 This guide describes **[1.0.47](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.47)** and the complete 1.0.47 beta series. Scrypted is optional: compatible sources can be used directly, without MQTT or Home Assistant.
 
-**Beta 1.0.48-beta.1** starts from that complete Stable baseline and adds consistent dashboard spacing/cards, visible overlay-deletion guidance, and optional scheduled application patches. See the [beta release notes](docs/releases/1.0.48-beta.1.md) and [patch controls and publication](docs/application-patches.md). Automatic application patches are off by default; enabling them uses the Live View restart schedule and restarts the whole application when a patch is installed.
+**Beta 1.0.48-beta.2** starts from that complete Stable baseline and adds consistent dashboard spacing/cards, visible overlay-deletion guidance, and optional scheduled application patches. See the [beta release notes](docs/releases/1.0.48-beta.2.md) and [patch controls and publication](docs/application-patches.md). Automatic application patches are off by default; enabling them uses the Live View restart schedule and restarts the whole application when a patch is installed.
 
 [Install](#requirements-and-installation) · [First setup](#first-login-and-first-camera-wall) · [Streams and layouts](#streams-and-layouts) · [Automation](#automation-and-weather) · [Backups and updates](#configuration-backups-and-updates) · [Troubleshooting](#troubleshooting)
 
