@@ -37,7 +37,7 @@ function Start-UserWall {
 try {
     if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -ne 'S-1-5-18') { throw 'Service updates must run through RTSPViewMaintenance.' }
     $job = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'job.json') | ConvertFrom-Json
-    if ($job.Version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$' -or $job.Sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid verified update job.' }
+    if ($job.Version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?(-patch\.[1-9]\d{0,5})?$' -or $job.Sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid verified update job.' }
     $root = [IO.Path]::GetFullPath([string]$job.InstallRoot).TrimEnd('\')
     if (!$root.StartsWith([Environment]::GetFolderPath('ProgramFiles').TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'The install location must be under Program Files.' }
     $installer = Join-Path $PSScriptRoot 'installer.exe'

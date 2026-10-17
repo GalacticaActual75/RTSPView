@@ -44,19 +44,20 @@ function Start-Process {
     $p | Add-Member ScriptMethod WaitForExit { return $true }
     return $p
 }
-function Get-Item { [pscustomobject]@{ VersionInfo=[pscustomobject]@{ ProductVersion='1.0.40-beta.12' } } }
+function Get-Item { [pscustomobject]@{ VersionInfo=[pscustomobject]@{ ProductVersion=$global:rtspTestversion } } }
 function Get-Process {
     param($Name)
     [pscustomobject]@{ SessionId=42; Path=(Join-Path $global:rtspTestinstallRoot $(if($Name -like '*.Viewer'){'Viewer\SpotMonitor.Viewer.exe'}else{'Controller\SpotMonitor.Controller.exe'})) }
 }
-foreach ($scenario in @('success','hash','installer','session')) {
+foreach ($scenario in @('success','stable-patch','beta-patch','hash','installer','session')) {
+    $global:rtspTestversion = switch ($scenario) { 'stable-patch' { '1.0.40-patch.2' } 'beta-patch' { '1.0.40-beta.12-patch.2' } default { '1.0.40-beta.12' } }
     $directory = Join-Path $root ('artifacts\service-update-checks\' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $global:rtspTestinstallRoot = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'RTSPView'
     [IO.File]::WriteAllText((Join-Path $directory 'installer.exe'), 'Fake installer bytes; never executed')
     $hash = (Get-FileHash -LiteralPath (Join-Path $directory 'installer.exe') -Algorithm SHA256).Hash
     if ($scenario -eq 'hash') { $hash = '0' * 64 }
-    @{ InstallRoot=$global:rtspTestinstallRoot; Version='1.0.40-beta.12'; Sha256=$hash; AllowedSid='S-1-5-21-1-2-3-1001'; SessionId=42 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'job.json')
+    @{ InstallRoot=$global:rtspTestinstallRoot; Version=$global:rtspTestversion; Sha256=$hash; AllowedSid='S-1-5-21-1-2-3-1001'; SessionId=42 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'job.json')
     $worker = Join-Path $directory 'worker.ps1'; Set-Content -LiteralPath $worker -Value $source
     $global:rtspTestdisabled=0; $global:rtspTestenabled=0; $global:rtspTeststopped=0; $global:rtspTeststarted=0; $global:rtspTestinstalls=0
     $global:rtspTestinstallerExit = if($scenario -eq 'installer'){1}else{0}
@@ -65,7 +66,7 @@ foreach ($scenario in @('success','hash','installer','session')) {
     $result = Get-Content -Raw -LiteralPath (Join-Path $directory 'progress.json') | ConvertFrom-Json
     if ($result.logPath -ne (Join-Path $directory 'update.log') -or !(Test-Path -LiteralPath $result.logPath)) { throw 'Progress must expose an existing update log on success and failure.' }
     if (!(Get-Content -Raw -LiteralPath $result.logPath).Contains($result.message)) { throw 'Update log does not include the final result.' }
-    if ($scenario -eq 'success') {
+    if ($scenario -in @('success','stable-patch','beta-patch')) {
         if ($result.state -ne 'complete' -or $global:rtspTestinstalls -ne 1 -or [RTSPViewUserLaunch]::Launches -ne 1 -or $global:rtspTestenabled -ne 1) { throw "Successful update failed: $($result.message)" }
     } else {
         if ($result.state -ne 'failed') { throw 'Failure was not reported.' }

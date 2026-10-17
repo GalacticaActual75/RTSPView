@@ -6,7 +6,11 @@ function prepareDisplayForm(){
  const alwaysOnTop=document.createElement('label');alwaysOnTop.innerHTML='<input name="keepViewerAlwaysOnTop" type="checkbox"> Keep viewer always on top';options.append(alwaysOnTop);const hoverExit=document.createElement('label');hoverExit.innerHTML='<input name="showHoverExitButton" type="checkbox"> Show Full exit when hovering in the top-right corner';options.append(hoverExit);
  const toggles=document.createElement('div'),fields=document.createElement('div');toggles.className='display-toggle-grid';fields.className='display-field-row';
  for(const label of [...options.children])(label.querySelector('input')?.type==='checkbox'?toggles:fields).append(label);
- fields.append(display.querySelector('.actions'));options.replaceWith(toggles,fields);
+ const monitor=document.createElement('div');monitor.className='display-monitor-group';
+ const monitorSelect=fields.querySelector('[name="preferredMonitor"]');
+ monitor.append(monitorSelect.closest('label'),fields.querySelector('#identifyDisplays'),fields.querySelector('#monitorState'));
+ monitorSelect.setAttribute('aria-describedby','monitorState');
+ fields.prepend(monitor);options.replaceWith(toggles,fields);
 }
 prepareDisplayForm();adminLayout.init();viewerControls.init();const networkPanel=createNetworkPanel();snapshotUi.init();restartScheduleUi.init();updateNotifications.init();temperatureUi.init();dependencyUi.init();automationUi.init();const connectorPanel=createConnectorPanel();systemTabs.init();
 async function api(url,options={}){const method=(options.method||'GET').toUpperCase(),headers={'Content-Type':'application/json',...(options.headers||{})};if(!['GET','HEAD'].includes(method)&&csrfToken)headers['X-CSRF-Token']=csrfToken;const r=await fetch(url,{headers,...options});if(r.status===401){showLogin();throw new Error('Authentication required')}if(!r.ok){const e=await r.json().catch(()=>({error:r.statusText}));if(e.passwordChangeRequired)showSetup();if(e.reference||e.related?.length)showRequestReference(e);throw new Error(e.error||e.detail||e.title||r.statusText)}const result=r.status===204?null:await r.json();if(!['GET','HEAD'].includes(method))window.dispatchEvent(new CustomEvent('admin:saved',{detail:{url,method}}));return result}
@@ -286,7 +290,7 @@ function renderUpdate(update){updateNotifications.render(update);
  const button=q('#installUpdate');button.textContent=`Install ${channelName(update.selectedChannel)} ${update.latestVersion||''}`;button.hidden=!update.updateAvailable;
 }
 async function checkUpdates(manual=false){const request=++updateRequest;pendingUpdate=null;q('#updateState').dataset.tone='neutral';q('#updateState').textContent='Checking selected channel...';q('#installUpdate').hidden=true;try{const update=await api(manual?'/api/update/check':'/api/update',manual?{method:'POST'}:{});if(request===updateRequest)renderUpdate(update)}catch(err){if(request===updateRequest)q('#updateState').textContent=err.message}}
-q('#checkUpdates').onclick=()=>checkUpdates(true);
+q('#checkUpdates').onclick=()=>{checkUpdates(true);patchUpdates.refresh(true);};
 q('#updateChannel').onchange=async()=>{
  const selector=q('#updateChannel'),channel=selector.value,previous=pendingUpdate?.selectedChannel,request=++updateRequest;
  pendingUpdate=null;selector.disabled=true;q('#checkUpdates').disabled=true;q('#installUpdate').hidden=true;q('#updateState').dataset.tone='neutral';q('#updateState').textContent='Saving channel selection and checking releases...';
@@ -335,22 +339,32 @@ function syncOverlaySource(camera){
  wallDesigner.updateCameras(cameraInventory);q('#cameraCount').textContent=cameraInventory.length+' streams';
 }
 
-// Keep a recoverable error next to the active editor, including dependency destinations.
+// Use the browser top layer so errors stay visible above the sidebar and any editor.
 function showRequestReference(error){
- document.querySelector('.request-reference')?.remove();
- const panel=document.createElement('section');panel.className='request-reference';panel.setAttribute('role','alert');
- const message=document.createElement('p');message.textContent=error.error;panel.append(message);
- const link=(label,action)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=action;panel.append(b);};
- const leaveDialog=()=>{const dialog=panel.closest('dialog');if(dialog?.open)dialog.close();};
+ const old=document.querySelector('.request-reference');if(old){old.close();old.remove();}
+ const previous=document.activeElement,parentDialog=document.querySelector('dialog[open]');
+ const panel=document.createElement('dialog');panel.className='request-reference';
+ const heading=document.createElement('h2');heading.id='request-reference-title';heading.textContent=error.related?.length?'Item is still in use':'Request could not be completed';
+ const message=document.createElement('p');message.id='request-reference-message';message.textContent=error.error;
+ panel.setAttribute('aria-labelledby',heading.id);panel.setAttribute('aria-describedby',message.id);panel.append(heading,message);
+ if(error.related?.length){const help=document.createElement('p');help.textContent='Open each item below, remove or replace its reference, and save your changes. Disabled rules also retain references. Then return here and delete again.';panel.append(help);}
+ const links=document.createElement('div');links.className='request-reference-links';panel.append(links);
+ const link=(label,action)=>{const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=label;b.onclick=action;links.append(b);};
+ let navigating=false;
+ const leaveDialog=()=>{navigating=true;panel.close();if(parentDialog?.open)parentDialog.close();};
  if(error.reference)link(error.panel==='updates'?'Open Updates':'Open Diagnostics',()=>{leaveDialog();adminLayout.select('system');document.querySelector('#system-tab-'+(error.panel==='updates'?'updates':'logs'))?.click();});
- for(const ref of error.related||[])link(ref.name,()=>{leaveDialog();
+ const kinds={layout:'Layout',automationLayout:'Automation layout',overlay:'Picture in picture',mqtt:'MQTT rule',tapo:'Tapo rule'};
+ for(const ref of error.related||[])link((kinds[ref.kind]||'Related item')+' · '+ref.name,()=>{leaveDialog();
    if(ref.kind==='layout'||ref.kind==='automationLayout'){wallDesigner.openLayout(ref.id,ref.kind==='automationLayout');return;}
    if(ref.kind==='overlay'){adminLayout.select('overlays');const form=[...document.querySelectorAll('.camera-card')].find(n=>n.dataset.slot===ref.id);const target=form?.closest('.overlay-workspace')?.id;document.querySelector('[data-overlay-target="'+target+'"]')?.click();form?.scrollIntoView({block:'center'});form?.querySelector('input')?.focus();return;}
    adminLayout.select('automation');document.querySelector('#automation-tab-'+(ref.kind==='tapo'?1:0))?.click();
    const card=[...document.querySelectorAll(ref.kind==='tapo'?'.tapo-rule':'.automation-rule')].find(n=>n.dataset.id===ref.id);
    if(card){for(const details of card.querySelectorAll('details'))details.open=true;card.scrollIntoView({block:'center'});card.querySelector('input')?.focus();}
  });
- link('Dismiss',()=>panel.remove());(document.querySelector('dialog[open]')||document.querySelector('#app')).prepend(panel);
+ const actions=document.createElement('div');actions.className='dialog-actions';
+ const dismiss=document.createElement('button');dismiss.type='button';dismiss.textContent='Dismiss';dismiss.onclick=()=>panel.close();actions.append(dismiss);panel.append(actions);
+ panel.addEventListener('close',()=>{panel.remove();if(!navigating&&previous?.isConnected)previous.focus();},{once:true});
+ document.body.append(panel);panel.showModal();dismiss.focus();
 }
 document.addEventListener('invalid',event=>{for(let p=event.target.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;},true);
 

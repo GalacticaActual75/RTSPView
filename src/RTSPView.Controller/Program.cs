@@ -93,9 +93,12 @@ builder.Services.AddSingleton(provider =>
     return new UpdateMonitor(dataDirectory, service.InitialStatus, service.CheckAsync, service.StageAndLaunchAsync,
         message => provider.GetRequiredService<RollingFileLogger>().Write("UPDATE", message));
 });
+builder.Services.AddSingleton(provider => new PatchUpdateMonitor(dataDirectory, UpdateService.InstalledRelease(),
+    provider.GetRequiredService<UpdateService>().CheckPatchAsync, provider.GetRequiredService<UpdateService>().InstallScheduledPatchAsync));
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateMonitor>());
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<PatchUpdateMonitor>());
     builder.Services.AddHostedService<WallUpdateServer>();
     builder.Services.AddHostedService<StreamingUpdateMonitor>();
 }
@@ -106,8 +109,11 @@ builder.Services.AddSingleton(provider => new RestartScheduler(dataDirectory, as
         var runtime = provider.GetRequiredService<ViewerRuntimeState>();
         using var gate = await runtime.AcquireAsync(token);
         if (runtime.Paused) return "Viewer intentionally stopped; scheduled viewer restart skipped.";
+        var patch = await provider.GetRequiredService<PatchUpdateMonitor>().InstallScheduledAsync(token);
+        if (patch is { Started: true } or { MaintenancePending: true }) return patch.Message;
         var result = await provider.GetRequiredService<ViewerCommandClient>().SendAsync(ViewerCommandType.RestartViewer, null, token);
-        return result.Success ? "Viewer accepted the scheduled restart." : "Viewer restart failed: " + result.Message;
+        var restartResult = result.Success ? "Viewer accepted the scheduled restart." : "Viewer restart failed: " + result.Message;
+        return patch is null ? restartResult : patch.Message + " " + restartResult;
     }
     using var process = Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 0 /d p:0:0 /c \"RTSPView scheduled host restart\"")
         { UseShellExecute = false, CreateNoWindow = true }) ?? throw new InvalidOperationException("Windows did not start the restart command.");
@@ -150,6 +156,7 @@ var applicationRestartPending = false;
 var applicationInstance = Guid.NewGuid().ToString("N");
 updates.ExternalMaintenanceActive = async () => applicationRestartPending || (await pawnIo.RemoteStatusAsync()).State is "installing" or "downloading" or "update-installing";
 var updateMonitor = app.Services.GetRequiredService<UpdateMonitor>();
+var patchMonitor = app.Services.GetRequiredService<PatchUpdateMonitor>();
 var restartScheduler = app.Services.GetRequiredService<RestartScheduler>();
 var scheduleTimeZoneId = TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaZone) ? ianaZone : TimeZoneInfo.Local.Id;
 var loginLimiter = new LoginAttemptLimiter();
@@ -334,6 +341,10 @@ app.MapPut("/api/network", async (HttpContext context, LanAccessRequest request)
 }).RequireAuthorization();
 
 app.MapGet("/api/update", async () => Results.Ok(await updateMonitor.StatusAsync())).RequireAuthorization();
+app.MapGet("/api/patch-update", () => Results.Ok(patchMonitor.Status)).RequireAuthorization();
+app.MapPut("/api/patch-update/automatic", (WallNotificationSettings request) => Results.Ok(patchMonitor.SetAutoInstall(request.Enabled))).RequireAuthorization();
+app.MapPost("/api/patch-update/check", async (CancellationToken token) =>
+    Results.Ok(await patchMonitor.CheckAsync(true, DateTimeOffset.UtcNow, token))).RequireAuthorization();
 app.MapGet("/api/streaming-update", () => Results.Ok(StreamingUpdates.Default.DisplayStatus())).RequireAuthorization();
 app.MapPost("/api/update/check", async (CancellationToken cancellationToken) =>
     Results.Ok(await updateMonitor.CheckAsync(true, DateTimeOffset.UtcNow, cancellationToken))).RequireAuthorization();

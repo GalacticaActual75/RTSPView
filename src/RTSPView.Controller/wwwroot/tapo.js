@@ -43,7 +43,7 @@ const tapoUi = (() => {
       <button type="button" class="secondary tapo-discover">Test connection & discover sensors</button></div>
       <div class="tapo-found-hubs"></div><p>Network discovery runs from the RTSPView computer. Hubs on other subnets or VLANs may require manual entry.</p>
       <p>Discovery tests the draft connection without saving or activating rules. Passwords are encrypted on this Windows account and omitted from configuration exports.</p>
-      </details><div class="control-buttons"><p>Save &amp; apply saves Tapo connection settings and all sensor rules in this panel, and activates enabled rules on this host.</p><button type="submit">Save &amp; apply</button><button type="button" class="secondary tapo-discard">Discard changes</button></div>
+      </details><div class="control-buttons"><p>Save &amp; apply saves Tapo connection settings and all sensor rules in this panel, and activates enabled rules on this host.</p><button type="button" class="secondary tapo-discard">Discard changes</button><button type="submit">Save &amp; apply</button></div>
       <p class="tapo-message" role="status"></p>`;
     const connection = q('.tapo-connection');
     const inventoryDetails = document.createElement('details'); inventoryDetails.innerHTML = '<summary>Sensor readings & connection details</summary>'; inventoryDetails.append(q('.tapo-inventory')); connection.append(inventoryDetails);

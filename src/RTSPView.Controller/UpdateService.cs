@@ -73,6 +73,58 @@ public sealed class UpdateService : IDisposable
         finally { _gate.Release(); }
     }
 
+    public async Task<string?> CheckPatchAsync(CancellationToken token)
+    {
+        var installed = InstalledRelease();
+        if (_channels.Read(installed.Channel) != installed.Channel) return null;
+        var patch = await _source.FindPatchAsync(installed, cancellationToken: token);
+        return patch is not null && patch.Manifest.SupportsServiceUpdates &&
+            UpdateRelease.CanInstall(installed, UpdateRelease.Parse(patch.Manifest.Version), installed.Channel)
+            ? patch.Manifest.Version : null;
+    }
+
+    // Called only from the restart scheduler, inside TryRunMaintenanceAsync's gate.
+    // It never opens a progress window or falls back to an elevation prompt.
+    public async Task<UpdateLaunchResult> InstallScheduledPatchAsync(string version, Func<bool> stillEnabled, CancellationToken token)
+    {
+        var installed = InstalledRelease();
+        if (!stillEnabled() || UpdateRelease.Parse(version).Patch == 0 || _channels.Read(installed.Channel) != installed.Channel ||
+            !UpdateRelease.CanInstall(installed, UpdateRelease.Parse(version), installed.Channel))
+            return new(false, "Automatic patch installation is disabled or the patch selection changed.");
+        if (_maintenance is null) return new(false, "Automatic patches require an available maintenance helper.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromMinutes(12));
+        var helper = await _maintenance.SendAsync(new("status"), timeout.Token);
+        if (_launched && helper.State is "update-failed" or "update-ready") _launched = false;
+        if (_launched) return new(false, "Waiting for the previous application update to finish.", MaintenancePending: true);
+        if (helper is not { Available: true, SupportsAppPatches: true })
+            return new(false, "Enable an up-to-date maintenance helper to install patches automatically.");
+        var ready = await _maintenance.SendAsync(new("prepare-update", Channel: installed.Channel, Version: version), timeout.Token);
+        if (ready.State != "update-ready" || ready.OperationId is null || ready.ProgressPath is null) throw new IOException(ready.Message);
+        // Recheck after the download: opting out while preparation runs cancels this handoff.
+        if (!stillEnabled()) return new(false, "Automatic installation canceled; the patch remains available for manual installation.");
+        _launched = true;
+        _activeProgressPath = ready.ProgressPath;
+        try
+        {
+            var launched = await _maintenance.SendAsync(new("install-update", ready.OperationId), timeout.Token);
+            if (launched.State != "update-installing") throw new IOException(launched.Message);
+        }
+        catch (Exception error) when (error is IOException or OperationCanceledException or JsonException or UnauthorizedAccessException)
+        {
+            // A lost response cannot prove that the service did not launch its worker.
+            _logger.Write("WARNING", "Scheduled patch handoff is unconfirmed; further restarts are deferred until helper status is known.");
+            return new(false, "Patch installation was requested but its status is unconfirmed. Check the maintenance helper before retrying.", MaintenancePending: true);
+        }
+        _logger.Write("AUDIT", $"Scheduled application patch {version} accepted by the maintenance helper.");
+        return new(true, "Application patch installation started at the scheduled restart.");
+    }
+
+    private Task<GitHubUpdate?> FindSelectedAsync(string channel, string version, CancellationToken token)
+        => UpdateRelease.Parse(version).Patch > 0
+            ? _source.FindPatchAsync(InstalledRelease(), refresh: true, cancellationToken: token)
+            : _source.FindAsync(channel, refresh: true, cancellationToken: token);
+
     // Serialize scheduled maintenance with update staging, including the elevated installer handoff.
     public async Task<bool> TryRunMaintenanceAsync(Func<Task> action, CancellationToken cancellationToken)
     {
@@ -81,6 +133,17 @@ public sealed class UpdateService : IDisposable
         {
             var directory = Path.Combine(_dataDirectory, "updates");
             if (ExternalMaintenanceActive is not null && await ExternalMaintenanceActive()) return false;
+            if (_launched && _activeProgressPath is not null)
+            {
+                try
+                {
+                    using var active = JsonDocument.Parse(File.ReadAllText(_activeProgressPath));
+                    var state = active.RootElement.GetProperty("state").GetString();
+                    if (state is not ("complete" or "failed" or "ready")) return false;
+                    if (state is "failed" or "ready") _launched = false;
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or KeyNotFoundException) { return false; }
+            }
             if (Directory.Exists(directory))
             {
                 foreach (var path in Directory.EnumerateFiles(directory, "progress-*.json"))
@@ -153,9 +216,9 @@ public sealed class UpdateService : IDisposable
                         : !helper.SupportsAppUpdates ? "The running maintenance helper does not support application updates."
                         : "This release requires the Windows approval installation path.";
                 var serviceCompatible = false;
-                if (helper is { Available: true, SupportsAppUpdates: true })
+                if (helper is { Available: true, SupportsAppUpdates: true } && (UpdateRelease.Parse(expectedVersion).Patch == 0 || helper.SupportsAppPatches))
                 {
-                    var candidate = await _source.FindAsync(channel, refresh: true, cancellationToken: cancellationToken);
+                    var candidate = await FindSelectedAsync(channel, expectedVersion, cancellationToken);
                     if (candidate?.Manifest.Version != expectedVersion) throw new InvalidOperationException("The available release changed. Check for updates and confirm the new version.");
                     serviceCompatible = candidate.Manifest.SupportsServiceUpdates;
                 }
@@ -181,7 +244,7 @@ public sealed class UpdateService : IDisposable
             }
 
             _logger.Write("WARNING", "Update is using Windows approval: " + approvalReason);
-            var release = await _source.FindAsync(channel, refresh: true, cancellationToken: cancellationToken)
+            var release = await FindSelectedAsync(channel, expectedVersion, cancellationToken)
                 ?? throw new InvalidDataException("No GitHub release is available for this channel.");
             var manifest = release.Manifest;
             if (manifest.Version != expectedVersion) throw new InvalidOperationException("The available release changed. Check for updates and confirm the new version.");
@@ -232,7 +295,7 @@ public sealed class UpdateService : IDisposable
         File.Move(temporary, path, true);
     }
 
-    private static UpdateRelease InstalledRelease()
+    public static UpdateRelease InstalledRelease()
     {
         var assembly = typeof(UpdateService).Assembly;
         var label = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0];
@@ -241,4 +304,4 @@ public sealed class UpdateService : IDisposable
     public void Dispose() { _source.Dispose(); _gate.Dispose(); }
 }
 
-public sealed record UpdateLaunchResult(bool Started, string Message);
+public sealed record UpdateLaunchResult(bool Started, string Message, bool MaintenancePending = false);

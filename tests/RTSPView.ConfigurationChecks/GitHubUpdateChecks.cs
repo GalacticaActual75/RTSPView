@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using RTSPView.Infrastructure;
+using RTSPView.Core;
 
 internal static class GitHubUpdateChecks
 {
@@ -26,7 +27,9 @@ internal static class GitHubUpdateChecks
                 return new(HttpStatusCode.OK) { Content = new ByteArrayContent(truncate ? bytes[..^1] : bytes) };
             var path = request.RequestUri.AbsolutePath;
             if (path.EndsWith("/latest")) return Json(Release("1.0.32"));
-            if (path.EndsWith("/releases")) return Json(new[] { Release("1.0.40", prerelease: false), Release("1.0.34-beta.1", draft: true), Release("1.0.32-beta.2"), Release("1.0.32-beta.10"), Release("1.0.32-beta.3") });
+            if (path.EndsWith("/releases")) return Json(new[] { Release("1.0.40", prerelease: false), Release("1.0.34-beta.1", draft: true), Release("1.0.32-beta.2"), Release("1.0.32-beta.10"), Release("1.0.32-beta.3"),
+                Release("1.0.32-beta.10-patch.2"), Release("1.0.32-beta.10-patch.10"), Release("1.0.32-beta.10-patch.99", draft:true),
+                Release("1.0.33-beta.1-patch.1"), Release("1.0.32-patch.3", prerelease:true) });
             if (path.EndsWith("/assets/1")) return Json(new UpdateManifest(manifestVersion, $"RTSPView-Setup-{manifestVersion}-win-x64.exe", badHash ? new string('0', 64) : checksum, DateTimeOffset.UtcNow));
             if (path.EndsWith("/assets/2"))
             {
@@ -45,6 +48,16 @@ internal static class GitHubUpdateChecks
         Check(File.ReadAllBytes(destination).SequenceEqual(bytes), "verified installer download");
         manifestVersion = "1.0.32-beta.10";
         Check((await source.FindAsync("beta"))?.Manifest.Version == manifestVersion, "highest beta revision, excluding stable/drafts");
+        manifestVersion = "1.0.32-beta.10-patch.10";
+        Check((await source.FindPatchAsync(UpdateRelease.Parse("1.0.32-beta.10")))?.Manifest.Version == manifestVersion, "highest patch for exact beta base, excludes drafts and newer bases");
+        manifestVersion = "1.0.32-patch.3";
+        Check((await source.FindPatchAsync(UpdateRelease.Parse("1.0.32")))?.Manifest.Version == manifestVersion, "stable patches use prerelease artifacts without replacing latest stable");
+        var patched = UpdateRelease.Parse(manifestVersion);
+        Check(UpdateRelease.CanInstall(UpdateRelease.Parse("1.0.32"), patched, "stable"), "patch accepted on its base");
+        Check(!UpdateRelease.CanInstall(patched, patched, "stable"), "same patch not reinstalled");
+        Check(!UpdateRelease.CanInstall(patched, UpdateRelease.Parse("1.0.32-patch.2"), "stable"), "patch downgrade blocked");
+        Check(!UpdateRelease.CanInstall(patched, UpdateRelease.Parse("1.0.33-patch.1"), "stable"), "patch cannot upgrade base version");
+        Check(UpdateRelease.CanInstall(patched, UpdateRelease.Parse("1.0.33"), "stable"), "full upgrade from patched version");
         manifestVersion = "1.0.31";
         await Reject(() => source.FindAsync("stable", refresh: true), "manifest/tag mismatch");
         manifestVersion = "1.0.32"; badHash = true;

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example 1.0.29 or 1.0.30-beta.1"
+        description: "Release or patch identity, for example 1.0.48, 1.0.48-beta.1, or 1.0.48-patch.1"
         required: true
 
 permissions:
@@ -66,7 +66,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $version = if ($env:RELEASE_EVENT -eq 'workflow_dispatch') { $env:RELEASE_INPUT } else { $env:RELEASE_REF.TrimStart('v') }
-          if ($version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$') { throw "Invalid release version: $version" }
+          if ($version -notmatch '^\d{1,6}\.\d{1,6}\.\d{1,6}(-beta\.\d{1,6})?(-patch\.[1-9]\d{0,5})?$') { throw "Invalid release version: $version" }
           "value=$version" >> $env:GITHUB_OUTPUT
           "numeric=$($version.Split('-')[0])" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
@@ -130,7 +130,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $tag='${{ steps.version.outputs.tag }}'
-          [string[]]$releaseFlags = if ('${{ steps.version.outputs.value }}' -match '-beta\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
+          # Patch artifacts never replace the advertised Stable release or the normal Beta update.
+          [string[]]$releaseFlags = if ('${{ steps.version.outputs.value }}' -match '-beta\.|-patch\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
             gh release create $tag dist/*.exe dist/*.sha256.txt dist/update.json --target '${{ github.sha }}' @releaseFlags --generate-notes --title "RTSPView ${{ steps.version.outputs.value }}"
           } else {

@@ -1,5 +1,7 @@
 # Scheduled restarts (beta)
 
+When [automatic application patches](application-patches.md) are enabled in Settings → Updates, a ready patch uses the next Live View schedule occurrence to install and restart the whole application. Otherwise that occurrence keeps its usual viewer-only behavior. Patch installation is off by default; disabled schedules, skipped occurrences and an intentionally stopped viewer never start an automatic patch. Windows host reboot schedules remain independent.
+
 System → Maintenance → Scheduled restarts has independent Viewer application and Windows host schedules, both disabled by default. Enable either one or both. Each has its own interval of 1–8760 hours or selected weekdays and a time in the host's time zone, plus its own save and skip controls. Saving re-arms only that action's schedule; changing a dropdown alone does nothing. Saving, disabling or skipping one action leaves the other action's settings and next occurrence intact.
 
 Existing single schedules are carried into their original action slot, including their next occurrence and history; the other action remains disabled. If a viewer restart becomes due during a host countdown or on the same scheduler tick as a host restart request, that viewer occurrence is skipped. Cancelling the host countdown does not replay the skipped viewer occurrence. Its next scheduled occurrence remains active.

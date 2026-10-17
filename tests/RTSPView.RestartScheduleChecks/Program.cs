@@ -14,6 +14,7 @@ void Check(bool condition, string message) { if (!condition) throw new Exception
 try
 {
     await UpdateMonitorChecks.Run(root);
+    await PatchUpdateChecks.Run(root);
     await IndependentSchedulesChecks.Run(root);
     await TemperatureChecks.Run(root);
     var s = Scheduler();

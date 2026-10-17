@@ -85,11 +85,13 @@ public sealed class ServiceUpdateCoordinator
         // Ignore repository overrides inherited from the user environment at the privileged boundary.
         using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
         using var source = new GitHubUpdateSource(http, GitHubUpdateSource.DefaultRepository, Path.Combine(_state, "github-cooldown.json"));
-        var release = await source.FindAsync(request.Channel!) ?? throw new IOException("The selected update channel has no release.");
-        if (!release.Manifest.SupportsServiceUpdates) throw new InvalidDataException("This older installer requires the standard Windows approval update path.");
-        if (release.Manifest.Version != request.Version) throw new InvalidDataException("The release changed. Check for updates and confirm the current version.");
         var installedPath = Path.Combine(_root, "Controller", "SpotMonitor.Controller.exe");
         var installed = UpdateRelease.Parse(FileVersionInfo.GetVersionInfo(installedPath).ProductVersion!.Split('+')[0]);
+        var target = UpdateRelease.Parse(request.Version!);
+        var release = (target.Patch > 0 ? await source.FindPatchAsync(installed) : await source.FindAsync(request.Channel!))
+            ?? throw new IOException("The selected update channel has no release.");
+        if (!release.Manifest.SupportsServiceUpdates) throw new InvalidDataException("This older installer requires the standard Windows approval update path.");
+        if (release.Manifest.Version != request.Version) throw new InvalidDataException("The release changed. Check for updates and confirm the current version.");
         if (!UpdateRelease.CanInstall(installed, UpdateRelease.Parse(request.Version!), request.Channel!)) throw new InvalidDataException("This release is already installed or older than the installed release.");
         await source.DownloadAsync(release, Path.Combine(directory, "installer.exe"));
         var script = Path.Combine(AppContext.BaseDirectory, "Apply-ServiceUpdate.ps1");

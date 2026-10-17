@@ -37,7 +37,12 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
   const instance=(await request(a,'/api/control/application/status')).json.instance;
   assert.equal(typeof instance,'string');
   const savedCsrf=a.csrf;a.csrf='';
+  assert.equal((await request(a,'/api/patch-update/automatic','PUT',{enabled:true})).status,400,'automatic patch preference requires CSRF');
   assert.equal((await request(a,'/api/control/application/restart','POST',{confirmed:true})).status,400,'restart requires CSRF');a.csrf=savedCsrf;
+  assert.equal((await request(a,'/api/patch-update')).json.autoInstall,false,'automatic patches default off');
+  assert.equal((await request(a,'/api/patch-update/automatic','PUT',{enabled:true})).json.autoInstall,true,'authenticated admin can opt in');
+  assert.equal((await request(a,'/api/patch-update/automatic','PUT',{enabled:false})).json.autoInstall,false,'authenticated admin can opt out');
+  assert.equal((await request(a,'/api/patch-update')).json.autoInstall,false,'opt-out is returned on subsequent reads');
   const config=(await request(a,'/api/config')).json;assert(config,'configuration loads');
   assert.equal((await request(a,'/api/startup')).json.managed,false,'isolated Controller cannot modify Windows startup');
   assert.equal((await request(a,'/api/startup','PUT',{enabled:true})).status,400,'unmanaged startup changes rejected');

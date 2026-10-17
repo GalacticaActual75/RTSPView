@@ -15,6 +15,7 @@ public sealed record MaintenanceStatus
 {
     public bool Available { get; init; }
     public bool SupportsAppUpdates { get; init; }
+    public bool SupportsAppPatches { get; init; }
     public string? ProgressPath { get; init; }
     public bool PawnInstalled { get; init; }
     public string State { get; init; } = "unavailable";

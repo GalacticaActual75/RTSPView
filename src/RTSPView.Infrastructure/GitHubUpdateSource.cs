@@ -35,21 +35,28 @@ public sealed class GitHubUpdateSource : IDisposable
 
     public string ChannelLocation(string channel) => $"https://github.com/{_repository}/releases" + (UpdateRelease.ValidateChannel(channel) == "stable" ? "/latest" : "");
 
-    public async Task<GitHubUpdate?> FindAsync(string channel, bool refresh = false, CancellationToken cancellationToken = default)
+    public Task<GitHubUpdate?> FindAsync(string channel, bool refresh = false, CancellationToken cancellationToken = default)
+        => FindReleaseAsync(channel, null, refresh, cancellationToken);
+
+    public Task<GitHubUpdate?> FindPatchAsync(UpdateRelease installed, bool refresh = false, CancellationToken cancellationToken = default)
+        => FindReleaseAsync(installed.Channel, installed.BaseLabel, refresh, cancellationToken);
+
+    private async Task<GitHubUpdate?> FindReleaseAsync(string channel, string? patchBase, bool refresh, CancellationToken cancellationToken)
     {
         UpdateRelease.ValidateChannel(channel);
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (!refresh && _cache.TryGetValue(channel, out var cached) && DateTimeOffset.UtcNow - cached.At < TimeSpan.FromMinutes(2)) return cached.Release;
+            var cacheKey = patchBase is null ? channel : "patch:" + patchBase;
+            if (!refresh && _cache.TryGetValue(cacheKey, out var cached) && DateTimeOffset.UtcNow - cached.At < TimeSpan.FromMinutes(2)) return cached.Release;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(60));
             Release? selected = null;
-            if (channel == "stable")
+            if (channel == "stable" && patchBase is null)
             {
                 try { selected = await ReadJsonAsync<Release>(Api("releases/latest"), 2 * 1024 * 1024, timeout.Token); }
                 catch (HttpRequestException error) when (error.StatusCode == HttpStatusCode.NotFound) { throw new InvalidDataException("GitHub release unavailable. The configured repository must be public."); }
-                if (selected.Draft || selected.Prerelease || ParseTag(selected.Tag).Channel != "stable") throw new InvalidDataException("The latest GitHub release is not a stable release.");
+                if (selected.Draft || selected.Prerelease || ParseTag(selected.Tag) is not { Channel: "stable", Patch: 0 }) throw new InvalidDataException("The latest GitHub release is not a stable release.");
             }
             else
             {
@@ -60,7 +67,11 @@ public sealed class GitHubUpdateSource : IDisposable
                     {
                         UpdateRelease version;
                         try { version = ParseTag(release.Tag); } catch (InvalidDataException) { continue; }
-                        if (version.Channel == "beta" && (selected is null || version.Number > ParseTag(selected.Tag).Number)) selected = release;
+                        if (patchBase is not null)
+                        {
+                            if (version.BaseLabel == patchBase && version.Patch > 0 && (selected is null || version.Patch > ParseTag(selected.Tag).Patch)) selected = release;
+                        }
+                        else if (version.Channel == "beta" && version.Patch == 0 && (selected is null || version.Number > ParseTag(selected.Tag).Number)) selected = release;
                     }
                     if (releases.Length < 100) break;
                     if (page == 10) throw new InvalidDataException("Too many releases to select a beta safely.");
@@ -82,7 +93,7 @@ public sealed class GitHubUpdateSource : IDisposable
                     throw new InvalidDataException("GitHub's asset digest disagrees with the manifest.");
                 result = new(manifest, installer.Id, installer.Size);
             }
-            _cache[channel] = (DateTimeOffset.UtcNow, result);
+            _cache[cacheKey] = (DateTimeOffset.UtcNow, result);
             return result;
         }
         finally { _gate.Release(); }

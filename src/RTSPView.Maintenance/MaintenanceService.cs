@@ -173,7 +173,7 @@ public sealed class MaintenanceService : ServiceBase
                     status = await _engine!.HandleAsync(request);
                 }
                 var sample = Volatile.Read(ref _temperatures);
-                status = status with { SupportsAppUpdates = _updates is not null, PawnInstalled = PawnInstalled(), Temperatures = sample.IsFresh(DateTimeOffset.UtcNow) ? sample : null };
+                status = status with { SupportsAppUpdates = _updates is not null, SupportsAppPatches = _updates is not null, PawnInstalled = PawnInstalled(), Temperatures = sample.IsFresh(DateTimeOffset.UtcNow) ? sample : null };
                 await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
                 using var writeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 await writer.WriteLineAsync(JsonSerializer.Serialize(status).AsMemory(), writeTimeout.Token);

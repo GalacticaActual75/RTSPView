@@ -1,5 +1,7 @@
 # Daily update checks and wall notifications
 
+This page describes full release updates. [Application patches](application-patches.md) use a separate daily check and an independent, opt-in automatic installation preference. Disabling wall notifications does not enable or disable patch installation.
+
 The Controller checks the selected Stable/Beta release channel once every 24 hours, independently of the browser or viewer. The first check runs when the Controller starts with no current cache. `update-monitor.json` stores results and deadlines across restarts. Opening the admin page or polling its status reads the cache rather than GitHub. A change in installed version invalidates the old result.
 
 System → Updates displays the last check, next check, and a Show update notifications on the stream wall toggle. Notifications default to enabled. Toggling them saves immediately, and the viewer picks up the change within five seconds. Checks continue when notifications are disabled. This host-specific preference and cache are separate from portable stream configuration backups.
