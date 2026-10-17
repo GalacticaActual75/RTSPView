@@ -103,6 +103,13 @@ body #page-layouts .designer-stage{border-radius:var(--control-radius)}
 #snapshotForm .display-field-row>label{min-width:0;width:min(100%,260px);margin:0}
 #snapshotForm .display-field-row>.actions{margin-top:0}
 @media(max-width:480px){.stats{grid-template-columns:minmax(0,1fr)}}
-:root .patch-updates{border-top:1px solid var(--card-border);margin-top:20px;padding-top:16px}
+:root .patch-updates{border:1px solid var(--card-border);border-radius:var(--card-radius);background:var(--panel2);margin-top:24px;padding:20px}
+:root .patch-updates h3{margin:0 0 8px}
+:root .patch-updates .panel-head{gap:16px;flex-wrap:wrap;align-items:flex-start}
+:root .patch-versions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}
+:root .patch-versions>div{padding:12px;border:1px solid var(--card-border);border-radius:var(--control-radius);min-width:0}
+:root .patch-versions dt{font-size:12px;color:var(--muted);margin-bottom:6px}
+:root .patch-versions dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+:root .patch-updates .patch-history{font-size:12px;color:var(--muted);margin-bottom:20px}
 :root .patch-updates .toggle-control{margin-bottom:12px}
-:root .patch-updates .actions{margin-top:12px}
+@media(max-width:600px){:root .patch-updates{padding:16px}:root .patch-versions{grid-template-columns:1fr}:root .patch-updates .control-buttons{width:100%;flex-wrap:wrap}:root .patch-updates .control-buttons button{flex:1 1 160px}}

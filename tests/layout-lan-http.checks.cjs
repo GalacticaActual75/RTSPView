@@ -9,6 +9,29 @@ assert.equal(ids.size, 1000);
 for (const id of ids) assert.match(id, /^[a-f0-9]{32}$/);
 assert(!source.includes('crypto.randomUUID('), 'layout actions must work on LAN HTTP');
 
+vm.runInContext(fs.readFileSync('src/RTSPView.Controller/wwwroot/layout-pip.js','utf8'),context);
+const pip=vm.runInContext('layoutPip',context);
+const garage={camera:{slot:11,name:'Garage',enabled:false},hostCameraSlot:3};
+const doorbell={camera:{slot:10,name:'Doorbell',enabled:true},hostCameraSlot:2};
+const config={garageOverlay:garage,doorbellOverlay:doorbell,additionalOverlays:[{camera:{slot:12},hostCameraSlot:3}],deletedOverlaySlots:[12]};
+const layout={id:'focus',tiles:[{cameraSlot:-1},{cameraSlot:3}]},previews=new Map();
+assert.equal(pip.forHost(config,3).length,1,'Automation-only overlays remain discoverable; deleted ones do not');
+assert.equal(pip.mode(garage),'Automation only');assert.equal(pip.mode(doorbell),'Always visible');
+assert.equal(pip.forHost(config,pip.slot(layout,layout.tiles[0],previews)).length,0);
+previews.set('focus:-1',3);
+assert.equal(pip.forHost(config,pip.slot(layout,layout.tiles[0],previews))[0],garage,'Focus preview resolves host overlay');
+previews.set('focus:-1',2);
+assert.equal(pip.forHost(config,pip.slot(layout,layout.tiles[0],previews))[0],doorbell,'Changing preview camera changes overlays');
+assert.equal(layout.tiles[0].cameraSlot,-1,'Preview selection must not persist a real focus assignment');
+const shape={viewportWidthPercent:28,viewportHeightPercent:50,viewportHorizontalPositionPercent:0,viewportVerticalPositionPercent:100,viewportShape:2};
+const normal=pip.bounds(shape,1600,900),portrait=pip.bounds(shape,600,1000);
+assert(Math.abs(normal.width-448)<1e-9);assert(Math.abs(normal.height-450)<1e-9);assert(Math.abs(normal.top-450)<1e-9);
+assert(Math.abs(portrait.width/portrait.height-normal.width/normal.height)<1e-9,'Overlay proportions survive differently shaped host tiles');
+const circle=pip.bounds({...shape,viewportShape:3},600,1000);assert.equal(circle.width,circle.height);
+const letterboxed=pip.bounds({...shape,viewportHorizontalPositionPercent:100},1000,1000,{left:0,top:218.75,width:1000,height:562.5});
+assert(Math.abs(letterboxed.top+letterboxed.height-781.25)<1e-9,'Standard PiP anchors to picture edges, not letterbox bars');
+console.log('PASS PiP previews: automation-only, focus camera changes, deleted overlays, and aspect-preserving geometry.');
+
 
 const widgets=fs.readFileSync('src/RTSPView.Controller/wwwroot/layout-widgets.js','utf8');
 context.weatherUi={defaults:()=>({location:'Test'}),editor:(options,save,placement)=>save(options,placement)};

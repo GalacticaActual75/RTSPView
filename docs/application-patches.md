@@ -4,7 +4,9 @@ Small dashboard and Windows application fixes can share a release version, with 
 
 ## User controls
 
-Settings → Updates has **Automatically install patches during scheduled restarts**, off by default. This is independent of the wall notification preference. Turning it off preserves daily checks and **Install patch now**, and prevents a prepared automatic download from being handed to the installer. An installer that has already started cannot be canceled by changing this preference.
+Settings → Updates → **Patches** shows the installed version, available patch, and check times. **Check for new patches** checks for a patch compatible with the installed release. **Install patch** becomes available when one is found and asks for confirmation before restarting the application.
+
+**Automatically install patches during scheduled restarts** is off by default. This is independent of the wall notification preference. Turning it off preserves daily checks and manual installation, and prevents a prepared automatic download from being handed to the installer. An installer that has already started cannot be canceled by changing this preference.
 
 Automatic installation uses the enabled **Live View** schedule in Settings → Maintenance. When a patch is available, that occurrence installs the patch and restarts the whole application, including the dashboard. No enabled Live View schedule means no automatic installation. Windows host schedules retain their existing reboot behavior and take priority when both schedules coincide. Skipped or missed runs do not trigger catch-up installation. A deliberately stopped viewer stays stopped.
 

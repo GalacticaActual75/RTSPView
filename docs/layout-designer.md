@@ -12,7 +12,9 @@ Open **Layouts** in the web admin. The current layout is marked **On wall**.
 
 The Cameras page initially shows the existing nine entries. **Add camera** adds one entry at a time, up to 16, and opens its settings without discarding edits in other cards. Configure the new camera, then assign it in Layouts. Existing configured or assigned extra cameras remain available after upgrading.
 
-All overlays follow their assigned main camera. The designer labels tiles hosting enabled overlays and reports when a layout omits their host camera. Omitted hosts hide their overlay windows. The existing Overlays page controls precise overlay framing.
+Picture-in-picture overlays follow their assigned host camera. Both layout editors preview their snapshots, size, shape, opacity and framing. Automation-only overlays are included as placement previews; they still require a rule to show them on the live wall. A missing snapshot leaves a labeled placeholder. Omitted hosts hide their overlay windows.
+
+Select a camera tile for its **Picture in picture** settings and **Edit [overlay name]**, or use the toolbar's **Picture in picture** button to find all overlays. Editing opens the shared overlay settings; changes apply across layouts. Saved overlay changes refresh both layout previews without discarding layout drafts.
 
 The preview uses snapshots and the saved screen format. The viewer centers the wall at the same aspect ratio inside its available window/monitor area, with black margins when the screen has different proportions. A matching portrait monitor fills with a portrait layout; the format setting does not rotate Windows or the source camera images. All enabled camera players remain supervised when omitted from a layout, allowing layout switches without reconnecting unchanged streams; switching to a smaller layout does not reduce background decoding load. Newly added camera entries are disabled until configured.
 
@@ -28,7 +30,7 @@ Export a configuration before installing this version on a host if downgrade tes
 
 ### Trying an automation arrangement
 
-In Automation layouts, choose a camera in each **Focus preview only** selector to see its snapshot in the otherwise unassigned focus tile. These selections stay in the browser and are not saved as camera assignments; the automation rule still supplies the actual cameras. Snapshots preserve the whole image without cropping or stretching.
+In Automation layouts, select a focus tile and choose **Preview camera only** to see that camera and its attached picture-in-picture overlays. These selections stay in the browser and are not saved as camera assignments; the automation rule still supplies the actual cameras. Image sizing and framing follow the selected tile settings.
 
 Drag smaller tiles into empty positions before expanding a focus tile with its corner handle, or select a tile and edit its Row, Column, Height, and Width. Overlapping placements are rejected. **Undo edit** reverses up to 50 draft edits in either layout editor. Saving or discarding clears that undo history. Save automation layouts when the preview looks right.
 

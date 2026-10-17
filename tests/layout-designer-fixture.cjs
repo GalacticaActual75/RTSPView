@@ -9,6 +9,11 @@ const overlay = (slot,name,hostCameraSlot) => ({hostCameraSlot,camera:camera(slo
 let config = {schemaVersion:15,cameraCount:9,cameras:slots.map((slot,i)=>camera(slot,'Camera '+(i+1))),doorbellOverlay:overlay(10,'Doorbell',2),garageOverlay:overlay(11,'Garage',3),additionalOverlays:[overlay(12,'Patio',1)],layouts:[{id:'default',name:'Default',rows:3,columns:3,tiles:slots.slice(0,9).map((cameraSlot,i)=>({cameraSlot,row:Math.floor(i/3),column:i%3,rowSpan:1,columnSpan:1}))}],activeLayoutId:'default',startFullScreen:true,preferredMonitor:0,hideMouseCursor:true,mouseCursorHideSeconds:3,showCameraNames:true,showCameraStats:true,showTileBorders:true,keepViewerAlwaysOnTop:true};
 config.automationViewLayouts = [{id:'focus',name:'One large camera',rows:3,columns:3,focusSlots:[-1],tiles:[{cameraSlot:-1,row:0,column:0,rowSpan:2,columnSpan:2},{cameraSlot:2,row:0,column:2,rowSpan:1,columnSpan:1},{cameraSlot:3,row:1,column:2,rowSpan:1,columnSpan:1}]}];
 config.deletedOverlaySlots=[]; config.deletedCameraSlots=[];
+if(process.env.PIP_LAYOUT_FIXTURE==='1'){
+  config.cameras.find(c=>c.slot===3).name='Driveway';
+  Object.assign(config.garageOverlay,{viewportShape:2,viewportWidthPercent:28,viewportHeightPercent:50});
+  Object.assign(config.garageOverlay.camera,{enabled:false,rtspUrl:'rtsp://camera.example.test/garage'});
+}
 // Opt-in dependency case for checking the PiP deletion error and navigation.
 if(process.env.PIP_REFERENCE_FIXTURE==='1'){
   config.garageOverlay.camera.rtspUrl='rtsp://camera.example.test/garage';
@@ -20,7 +25,7 @@ if(process.env.RTSPVIEW_WIDGET_FIXTURE==='1'){
   config.layouts[0].widgets=[{id:'weather-test',kind:'weather',enabled:true,hostCameraSlot:0,margin:0,widthPercent:33,heightPercent:33,x:0,y:0,cell:{row:0,column:1,rowSpan:2,columnSpan:2},weather:{...appearance,timeZone:'auto',preset:'compact',fields:['location','temperature','condition','highLow']}},{id:'aircraft-test',kind:'aircraft',enabled:true,hostCameraSlot:0,margin:0,widthPercent:33,heightPercent:33,x:100,y:100,cell:{row:2,column:2,rowSpan:1,columnSpan:1},aircraft:{...appearance,radiusMiles:10,preset:'featured',cardDesign:'compact',maximumAircraft:2,textSizes:{},showPhoto:true,fields:['type','owner','altitude','speed','distance']}}];
 }
 const schedules=Object.fromEntries(['viewer','host'].map(action=>[action,{settings:{enabled:action==='host',action,mode:'weekly',intervalHours:24,time:'03:00',days:[0]},nextRun:'2026-10-01T03:00:00Z',result:'Schedule saved.'}]));
-let patchStatus={installedVersion:'1.0.47-beta.12',availableVersion:'1.0.47-beta.12-patch.1',autoInstall:false,message:'A synthetic patch is available for this preview.'};
+let patchStatus={installedVersion:'1.0.48-beta.2',availableVersion:process.env.PATCH_NONE_FIXTURE==='1'?null:'1.0.48-beta.2-patch.1',autoInstall:false,message:'Synthetic patch status for this preview.'};
 http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');res.setHeader('Cache-Control','no-store');
   const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
@@ -28,7 +33,9 @@ http.createServer(async(req,res)=>{
     let body='';for await(const chunk of req)body+=chunk;
     patchStatus={...patchStatus,autoInstall:!!JSON.parse(body).enabled,message:JSON.parse(body).enabled?'Automatic patches will wait for the Live View restart schedule.':'Automatic installation is off. Manual installation remains available.'};return json(patchStatus);
   }
+  if(url.pathname==='/api/patch-update/check'&&req.method==='POST')patchStatus={...patchStatus,lastChecked:new Date().toISOString(),message:patchStatus.availableVersion?'Check complete. A patch is available for your installed release.':'Check complete. No new patches are available.'};
   if(['/api/patch-update','/api/patch-update/check'].includes(url.pathname))return json(patchStatus);
+  if(url.pathname==='/api/update/install'&&req.method==='POST')return json({message:'Synthetic installation accepted. No software was installed.'});
   if(req.method==='DELETE'&&/^\/api\/overlays\/\d+$/.test(url.pathname)){
     const slot=Number(url.pathname.split('/').pop());
     const related=config.layouts.filter(l=>l.tiles.some(t=>t.cameraSlot===slot+23)).map(l=>({kind:'layout',id:l.id,name:l.name}));

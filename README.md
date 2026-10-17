@@ -34,6 +34,8 @@ This guide describes **[1.0.47](https://github.com/GalacticaActual75/RTSPView/re
 
 **Beta 1.0.48-beta.2** starts from that complete Stable baseline and adds consistent dashboard spacing/cards, visible overlay-deletion guidance, and optional scheduled application patches. See the [beta release notes](docs/releases/1.0.48-beta.2.md) and [patch controls and publication](docs/application-patches.md). Automatic application patches are off by default; enabling them uses the Live View restart schedule and restarts the whole application when a patch is installed.
 
+**Beta 1.0.48-beta.2 · patch 1** adds picture-in-picture snapshots and settings links to both layout editors, including automation-only overlays and focus preview cameras. Updates now has a dedicated Patches section with manual check/install controls. See the [patch notes](docs/releases/1.0.48-beta.2-patch.1.md).
+
 [Install](#requirements-and-installation) · [First setup](#first-login-and-first-camera-wall) · [Streams and layouts](#streams-and-layouts) · [Automation](#automation-and-weather) · [Backups and updates](#configuration-backups-and-updates) · [Troubleshooting](#troubleshooting)
 
 ## Key features

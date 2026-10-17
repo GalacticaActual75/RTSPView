@@ -1,10 +1,10 @@
 const updateNotifications = (() => {
   let toggle, timing, loading=false;
   function init() {
-    patchUpdates.init();
     const panel=document.querySelector('#updatePanel'), row=document.createElement('div');row.className='update-notifications';
     row.innerHTML='<label class="toggle-control"><input type="checkbox" role="switch" checked><span class="toggle-track" aria-hidden="true"></span>Show update notifications on the stream wall</label><p>Checks once every 24 hours, even with the browser closed. Turning notifications off hides the wall badge; checks continue.</p><p class="update-check-times" role="status"></p>';
     panel.append(row);toggle=row.querySelector('input');timing=row.querySelector('.update-check-times');
+    patchUpdates.init();
     toggle.onchange=async()=>{toggle.disabled=true;const enabled=toggle.checked;try{renderUpdate(await api('/api/update/notifications',{method:'PUT',body:JSON.stringify({enabled})}));}catch(error){toggle.checked=!enabled;timing.textContent=error.message;}finally{toggle.disabled=false;}};
   }
   function render(status) {

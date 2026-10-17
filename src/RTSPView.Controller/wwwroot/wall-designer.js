@@ -12,6 +12,12 @@ function createWallDesigner(isAutomation = false) {
   const redoHistory=[];
   window.addEventListener('weather-overlay-saved',event=>{if(!config)return;config.weatherOverlays=[...(config.weatherOverlays||[]).filter(o=>o.hostCameraSlot!==event.detail.hostCameraSlot),event.detail];render();});
   window.addEventListener('aircraft-overlay-saved',event=>{if(!config)return;config.aircraftOverlays=[...(config.aircraftOverlays||[]).filter(o=>o.hostCameraSlot!==event.detail.hostCameraSlot),event.detail];render();});
+  window.addEventListener('picture-in-picture-saved',event=>{
+    if(!config)return;const overlay=event.detail,slot=overlay.camera.slot;
+    if(slot===10)config.doorbellOverlay=overlay;else if(slot===11)config.garageOverlay=overlay;
+    else config.additionalOverlays=[...(config.additionalOverlays||[]).filter(o=>o.camera.slot!==slot),overlay];
+    render();
+  });
   function fitPreview(){
     if(!board||!root?.getClientRects().length)return;
     const stage=board.parentElement,foot=root.querySelector('.designer-preview-foot');
@@ -38,6 +44,7 @@ function createWallDesigner(isAutomation = false) {
     board.querySelectorAll('.designer-weather-overlay').forEach(node=>{const overlay=config.weatherOverlays.find(o=>o.hostCameraSlot===Number(node.dataset.weatherSlot));const host=node.parentElement;const b=weatherUi.overlayBounds(overlay,host.clientWidth/scale,host.clientHeight/scale);Object.assign(node.style,Object.fromEntries(Object.entries(b).map(([key,value])=>[key,value*scale+'px'])));});
     board.querySelectorAll('.designer-aircraft-overlay[data-aircraft-slot]').forEach(node=>{const overlay=(config.aircraftOverlays||[]).find(o=>o.hostCameraSlot===Number(node.dataset.aircraftSlot));if(!overlay)return;const host=node.parentElement;const b=aircraftUi.overlayBounds(overlay,host.clientWidth/scale,host.clientHeight/scale);Object.assign(node.style,Object.fromEntries(Object.entries(b).map(([key,value])=>[key,value*scale+'px'])));});
     const note=root.querySelector('[data-dimensions-note]');if(note)note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));
+    board.querySelectorAll('.designer-pip-preview').forEach(canvas=>canvas.paint());
   }
 
   const streamAspects = new Map(), previewCameras = new Map(), undoHistory = [];
@@ -181,6 +188,7 @@ function createWallDesigner(isAutomation = false) {
     button('Camera stream',()=>{addWidget.open=false;toggleDrawer('add');},widgetMenu);
     for(const kind of ['weather','aircraft','systemStats','dateTime'])if(pluginsUi.enabled(kind))button(systemWidgetsUi.names[kind],()=>{addWidget.open=false;layoutWidgetsUi.add(kind,layout,config.cameras,changed);},widgetMenu);
     if(widgetMenu.children.length)actions.append(addWidget);
+    if(pluginsUi.enabled('pictureInPicture'))button('Picture in picture',()=>toggleDrawer('pip'),actions).setAttribute('aria-expanded',String(drawer==='pip'));
     const toolsMenu=el('details',undefined,'designer-menu');toolsMenu.append(el('summary','Layout tools'));const toolsPanel=el('div',undefined,'designer-popover');toolsMenu.append(toolsPanel);actions.append(toolsMenu);
     for(const [id,label] of [['presets','Presets'],['sizing','Sizing'],['advanced','Canvas settings'],['widgets','Content'],['help','Help']]){const primary=id==='add'||id==='widgets';const control=button(label,()=>{toolsMenu.open=false;toggleDrawer(id);},primary?actions:toolsPanel);control.setAttribute('aria-expanded',String(drawer===id));}
 
@@ -191,7 +199,7 @@ function createWallDesigner(isAutomation = false) {
     else {if(selectedId!==saved.activeLayoutId)button('Save layout',()=>persist(),actions);button('Apply to wall',()=>persist(true),actions,false);}
     for(const [caption,labels] of [
       ['Add content',['Add content']],
-      ['Editing',['Layout tools','Content','Undo','Redo']],
+      ['Editing',['Layout tools','Content','Picture in picture','Undo','Redo']],
       ['Wall action',['Save layout','Apply to wall','Save automation layouts']]
     ]) {
       const group=el('div',undefined,'designer-action-group');
@@ -283,11 +291,12 @@ function createWallDesigner(isAutomation = false) {
       image.onload=()=>{if(image.naturalWidth&&image.naturalHeight){streamAspects.set(previewSlot,image.naturalWidth/image.naturalHeight);image.style.visibility='';updateGuide(rect);}};updateGuide(rect);
       node.append(el('span',camera.name,'designer-caption'));
       if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot)){
-        node.append(el('span','Chosen by automation','designer-overlay'));
         const previewButton=button('Preview camera',()=>{selectedTile=index;selectedWidget=null;drawer='tile';render();},node);previewButton.classList.add('designer-preview-camera');previewButton.onpointerdown=e=>e.stopPropagation();
       }
-      const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].map(overlay=>[overlay.camera.name,overlay]).filter(([,o])=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
-      if(overlays.length)node.append(el('span',overlays.map(([name])=>name+' overlay').join(' · '),'designer-overlay'));
+      const overlays=pluginsUi.enabled('pictureInPicture')&&!['weather','aircraft'].includes(tile.kind)?layoutPip.forHost(config,previewSlot):[];
+      for(const overlay of overlays)layoutPip.render(node,overlay,image,config.showTileBorders!==false);
+      if(overlays.length)node.append(el('span',overlays.map(o=>o.camera.name+' · '+layoutPip.mode(o)).join(' / '),'designer-overlay designer-pip-caption'));
+      else if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot))node.append(el('span','Chosen by automation','designer-overlay'));
       for(const edge of ['n','s','e','w','nw','ne','sw','se']){const handle=el('span',undefined,'designer-resize handle-'+edge);handle.dataset.edge=edge;handle.setAttribute('aria-hidden','true');node.append(handle);}
       node.onkeydown=e=>{
         if(e.key==='Enter'||e.key===' '){e.preventDefault();selectedTile=index;selectedWidget=null;drawer='tile';render();root.querySelectorAll('.designer-tile')[index]?.focus();return;}
@@ -322,6 +331,20 @@ function createWallDesigner(isAutomation = false) {
 
     const side=el('aside',undefined,'designer-inspector');side.hidden=!drawer;workspace.append(side);
     button('Close panel',()=>{drawer='';render();},side).classList.add('designer-close');
+    function overlayControls(parent,overlays){
+      for(const overlay of overlays){
+        const card=el('div',undefined,'designer-pip-setting'),host=config.cameras.find(c=>c.slot===overlay.hostCameraSlot);
+        card.append(el('strong',overlay.camera.name),el('p',layoutPip.mode(overlay)+' · Host: '+(host?.name||'Stream #'+overlay.hostCameraSlot),'designer-help'));
+        button('Edit '+overlay.camera.name,()=>layoutPip.open(overlay),card);parent.append(card);
+      }
+    }
+    const pipPanel=el('section');pipPanel.hidden=drawer!=='pip';side.append(pipPanel);
+    if(pluginsUi.enabled('pictureInPicture')){
+      pipPanel.append(el('h3','Picture in picture'),el('p','Overlays follow their host camera across layouts. Edit the source, display mode, position and shape in Picture in picture; those settings apply across layouts.','designer-help'));
+      pipPanel.append(el('p','Automation-only overlays are shown here as placement previews. On the live wall, they need a rule to show them. Choose a preview camera for each focus tile to see its overlays.','designer-help'));
+      overlayControls(pipPanel,layoutPip.all(config));
+      button('Manage picture in picture',()=>adminLayout.select('overlays'),pipPanel);
+    }
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
     sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Choose Original, Fit, Fill or Stretch per tile. Small tiles remain equal in size.','designer-help'));
     button('Fit tiles to streams',()=>{
@@ -360,6 +383,14 @@ function createWallDesigner(isAutomation = false) {
         tilePanel.append(el('p','Your automation rule chooses the live camera.','designer-help'));
       }
       if(isAutomation&&tile.cameraSlot>0){const focusActions=el('div',undefined,'designer-focus-actions');tilePanel.append(focusActions);for(const focusSlot of layout.focusSlots)button('Use as Focus '+(-focusSlot),()=>{const old=layout.tiles.find(t=>t.cameraSlot===focusSlot);old.cameraSlot=tile.cameraSlot;tile.cameraSlot=focusSlot;changed();},focusActions);}
+      if(pluginsUi.enabled('pictureInPicture')){
+        const overlays=layoutPip.forHost(config,layoutPip.slot(layout,tile,previewCameras));
+        const group=el('section',undefined,'designer-pip-controls');group.append(el('h4','Picture in picture'));tilePanel.append(group);
+        overlayControls(group,overlays);
+        if(!overlays.length)group.append(el('p',tile.cameraSlot<0&&!layoutPip.slot(layout,tile,previewCameras)?'Choose a preview camera to see its attached overlays.':'No picture-in-picture overlays are assigned to this camera.','designer-help'));
+        if(overlays.some(o=>!o.camera.enabled))group.append(el('p','Automation-only placement preview. A rule must show this overlay on the live wall.','designer-help'));
+        button('All picture-in-picture settings',()=>{drawer='pip';render();},group);
+      }
       const sizing=el('select');for(const [value,label] of [['fit','Fit · entire image (default)'],['original','Original size'],['fill','Fill · crop edges'],['stretch','Stretch to tile']])sizing.add(new Option(label,value));sizing.value=tile.sizing||'fit';sizing.onchange=()=>updateTile({...tile,sizing:sizing.value},selectedTile);field('Image sizing · this tile',sizing,tilePanel);
       const advanced=el('details');advanced.append(el('summary','Advanced image transform'));tilePanel.append(advanced);const framing=el('div',undefined,'designer-framing');advanced.append(framing);
       for(const [key,label,min,max,fallback] of [['zoomPercent','Zoom',25,400,100],['horizontalPositionPercent','Horizontal position',0,100,50],['verticalPositionPercent','Vertical position',0,100,50]]){
@@ -378,8 +409,6 @@ function createWallDesigner(isAutomation = false) {
       tilePanel.append(el('p',Math.round(proportions.bounds(tile).width*outputWidth)+' × '+Math.round(proportions.bounds(tile).height*outputHeight)+' output pixels. Original uses source pixels, centered and clipped. Fit keeps the whole image; Fill crops; Stretch changes proportions.','designer-help'));
       if((tile.sizing||'fit')==='original'){const note=el('p','Source dimensions unavailable. Preview uses Fit until live camera dimensions arrive.','designer-help');note.dataset.dimensionsNote=tile.cameraSlot>0?tile.cameraSlot:(previewCameras.get(layout.id+":"+tile.cameraSlot)||0);note.hidden=streamDimensions.has(Number(note.dataset.dimensionsNote));tilePanel.append(note);}
       button('Fill available space',()=>{let best=tile;for(let r=1;r<=layout.rows-tile.row;r++)for(let c=1;c<=layout.columns-tile.column;c++){const t={...tile,rowSpan:r,columnSpan:c};if(r*c>best.rowSpan*best.columnSpan&&validTile(t,selectedTile))best=t;}updateTile(best,selectedTile);},tilePanel);
-      const overlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])].filter(o=>o.camera.enabled&&o.hostCameraSlot===tile.cameraSlot);
-      if(overlays.length){const hosts=el('div',undefined,'designer-hosts');hosts.append(el('span','OVERLAYS','designer-eyebrow'));for(const o of overlays)hosts.append(el('span',o.camera.name,'designer-host'));tilePanel.append(hosts);}
       const remove=button('Remove from layout',()=>{layout.tiles.splice(selectedTile,1);selectedTile=-1;changed();},tilePanel);remove.classList.add('designer-danger');remove.disabled=(isAutomation&&layout.focusSlots.includes(tile.cameraSlot));
     }
     const available=config.cameras.filter(camera=>!layout.tiles.some(t=>t.cameraSlot===camera.slot));
@@ -405,10 +434,9 @@ function createWallDesigner(isAutomation = false) {
     const help=el('section');help.hidden=drawer!=='help';help.append(el('h3','Arrange your wall'),el('p','Drag tiles to move or swap them. Drag the right or bottom edge to resize. Move smaller tiles into empty spaces before enlarging a focus tile.'),el('p','Stream tiles snap to the grid. Widgets move freely above streams; select to configure, then use Edit widget. Changes stay in draft until saved or applied.'));
     if(isAutomation){help.append(el('p','Focus tiles get their cameras from automation rules. Preview cameras only help you try the arrangement.'));button('Open Automation rules',()=>adminLayout.select('automation'),help);}
     side.append(help);
-    status=el('p',dirty?'Unsaved changes. Apply when you are ready.':'Apply to wall saves all layout drafts and displays the selected layout. Save layout saves drafts without switching the wall.','designer-status');status.setAttribute('role','status');status.tabIndex=-1;root.append(status);
-    const hiddenOverlays=[config.doorbellOverlay,config.garageOverlay,...(config.additionalOverlays||[])]
-      .filter(overlay=>overlay.camera.enabled&&!layout.tiles.some(tile=>tile.cameraSlot===overlay.hostCameraSlot));
-    if(pluginsUi.enabled('pictureInPicture')&&hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' hidden in this layout because the host stream is absent.','designer-help'));
+    status=el('p',isAutomation?(dirty?'Unsaved changes. Save automation layouts when you are ready.':'Preview cameras do not change your rules. Save automation layouts to save layout edits.'):(dirty?'Unsaved changes. Apply when you are ready.':'Apply to wall saves all layout drafts and displays the selected layout. Save layout saves drafts without switching the wall.'),'designer-status');status.setAttribute('role','status');status.tabIndex=-1;root.append(status);
+    const hiddenOverlays=layoutPip.all(config).filter(overlay=>!layout.tiles.some(tile=>!['weather','aircraft'].includes(tile.kind)&&layoutPip.slot(layout,tile,previewCameras)===overlay.hostCameraSlot));
+    if(pluginsUi.enabled('pictureInPicture')&&hiddenOverlays.length)root.append(el('p',hiddenOverlays.map(o=>o.camera.name).join(', ')+' not shown in this preview because the host camera is absent.'+(isAutomation?' Select its host as a focus tile’s preview camera to see it. The automation rule chooses the live camera.':''),'designer-help'));
   }
   return {open(id){if(draft?.layouts.some(l=>l.id===id)){selectedId=id;selectedTile=-1;render();root.querySelector('select')?.focus();}},dimensions(cameras){streamDimensions=new Map((cameras||[]).filter(c=>c.width>0&&c.height>0).map(c=>[c.slot,c]));if(draft)sizeImages();},isDirty:()=>dirty,savedLayouts:()=>saved?.layouts||[],active:()=>saved?.layouts.find(l=>l.id===saved.activeLayoutId),updateCameras(cameras){if(config){config.cameras=cameras;render();}},load(value){
     config=value;root=document.querySelector(isAutomation?'#automation-layout-editor':'#standard-layout-editor');
