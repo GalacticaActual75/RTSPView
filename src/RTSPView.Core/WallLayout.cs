@@ -17,6 +17,14 @@ public sealed record WallTile
     public int VerticalPositionPercent { get; init; } = 50;
 }
 
+public sealed record LayoutOverlayPlacement
+{
+    public int OverlaySlot { get; init; }
+    public bool Hidden { get; init; }
+    public int? HorizontalPositionPercent { get; init; }
+    public int? VerticalPositionPercent { get; init; }
+}
+
 public sealed record WallLayout
 {
     public string Id { get; init; } = "default";
@@ -36,6 +44,16 @@ public sealed record WallLayout
     public double[] RowWeights { get; init; } = [];
     public double[] ColumnWeights { get; init; } = [];
     public int[] FocusSlots { get; init; } = [];
+    public IReadOnlyList<LayoutOverlayPlacement> OverlayPlacements { get; init; } = [];
+    public bool IsOverlayHidden(int slot) => OverlayPlacements.Any(p => p.OverlaySlot == slot && p.Hidden);
+    public DoorbellOverlaySettings ApplyOverlayPlacement(DoorbellOverlaySettings overlay)
+    {
+        var placement = OverlayPlacements.FirstOrDefault(p => p.OverlaySlot == overlay.Camera.Slot);
+        return placement is null ? overlay : overlay with {
+            ViewportHorizontalPositionPercent = placement.HorizontalPositionPercent ?? overlay.ViewportHorizontalPositionPercent,
+            ViewportVerticalPositionPercent = placement.VerticalPositionPercent ?? overlay.ViewportVerticalPositionPercent
+        };
+    }
 
     public (double Width, double Height) Fit(double availableWidth, double availableHeight)
     {
@@ -74,6 +92,11 @@ public sealed record WallLayout
             if (layout.Widgets is null || layout.Widgets.Count > 64 || layout.Widgets.Any(w => w is null) || layout.Widgets.Select(w => w.Id).Distinct().Count() != layout.Widgets.Count)
                 throw new InvalidDataException("Keep up to 64 uniquely identified widgets per layout.");
             foreach (var widget in layout.Widgets) widget.Validate(layout);
+            if (layout.OverlayPlacements is null || layout.OverlayPlacements.Count > 16 ||
+                layout.OverlayPlacements.Any(p => p is null || p.OverlaySlot is < 10 or > 25 ||
+                    p.HorizontalPositionPercent is < 0 or > 100 || p.VerticalPositionPercent is < 0 or > 100) ||
+                layout.OverlayPlacements.Select(p => p.OverlaySlot).Distinct().Count() != layout.OverlayPlacements.Count)
+                throw new InvalidDataException("Keep one placement per picture-in-picture overlay, with positions between 0 and 100%.");
             var occupied = new HashSet<(int, int)>();
             var cameras = new HashSet<int>();
             var widgets = new HashSet<string>();

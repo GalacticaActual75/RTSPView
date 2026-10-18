@@ -572,6 +572,7 @@ public partial class MainWindow : Window
             BringOverlayWindowToFront(overlayWindow);
             return;
         }
+        overlay = EffectiveLayout.ApplyOverlayPlacement(overlay);
         if (!OverlayEnabled(overlay) || !CanDisplayOverlayWindows())
         {
             HideOverlayWindowHierarchy(overlayWindow, overlayTile);
@@ -702,13 +703,13 @@ public partial class MainWindow : Window
     private void PlaceHostRestartButtons()
     {
         if (_tiles.Length == 0) return;
-        var overlays = _settings.AllOverlays().ToArray();
+        var overlays = _settings.AllOverlays().Where(OverlayEnabled).Select(EffectiveLayout.ApplyOverlayPlacement).ToArray();
         for (var index = 0; index < _tiles.Length; index++)
         {
             var target = _tiles[index];
             target.SetRestartButtonPlacement(RestartButtonPlacement.Center);
             var overlayBounds = overlays
-                .Where(overlay => overlay.Camera.Enabled && overlay.HostCameraSlot == AppSettings.MainCameraSlots[index])
+                .Where(overlay => overlay.HostCameraSlot == AppSettings.MainCameraSlots[index])
                 .Select(overlay => CalculateOverlayBounds(target, overlay))
                 .ToArray();
             target.SetRestartButtonCompact(overlayBounds.Length > 0);

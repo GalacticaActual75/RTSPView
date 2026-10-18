@@ -32,6 +32,10 @@
 .designer-pip-controls h4{margin:0 0 12px}
 .designer-pip-setting{padding:12px;margin-bottom:12px;background:#17212d;border:1px solid var(--designer-border);border-radius:8px;overflow-wrap:anywhere}
 .designer-pip-setting button{width:100%;white-space:normal}
+#page-layouts .designer-pip-hit{position:absolute;z-index:7;min-height:0!important;min-width:0;padding:0!important;margin:0;background:transparent!important;box-shadow:none;border:2px solid transparent;cursor:move;touch-action:none}
+#page-layouts .designer-pip-hit:hover,#page-layouts .designer-pip-hit.selected,#page-layouts .designer-pip-hit:focus-visible{border-color:#63abff;outline:1px solid #0b1119;outline-offset:-3px}
+.designer-pip-inspector{display:grid;gap:14px}.designer-pip-inspector[hidden]{display:none}.designer-pip-inspector>h3,.designer-pip-inspector>p{margin:0}
+.designer-pip-setting button+button{margin-top:8px}
 .designer-library{margin-top:18px;padding-top:17px;border-top:1px solid var(--designer-border)}.designer-library>div{display:flex;justify-content:space-between;align-items:center}.designer-library h3{font-size:12px;margin:0}.designer-count{font-size:10px;color:#9bafc6;background:#223042;padding:2px 6px;border-radius:4px}.designer-empty{font-size:12px;line-height:1.7;color:#8293a9;margin-bottom:0}
 #page-layouts .designer-camera{display:flex;align-items:center;gap:9px;width:100%;padding:7px;margin-top:8px;background:#17222f;border:1px solid #293746;text-align:left}.designer-camera img{width:45px;height:29px;object-fit:contain;border-radius:3px;background:#0b121c}.designer-camera span:nth-child(2){flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.designer-camera span:last-child{font-size:17px;color:#a8c9f2;padding-right:4px}
 .designer-status{font-size:12px;line-height:1.5;color:#a4b7ce;margin:14px 3px;min-height:18px}.camera-page-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.camera-page-toolbar>span{font-size:13px;color:#92a5bc}.camera-page-toolbar button:disabled{opacity:.45}

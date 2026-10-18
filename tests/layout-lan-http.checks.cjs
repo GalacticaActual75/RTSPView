@@ -31,6 +31,19 @@ const circle=pip.bounds({...shape,viewportShape:3},600,1000);assert.equal(circle
 const letterboxed=pip.bounds({...shape,viewportHorizontalPositionPercent:100},1000,1000,{left:0,top:218.75,width:1000,height:562.5});
 assert(Math.abs(letterboxed.top+letterboxed.height-781.25)<1e-9,'Standard PiP anchors to picture edges, not letterbox bars');
 console.log('PASS PiP previews: automation-only, focus camera changes, deleted overlays, and aspect-preserving geometry.');
+const localLayout={},otherLayout={};
+pip.setPlacement(localLayout,11,{horizontalPositionPercent:80,verticalPositionPercent:25});
+assert.equal(pip.effective(localLayout,garage).viewportHorizontalPositionPercent,80);
+assert.equal(pip.effective(otherLayout,garage).viewportHorizontalPositionPercent,garage.viewportHorizontalPositionPercent);
+pip.setPlacement(localLayout,11,{hidden:true});assert(pip.hidden(localLayout,garage));assert(!pip.hidden(otherLayout,garage));
+assert.equal(localLayout.overlayPlacements.length,1);
+pip.setPlacement(localLayout,11,{hidden:false,horizontalPositionPercent:null,verticalPositionPercent:null});
+assert(!pip.hidden(localLayout,garage));assert.equal(pip.effective(localLayout,garage).viewportHorizontalPositionPercent,garage.viewportHorizontalPositionPercent);
+const moved=pip.moved(shape,normal,{left:0,top:0,width:1600,height:900},576,-225);
+assert.equal(moved.horizontalPositionPercent,50);assert.equal(moved.verticalPositionPercent,50);
+const custom=pip.moved({...shape,viewportHorizontalPositionPercent:50,viewportVerticalPositionPercent:50},normal,{},-100,50,{x:400,y:200});
+assert.equal(custom.horizontalPositionPercent,25);assert.equal(custom.verticalPositionPercent,75);
+console.log('PASS layout-only PiP movement, removal, restoration and custom-mask drag mapping.');
 
 
 const widgets=fs.readFileSync('src/RTSPView.Controller/wwwroot/layout-widgets.js','utf8');

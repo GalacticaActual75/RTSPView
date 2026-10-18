@@ -16,6 +16,7 @@ try
     Check(detached.Widgets.Count == 1, "removing cameras preserves independent widgets");
     await AuditRegressionChecks.Run(root);
     await OverlaySourceChecks.Run(root);
+    await LayoutOverlayChecks.Run(root);
     await StreamSourceChecks.Run(root);
     var borderStore = new JsonSettingsStore(Path.Combine(root, "borders.json"));
     await borderStore.SaveAsync(new AppSettings { ShowTileBorders = false, DoorbellOverlay = new() { ShowBorder = false } });

@@ -28,7 +28,7 @@ public partial class MainWindow
             : AutomationLayouts.Resolve(_settings, template, _automationPresentation.FocusSlots(DateTimeOffset.UtcNow, template.Id));
     }
 
-    private bool OverlayEnabled(DoorbellOverlaySettings overlay) => _settings.Plugins.PictureInPicture && (_sensorOverlays.TryGetValue(overlay.Camera.Slot, out var enabled)
+    private bool OverlayEnabled(DoorbellOverlaySettings overlay) => _settings.Plugins.PictureInPicture && !EffectiveLayout.IsOverlayHidden(overlay.Camera.Slot) && (_sensorOverlays.TryGetValue(overlay.Camera.Slot, out var enabled)
         ? enabled : overlay.Camera.Enabled || _automatedSlots.Contains(overlay.Camera.Slot));
 
     private ViewerCommandResult ApplySensorAutomation(ViewerCommand command)

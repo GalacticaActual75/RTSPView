@@ -6,7 +6,7 @@ function layoutItemId() {
 }
 
 function createWallDesigner(isAutomation = false) {
-  let selectedWidget=null;
+  let selectedWidget=null,selectedOverlay=null;
   let config, saved, draft, selectedId, selectedTile = -1, previous, dirty = false, busy = false;
   let root, board, status, observer, armedCamera = null;
   const redoHistory=[];
@@ -66,6 +66,8 @@ function createWallDesigner(isAutomation = false) {
     const wrapper = el('label', label); input.setAttribute('aria-label',label);wrapper.append(input); parent.append(wrapper); return input;
   }
   function message(text) { status.textContent = text; }
+  function selectOverlay(overlay,index=-1){selectedOverlay=overlay.camera.slot;selectedTile=index;selectedWidget=null;drawer='pip-selected';render();}
+  function changeOverlay(overlay,values,index=selectedTile){selectedOverlay=overlay.camera.slot;selectedTile=index;selectedWidget=null;drawer='pip-selected';layoutPip.setPlacement(current(),selectedOverlay,values);changed();}
   function changed() {
     for(const l of draft.layouts)for(const w of l.widgets||[])if(w.hostCameraSlot&&!l.tiles.some(t=>t.cameraSlot===w.hostCameraSlot))w.hostCameraSlot=0;
     const layout=current(),small=layout.tiles.filter(t=>t.rowSpan===1&&t.columnSpan===1);
@@ -278,7 +280,7 @@ function createWallDesigner(isAutomation = false) {
     };
     layout.tiles.forEach((tile,index)=>{if(['weather','aircraft'].includes(tile.kind)&&!pluginsUi.enabled(tile.kind))return;
       const camera=config.cameras.find(camera=>camera.slot===tile.cameraSlot)||{name:tile.kind==='aircraft'?'Aircraft · '+tile.aircraft.location:tile.kind==='weather'?'Weather · '+tile.weather.location:tile.cameraSlot<0?'Focus '+(-tile.cameraSlot):'Stream',slot:tile.cameraSlot};
-      const node=el('div',undefined,'designer-tile'+(index===selectedTile?' selected':''));node.tabIndex=0;
+      const node=el('div',undefined,'designer-tile'+(index===selectedTile&&drawer!=='pip-selected'?' selected':''));node.tabIndex=0;
       node.setAttribute('aria-label',camera.name+'; row '+(tile.row+1)+', column '+(tile.column+1));
       const rect=proportions.bounds(tile);Object.assign(node.style,Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,value*100+'%'])));
       const previewSlot=tile.cameraSlot>0?tile.cameraSlot:previewCameras.get(layout.id+':'+tile.cameraSlot);
@@ -293,8 +295,11 @@ function createWallDesigner(isAutomation = false) {
       if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot)){
         const previewButton=button('Preview camera',()=>{selectedTile=index;selectedWidget=null;drawer='tile';render();},node);previewButton.classList.add('designer-preview-camera');previewButton.onpointerdown=e=>e.stopPropagation();
       }
-      const overlays=pluginsUi.enabled('pictureInPicture')&&!['weather','aircraft'].includes(tile.kind)?layoutPip.forHost(config,previewSlot):[];
-      for(const overlay of overlays)layoutPip.render(node,overlay,image,config.showTileBorders!==false);
+      const overlays=pluginsUi.enabled('pictureInPicture')&&!['weather','aircraft'].includes(tile.kind)?layoutPip.forHost(config,previewSlot).filter(o=>!layoutPip.hidden(layout,o)):[];
+      for(const overlay of overlays)layoutPip.render(node,layoutPip.effective(layout,overlay),image,layout.showTileBorders??config.showTileBorders!==false,{
+        selected:drawer==='pip-selected'&&selectedOverlay===overlay.camera.slot&&selectedTile===index,
+        onSelect:()=>selectOverlay(overlay,index),onMove:values=>changeOverlay(overlay,values,index),onRemove:()=>changeOverlay(overlay,{hidden:true},index)
+      });
       if(overlays.length)node.append(el('span',overlays.map(o=>o.camera.name+' · '+layoutPip.mode(o)).join(' / '),'designer-overlay designer-pip-caption'));
       else if(isAutomation&&layout.focusSlots.includes(tile.cameraSlot))node.append(el('span','Chosen by automation','designer-overlay'));
       for(const edge of ['n','s','e','w','nw','ne','sw','se']){const handle=el('span',undefined,'designer-resize handle-'+edge);handle.dataset.edge=edge;handle.setAttribute('aria-hidden','true');node.append(handle);}
@@ -334,17 +339,39 @@ function createWallDesigner(isAutomation = false) {
     function overlayControls(parent,overlays){
       for(const overlay of overlays){
         const card=el('div',undefined,'designer-pip-setting'),host=config.cameras.find(c=>c.slot===overlay.hostCameraSlot);
-        card.append(el('strong',overlay.camera.name),el('p',layoutPip.mode(overlay)+' · Host: '+(host?.name||'Stream #'+overlay.hostCameraSlot),'designer-help'));
-        button('Edit '+overlay.camera.name,()=>layoutPip.open(overlay),card);parent.append(card);
+        card.append(el('strong',overlay.camera.name),el('p',(layoutPip.hidden(layout,overlay)?'Removed from this layout':layoutPip.mode(overlay))+' · Host: '+(host?.name||'Stream #'+overlay.hostCameraSlot),'designer-help'));
+        const hostIndex=layout.tiles.findIndex(t=>layoutPip.slot(layout,t,previewCameras)===overlay.hostCameraSlot);
+        button('Select '+overlay.camera.name,()=>selectOverlay(overlay,hostIndex),card);
+        if(layoutPip.hidden(layout,overlay))button('Restore to this layout',()=>changeOverlay(overlay,{hidden:false},hostIndex),card);
+        parent.append(card);
       }
     }
     const pipPanel=el('section');pipPanel.hidden=drawer!=='pip';side.append(pipPanel);
     if(pluginsUi.enabled('pictureInPicture')){
-      pipPanel.append(el('h3','Picture in picture'),el('p','Overlays follow their host camera across layouts. Edit the source, display mode, position and shape in Picture in picture; those settings apply across layouts.','designer-help'));
+      pipPanel.append(el('h3','Picture in picture'),el('p','Select an overlay to move it or remove it from this layout. Save the layout to apply. Shared source, shape and display mode settings remain in Picture in picture.','designer-help'));
       pipPanel.append(el('p','Automation-only overlays are shown here as placement previews. On the live wall, they need a rule to show them. Choose a preview camera for each focus tile to see its overlays.','designer-help'));
       overlayControls(pipPanel,layoutPip.all(config));
       button('Manage picture in picture',()=>adminLayout.select('overlays'),pipPanel);
     }
+    const overlayPanel=el('section',undefined,'designer-pip-inspector');overlayPanel.hidden=drawer!=='pip-selected';side.append(overlayPanel);
+    const selectedPip=pluginsUi.enabled('pictureInPicture')?layoutPip.all(config).find(o=>o.camera.slot===selectedOverlay):null;
+    if(selectedPip){
+      const hidden=layoutPip.hidden(layout,selectedPip),effective=layoutPip.effective(layout,selectedPip);
+      overlayPanel.append(el('span','SELECTED OVERLAY','designer-eyebrow'),el('h3',selectedPip.camera.name),el('p','Changes here affect only “'+layout.name+'”. Save the layout to apply them.','designer-help'));
+      if(hidden)overlayPanel.append(el('p','Removed from this layout. The overlay remains available in other layouts.','designer-help'));
+      else{
+        overlayPanel.append(el('p','Drag the overlay inside its host camera, or use the position controls. Arrow keys move it; Shift moves in larger steps.','designer-help'));
+        for(const [key,label,value] of [['horizontalPositionPercent','Overlay horizontal position (%)',effective.viewportHorizontalPositionPercent??0],['verticalPositionPercent','Overlay vertical position (%)',effective.viewportVerticalPositionPercent??100]]){
+          const input=el('input');input.type='number';input.min=0;input.max=100;input.step=1;input.value=value;
+          input.onchange=()=>{if(input.value!==''&&input.reportValidity())changeOverlay(selectedPip,{[key]:Number(input.value)});};field(label,input,overlayPanel);
+        }
+        button('Use shared position',()=>changeOverlay(selectedPip,{horizontalPositionPercent:null,verticalPositionPercent:null}),overlayPanel);
+      }
+      button(hidden?'Restore to this layout':'Remove from this layout',()=>changeOverlay(selectedPip,{hidden:!hidden}),overlayPanel).classList.toggle('designer-danger',!hidden);
+      button('Edit shared overlay settings',()=>layoutPip.open(selectedPip),overlayPanel);
+      overlayPanel.append(el('p','Shared settings change the source, shape and display mode across layouts.','designer-help'));
+      button('All picture-in-picture settings',()=>{drawer='pip';render();},overlayPanel);
+    }else overlayPanel.append(el('p','Select an overlay in the preview or Picture in picture list.','designer-help'));
     const sizing=el('section',undefined,'designer-sizing');sizing.hidden=drawer!=='sizing';side.append(sizing);
     sizing.append(el('h3','Feed sizing'),el('p','Preview changes here, then Save or Apply. Choose Original, Fit, Fill or Stretch per tile. Small tiles remain equal in size.','designer-help'));
     button('Fit tiles to streams',()=>{

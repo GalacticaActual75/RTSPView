@@ -6,6 +6,17 @@ const layoutPip = (() => {
   const slot = (layout, tile, previews) => tile.cameraSlot > 0 ? tile.cameraSlot : previews.get(layout.id + ':' + tile.cameraSlot);
   const forHost = (config, host) => all(config).filter(o => o.hostCameraSlot === host);
   const mode = overlay => overlay.camera.enabled ? 'Always visible' : 'Automation only';
+  const placement = (layout, overlay) => (layout.overlayPlacements || []).find(p => p.overlaySlot === overlay.camera.slot);
+  const hidden = (layout, overlay) => !!placement(layout, overlay)?.hidden;
+  function effective(layout, overlay) {
+    const p = placement(layout, overlay);
+    return {...overlay,viewportHorizontalPositionPercent:p?.horizontalPositionPercent ?? overlay.viewportHorizontalPositionPercent,
+      viewportVerticalPositionPercent:p?.verticalPositionPercent ?? overlay.viewportVerticalPositionPercent};
+  }
+  function setPlacement(layout, slot, values) {
+    const entries = layout.overlayPlacements ||= [], existing = entries.find(p => p.overlaySlot === slot);
+    if(existing)Object.assign(existing,values);else entries.push({overlaySlot:slot,...values});
+  }
   function open(overlay) {
     adminLayout.select('overlays');
     const slot = overlay.camera.slot;
@@ -34,19 +45,32 @@ const layoutPip = (() => {
     else p.rect(x, y, w, h);
     return p;
   }
-  function render(host, overlay, hostImage, showBorder) {
+  function moved(overlay, box, frame, dx, dy, customTravel) {
+    const position = (key, offset, size, start, length, delta, travel) => Math.round(clamp(customTravel
+      ? (overlay[key] ?? (key==='viewportHorizontalPositionPercent'?0:100)) + (Math.abs(travel)>1 ? delta/travel*100 : 0)
+      : Math.abs(size-length)>1 ? (start+delta-offset)/(size-length)*100 : (overlay[key] ?? 50),0,100));
+    return {horizontalPositionPercent:position('viewportHorizontalPositionPercent',frame.left,frame.width,box.left,box.width,dx,customTravel?.x),
+      verticalPositionPercent:position('viewportVerticalPositionPercent',frame.top,frame.height,box.top,box.height,dy,customTravel?.y)};
+  }
+  function render(host, overlay, hostImage, showBorder, selection = {}) {
     const canvas = document.createElement('canvas'), image = document.createElement('img'), age = document.createElement('span');
     canvas.className = 'designer-pip-preview';canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', overlay.camera.name + ' picture-in-picture preview · ' + mode(overlay));
     image.alt = '';image.style.display = 'none';age.hidden = true;image._ageLabel = age;
     host.append(canvas, image, age);
+    let box, frame, customTravel;
+    const hit = document.createElement('button');hit.type='button';hit.className='designer-pip-hit';
+    hit.dataset.overlaySlot=overlay.camera.slot;hit.setAttribute('aria-label','Select '+overlay.camera.name+' overlay');
+    hit.setAttribute('aria-pressed',String(!!selection.selected));hit.classList.toggle('selected',!!selection.selected);
+    hit.title=overlay.camera.name+' · Drag to move in this layout';host.append(hit);
     function paint() {
       const width = host.clientWidth, height = host.clientHeight;if (!width || !height) return;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.round(width * ratio);canvas.height = Math.round(height * ratio);
       const ctx = canvas.getContext('2d');ctx.scale(ratio, ratio);
-      let b = bounds(overlay, width, height, {left:parseFloat(hostImage.style.left)||0,top:parseFloat(hostImage.style.top)||0,
-        width:parseFloat(hostImage.style.width)||width,height:parseFloat(hostImage.style.height)||height});
+      frame={left:parseFloat(hostImage.style.left)||0,top:parseFloat(hostImage.style.top)||0,
+        width:parseFloat(hostImage.style.width)||width,height:parseFloat(hostImage.style.height)||height};
+      let b = bounds(overlay, width, height, frame);customTravel=null;
       // Custom masks follow the host's rendered image, including stretch, zoom and pan.
       if (overlay.viewportShape === 5) {
         const sw = hostImage.naturalWidth || 1600, sh = hostImage.naturalHeight || 900;
@@ -55,7 +79,9 @@ const layoutPip = (() => {
         const ref = bounds(overlay, 1600, 900);
         b = {left: (parseFloat(hostImage.style.left) || 0) + (ref.left - (1600 - rw) / 2) * sx,
           top: (parseFloat(hostImage.style.top) || 0) + (ref.top - (900 - rh) / 2) * sy, width: ref.width * sx, height: ref.height * sy};
+        customTravel={x:(1600-ref.width)*sx,y:(900-ref.height)*sy};
       }
+      box=b;Object.assign(hit.style,{left:b.left+'px',top:b.top+'px',width:b.width+'px',height:b.height+'px',borderRadius:[3,4].includes(overlay.viewportShape)?'50%':overlay.viewportShape===2?'22%':'0'});
       const clip = path(overlay, b);ctx.globalAlpha = clamp(overlay.viewportOpacityPercent ?? 100, 20, 100) / 100;
       ctx.save();ctx.clip(clip, overlay.viewportShape === 5 ? 'evenodd' : 'nonzero');
       ctx.fillStyle = '#182c40';ctx.fillRect(b.left, b.top, b.width, b.height);
@@ -72,8 +98,28 @@ const layoutPip = (() => {
       ctx.restore();
       if (showBorder && overlay.showBorder !== false) {ctx.strokeStyle = '#7f9bb5';ctx.lineWidth = 1;ctx.stroke(clip);}
     }
+    const focus = () => requestAnimationFrame(()=>[...document.querySelectorAll('.designer-pip-hit.selected')].find(node=>node.getClientRects().length)?.focus({preventScroll:true}));
+    hit.onclick=e=>{e.stopPropagation();if(e.detail===0){selection.onSelect?.();focus();}};
+    hit.onkeydown=e=>{
+      e.stopPropagation();
+      if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();selection.onRemove?.();return;}
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();selection.onSelect?.();focus();return;}
+      const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+      if(delta){e.preventDefault();const step=e.shiftKey?10:1;selection.onMove?.({horizontalPositionPercent:clamp((overlay.viewportHorizontalPositionPercent??0)+delta[0]*step,0,100),verticalPositionPercent:clamp((overlay.viewportVerticalPositionPercent??100)+delta[1]*step,0,100)});focus();}
+    };
+    hit.onpointerdown=e=>{
+      if(e.button!==0||!box)return;e.preventDefault();e.stopPropagation();hit.setPointerCapture(e.pointerId);
+      const original={...overlay},startBox={...box},startFrame={...frame},travel=customTravel,startX=e.clientX,startY=e.clientY;
+      const scale=host.getBoundingClientRect().width/host.offsetWidth||1;let values=null;
+      hit.classList.add('selected');
+      hit.onpointermove=event=>{const dx=(event.clientX-startX)/scale,dy=(event.clientY-startY)/scale;if(!values&&Math.hypot(dx,dy)<3)return;
+        values=moved(original,startBox,startFrame,dx,dy,travel);Object.assign(overlay,{viewportHorizontalPositionPercent:values.horizontalPositionPercent,viewportVerticalPositionPercent:values.verticalPositionPercent});paint();};
+      const stop=()=>{hit.onpointermove=null;hit.onpointerup=null;hit.onpointercancel=null;};
+      hit.onpointerup=event=>{event.stopPropagation();stop();if(values)selection.onMove?.(values);else selection.onSelect?.();focus();};
+      hit.onpointercancel=()=>{stop();Object.assign(overlay,original);hit.classList.toggle('selected',!!selection.selected);paint();};
+    };
     canvas.paint = paint;image.onload = paint;image.onerror = paint;
     dashboardUX.snapshot(image, overlay.camera.slot);paint();
   }
-  return {all, slot, forHost, mode, open, bounds, render};
+  return {all, slot, forHost, mode, open, bounds, render, hidden, effective, setPlacement, moved};
 })();

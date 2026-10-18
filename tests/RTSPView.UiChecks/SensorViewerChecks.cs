@@ -13,7 +13,9 @@ internal static class SensorViewerChecks
         var settings = original.Normalize();
         settings = settings with { DoorbellOverlay = settings.DoorbellOverlay with { Camera = settings.DoorbellOverlay.Camera with { RtspUrl = "rtsp://camera.example/live", Enabled = true } } };
         var layout = settings.Layouts[0] with { Id = Guid.NewGuid().ToString("N"), Name = "Sensor layout" };
-        settings = settings with { Layouts = settings.Layouts.Append(layout).ToArray() };
+        var removed = layout with { Id = Guid.NewGuid().ToString("N"), OverlayPlacements = [new() { OverlaySlot = 10, Hidden = true }] };
+        settings = settings with { Layouts = settings.Layouts.Concat([layout, removed]).ToArray(),
+            AutomationViewLayouts = settings.AutomationViewLayouts.Select(l => l with { OverlayPlacements = [new() { OverlaySlot = 10, Hidden = true, HorizontalPositionPercent = 75, VerticalPositionPercent = 20 }] }).ToArray() };
         settings = settings with { Cameras = settings.Cameras.Select(c => c with { Enabled = true, RtspUrl = "rtsp://camera.example/live" }).ToArray() };
         var hash = AutomationConfiguration.Hash(settings);
         settingsField.SetValue(viewer, settings);
@@ -34,10 +36,17 @@ internal static class SensorViewerChecks
             if (!(bool)overlayEnabled.Invoke(viewer, [settings.DoorbellOverlay with { Camera = settings.DoorbellOverlay.Camera with { Enabled = false } }])!) throw new Exception("Sensor show did not override disabled overlay");
             Send(new SensorEffect("door", SensorAction.Layout, 0, layout.Id, 2));
             if (((WallLayout)effective.GetValue(viewer)!).Id != layout.Id) throw new Exception("Sensor layout was not wired into viewer");
+            Send(new SensorEffect("layout", SensorAction.Layout, 0, removed.Id, 2), new SensorEffect("door", SensorAction.ShowOverlay, 10, "", 2));
+            if ((bool)overlayEnabled.Invoke(viewer, [settings.DoorbellOverlay])!) throw new Exception("Layout removal did not override sensor show");
+            Send(new SensorEffect("layout", SensorAction.Layout, 0, layout.Id, 2), new SensorEffect("door", SensorAction.ShowOverlay, 10, "", 2));
+            if (!(bool)overlayEnabled.Invoke(viewer, [settings.DoorbellOverlay])!) throw new Exception("Layout removal leaked into another layout");
             var dual = settings.AutomationViewLayouts.First(l => l.FocusSlots.Length == 2);
             Send(new SensorEffect("door", SensorAction.AutomationLayout, 0, dual.Id, 2, 1, 2));
             var resolved = (WallLayout)effective.GetValue(viewer)!;
             if (resolved.Id != dual.Id || resolved.Tiles.Any(t => t.CameraSlot < 0) || !resolved.Tiles.Any(t => t.CameraSlot == 1) || !resolved.Tiles.Any(t => t.CameraSlot == 2)) throw new Exception("Sensor focus cameras were not resolved into automation layout");
+            if ((bool)overlayEnabled.Invoke(viewer, [settings.DoorbellOverlay])!) throw new Exception("Automation layout removal was ignored by viewer");
+            var placed = resolved.ApplyOverlayPlacement(settings.DoorbellOverlay);
+            if (placed.ViewportHorizontalPositionPercent != 75 || placed.ViewportVerticalPositionPercent != 20) throw new Exception("Viewer effective layout lost local overlay position");
             var detections = (OverlayAutomationState)type.GetField("_automationPresentation", flags)!.GetValue(viewer)!;
             detections.Update([new("high", 1, DateTimeOffset.UtcNow.AddSeconds(5), AutomationAction.FullScreen, Priority: 1)], DateTimeOffset.UtcNow);
             type.GetMethod("RefreshAutomationOverlays", flags)!.Invoke(viewer, null);
@@ -48,7 +57,7 @@ internal static class SensorViewerChecks
             var stale = (ViewerCommandResult)apply.Invoke(viewer, [new ViewerCommand(Guid.NewGuid(), ViewerCommandType.SensorAutomation,
                 Sensors: new("wrong-configuration", DateTimeOffset.UtcNow.AddSeconds(5), []))])!;
             if (stale.Success) throw new Exception("Stale sensor configuration accepted");
-            Console.WriteLine("PASS real Viewer sensor IPC: show/hide overrides, saved layout, higher-priority person preemption, clear restoration and configuration rejection.");
+            Console.WriteLine("PASS real Viewer sensor IPC: show/hide overrides, local overlay removal/placement, saved layout, higher-priority person preemption, clear restoration and configuration rejection.");
         }
         finally { type.GetMethod("ClearAutomation", flags)!.Invoke(viewer, null); settingsField.SetValue(viewer, original); }
     }

@@ -11,6 +11,8 @@ public static class StreamCatalog
             throw new InvalidDataException("A layout uses this overlay's original stream. Remove it from the layout before deleting the overlay.");
         return (settings with {
             DeletedOverlaySlots = [..settings.DeletedOverlaySlots, slot],
+            Layouts = settings.Layouts.Select(l => l with { OverlayPlacements = l.OverlayPlacements.Where(p => p.OverlaySlot != slot).ToArray() }).ToArray(),
+            AutomationViewLayouts = settings.AutomationViewLayouts.Select(l => l with { OverlayPlacements = l.OverlayPlacements.Where(p => p.OverlaySlot != slot).ToArray() }).ToArray(),
             DiagnosticsAutoOpenExcludedSlots = settings.DiagnosticsAutoOpenExcludedSlots.Where(s => s != slot && s != source).ToArray()
         }).Normalize();
     }
