@@ -30,11 +30,11 @@ The Windows **Viewer** plays the video. The **Controller** runs web administrati
 
 **[Download the latest stable release](https://github.com/GalacticaActual75/RTSPView/releases/latest)** · [All releases](https://github.com/GalacticaActual75/RTSPView/releases) · [Feedback](https://github.com/GalacticaActual75/RTSPView/issues) · [Buy Me a Coffee](https://buymeacoffee.com/galacticaactual75)
 
-This guide describes **[1.0.47](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.47)** and the complete 1.0.47 beta series. Scrypted is optional: compatible sources can be used directly, without MQTT or Home Assistant.
+This guide describes **[1.0.48](https://github.com/GalacticaActual75/RTSPView/releases/tag/v1.0.48)**, including the complete 1.0.47 baseline and the changes from 1.0.48-beta.2 through Patch 2. Scrypted is optional: compatible sources can be used directly, without MQTT or Home Assistant.
 
-**Beta 1.0.48-beta.2** starts from that complete Stable baseline and adds consistent dashboard spacing/cards, visible overlay-deletion guidance, and optional scheduled application patches. See the [beta release notes](docs/releases/1.0.48-beta.2.md) and [patch controls and publication](docs/application-patches.md). Automatic application patches are off by default; enabling them uses the Live View restart schedule and restarts the whole application when a patch is installed.
+**Stable 1.0.48** adds consistent dashboard spacing/cards, visible overlay-deletion guidance, and optional scheduled application patches. Settings → Updates has a dedicated Patches section for checking and installing compatible patches. Automatic installation is off by default; enabling it uses the Live View restart schedule and restarts the whole application when a patch is installed. See the [release notes](docs/releases/1.0.48.md) and [patch controls and publication](docs/application-patches.md).
 
-**Beta 1.0.48-beta.2 · patch 1** adds picture-in-picture snapshots and settings links to both layout editors, including automation-only overlays and focus preview cameras. Updates now has a dedicated Patches section with manual check/install controls. See the [patch notes](docs/releases/1.0.48-beta.2-patch.1.md).
+Both layout editors now preview picture-in-picture overlays, including automation-only overlays and focus preview cameras. Click an overlay to select it, drag or use arrow keys to move it, and remove or restore it for the current layout only. Undo/Redo and the normal layout save/apply controls preserve these changes; shared source, shape and display-mode settings remain available separately.
 
 [Install](#requirements-and-installation) · [First setup](#first-login-and-first-camera-wall) · [Streams and layouts](#streams-and-layouts) · [Automation](#automation-and-weather) · [Backups and updates](#configuration-backups-and-updates) · [Troubleshooting](#troubleshooting)
 
